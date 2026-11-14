@@ -1,0 +1,38 @@
+/* Game UI tokens: reskin the game here without touching structure (shell.css). No external fonts. */
+:root {
+  /* One reference pixel: the UI is designed at 720px viewport height and scales with it (desktop target).
+     Mobile targets override it with one stage design pixel (shell.css). */
+  --ui-px: clamp(0.75px, calc(100dvh / 720), 1.75px);
+
+  --font-ui: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-numeric: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  --color-bg: #0b1120;
+  --color-text: #f3f4f6;
+  --color-text-muted: #9aa6ba;
+  --color-accent: #6ee7b7;
+  --color-accent-strong: #34d399;
+  --color-on-accent: #052e22;
+  --color-focus: #fbbf24;
+
+  --panel-bg: rgb(11 17 32 / 0.72);
+  --panel-border: rgb(110 231 183 / 0.28);
+  --panel-radius: 0.6em;
+  --scrim: rgb(5 8 16 / 0.6);
+
+  --button-bg: #1d2a40;
+  --button-bg-hover: #273a57;
+  --button-bg-active: #15202f;
+  --button-border: #36507a;
+  --button-text: var(--color-text);
+  --button-primary-bg: var(--color-accent);
+  --button-primary-bg-hover: var(--color-accent-strong);
+  --button-primary-text: var(--color-on-accent);
+  --button-disabled-opacity: 0.4;
+
+  --space-xs: 0.25em;
+  --space-s: 0.5em;
+  --space-m: 1em;
+  --space-l: 1.5em;
+  --edge: 1em; /* HUD distance from the viewport edges */
+}
