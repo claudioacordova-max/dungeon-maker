@@ -1,0 +1,8 @@
+{
+  // Despliegue como sitio estático en Cloudflare Workers. "name" debe coincidir con el nombre del Worker en el panel.
+  "name": "dungeon-maker",
+  "compatibility_date": "2026-11-14",
+  "assets": {
+    "directory": "./dist"
+  }
+}
