@@ -6,7 +6,7 @@ import PrototypeScene from './scene/PrototypeScene'
 import GameUi from './ui/GameUi'
 
 // Game shell: canvas with the UI overlay on top. Extend it; do not wrap it in a page layout.
-// Desktop: the game fills the viewport. Mobile targets: it fills a fixed-aspect stage centered in the window.
+// Desktop: the game fills the viewport. Mobile targets: it fills a stage with a fixed short axis and a flexible long axis (shell.css).
 export default function App() {
   const game = (
     <div className="game">

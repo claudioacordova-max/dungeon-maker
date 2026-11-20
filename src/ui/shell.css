@@ -204,16 +204,23 @@ kbd {
 }
 
 /* Mobile targets (factory.json "mobile-portrait" / "mobile-landscape"; main.tsx sets data-target).
-   The game lives in a fixed-aspect stage at its design size, scaled to fit the safe area and centered; the page
-   background shows as bands around it. Nothing reflows: on any other screen the same stage is only scaled. */
+   The game lives in a stage measured in design pixels. The short axis is the fixed reference (390, it sets the UI
+   scale); the long axis is flexible between 600 and 900, so the stage fills the safe area of a real phone with or
+   without browser bars. Beyond that range (e.g. a desktop window) the stage clamps, centered, and the page background
+   shows as bands. HUD anchors to the stage edges and the middle absorbs the extra or missing length: no reflow.
+   Bounds per axis (min = max on the reference axis); keep them in sync with scripts/targets.mjs. */
 [data-target='mobile-portrait'] {
-  --stage-w: 390;
-  --stage-h: 844;
+  --stage-min-w: 390;
+  --stage-max-w: 390;
+  --stage-min-h: 600;
+  --stage-max-h: 900;
 }
 
 [data-target='mobile-landscape'] {
-  --stage-w: 844;
-  --stage-h: 390;
+  --stage-min-w: 600;
+  --stage-max-w: 900;
+  --stage-min-h: 390;
+  --stage-max-h: 390;
 }
 
 /* Touch first: no browser panning, zoom, callout or selection on the game. */
@@ -231,14 +238,16 @@ html[data-target^='mobile'] body {
   place-items: center;
   /* Size container: the cq units below measure the safe area. Keep descendants free of container-type. */
   container-type: size;
-  /* One design pixel, from the stage instead of the window (overrides tokens.css). */
-  --ui-px: min(100cqw / var(--stage-w), 100cqh / var(--stage-h));
+  /* One design pixel (overrides tokens.css): the largest scale at which the stage's minimum size fits. Inside the
+     range this is the safe-area size of the reference axis / 390. */
+  --ui-px: min(100cqw / var(--stage-min-w), 100cqh / var(--stage-min-h));
 }
 
+/* Fill the safe area up to the maximum design size; the reference axis always measures exactly 390 design px. */
 .stage {
   position: relative;
-  width: calc(var(--stage-w) * var(--ui-px));
-  height: calc(var(--stage-h) * var(--ui-px));
+  width: min(100cqw, var(--stage-max-w) * var(--ui-px));
+  height: min(100cqh, var(--stage-max-h) * var(--ui-px));
   overflow: hidden;
 }
 

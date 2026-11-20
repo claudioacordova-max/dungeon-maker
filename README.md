@@ -32,10 +32,10 @@ Cada juego se especializa en una sola plataforma, declarada en `factory.json` en
 | `target` | Pantalla | Entrada principal |
 |---|---|---|
 | `desktop` (por defecto) | Lienzo fluido a toda la ventana (referencia 1440×900 y 1024×768) | Teclado y ratón |
-| `mobile-portrait` | Escenario fijo de 390×844 | Táctil |
-| `mobile-landscape` | Escenario fijo de 844×390 | Táctil |
+| `mobile-portrait` | Escenario de 390 de ancho y 600–900 de alto (referencia 390×844 y 390×664) | Táctil |
+| `mobile-landscape` | Escenario de 390 de alto y 600–900 de ancho (referencia 844×390 y 664×390) | Táctil |
 
-En los perfiles móviles el juego vive en un escenario de proporción fija, escalado para caber en la zona segura de la pantalla y centrado; si la pantalla tiene otra proporción, el fondo de la página queda como bandas. Los controles miden al menos 44 px de diseño, no dependen del hover ni del teclado, la pausa es un botón siempre visible y los gestos del navegador (zoom, desplazamiento, selección) están desactivados. En un dispositivo táctil girado se muestra «Gira el dispositivo».
+En los perfiles móviles el juego vive en un escenario medido en píxeles de diseño: el eje corto mide siempre 390 y fija la escala de la UI; el eje largo es flexible entre 600 y 900, así el escenario llena la zona segura de un teléfono real con o sin las barras del navegador. Fuera de ese rango (por ejemplo, una ventana de escritorio) el escenario se limita, centrado, y el fondo de la página queda como bandas. El HUD se ancla a los bordes del escenario y el centro absorbe la longitud sobrante o faltante: es el mismo diseño con más o menos espacio, no una reorganización. Los controles miden al menos 44 px de diseño, no dependen del hover ni del teclado, la pausa es un botón siempre visible y los gestos del navegador (zoom, desplazamiento, selección) están desactivados. En un dispositivo táctil girado se muestra «Gira el dispositivo».
 
 Para probar en un teléfono de la misma red local:
 
