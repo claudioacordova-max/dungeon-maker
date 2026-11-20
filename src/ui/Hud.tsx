@@ -2,7 +2,8 @@ import { me, useNet } from '../net/connection'
 import { COST, HERO_HITS, ROOMS_TO_WIN, TEAM_LIVES } from '../shared/rules'
 import type { Placeable } from '../shared/protocol'
 import { useMaster } from '../game/master'
-import { DoorIcon, ExitIcon, GemIcon, HeartIcon } from './icons'
+import { DoorIcon, ExitIcon, GemIcon, HeartIcon, SwordIcon } from './icons'
+import { attack } from '../game/input'
 import Joystick from './Joystick'
 import { PLAYER_COLORS } from './screens'
 
@@ -30,12 +31,15 @@ export default function Hud() {
       </div>
 
       <div className="hud-corner hud-top-right">
+        <span className="latency" aria-label={`Latencia: ${state.latency} ms`}>
+          {state.latency > 0 ? `${state.latency} ms` : '…'}
+        </span>
         <button type="button" className="ui-button ui-icon-button" aria-label="Salir de la partida" onClick={state.leave}>
           <ExitIcon />
         </button>
       </div>
 
-      <ul className="party panel" aria-label="Héroes">
+      <ul className={isMaster ? 'party panel' : 'party panel party-hero-view'} aria-label="Héroes">
         {s.heroes.map((h) => {
           const player = state.players.find((p) => p.id === h.id)
           return (
@@ -56,7 +60,24 @@ export default function Hud() {
         })}
       </ul>
 
-      {isMaster ? <MasterPanel points={s.points} /> : <Joystick />}
+      {isMaster ? (
+        <MasterPanel points={s.points} />
+      ) : (
+        <>
+          <Joystick />
+          <button
+            type="button"
+            className="attack-button"
+            aria-label="Atacar"
+            onPointerDown={(e) => {
+              e.preventDefault()
+              attack()
+            }}
+          >
+            <SwordIcon />
+          </button>
+        </>
+      )}
     </div>
   )
 }

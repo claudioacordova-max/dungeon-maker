@@ -29,11 +29,14 @@ export type ServerMessage =
   | { type: 'lobby'; host: string; phase: Phase; players: LobbyPlayer[]; reason?: string }
   | { type: 'state'; s: Snapshot }
   | { type: 'error'; code: 'no-room' | 'taken' | 'full' | 'started' | 'bad-request' }
+  | { type: 'pong'; t: number }
 
 export type ClientMessage =
   | { type: 'role'; role: Role }
   | { type: 'start' }
   | { type: 'input'; dx: number; dy: number }
+  | { type: 'attack' }
+  | { type: 'ping'; t: number }
   | { type: 'place'; kind: Placeable; cx: number; cy: number }
   | { type: 'remove'; cx: number; cy: number }
   | { type: 'lobby' }

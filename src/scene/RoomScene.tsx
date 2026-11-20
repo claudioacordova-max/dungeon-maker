@@ -1,11 +1,13 @@
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import type { Group, OrthographicCamera } from 'three'
 import { useMaster } from '../game/master'
+import { moveInput } from '../game/input'
 import { me, useNet } from '../net/connection'
+import { latestHero, sampleEnemy, sampleHero } from '../net/interp'
 import type { Placeable } from '../shared/protocol'
 import { ROOM_H, ROOM_W } from '../shared/rules'
-import { isPlaceable } from '../shared/sim'
+import { isPlaceable, moveHero } from '../shared/sim'
 import { PLAYER_COLORS } from '../ui/screens'
 
 // Top-down room. Simulation (x, y) maps to world (x, 0, -y): the door (y = ROOM_H) is at the top of the screen.
@@ -30,23 +32,49 @@ function FitCamera() {
   return null
 }
 
-function Smoothed({ x, y, children }: { x: number; y: number; children: ReactNode }) {
+// Draws its children at a position read every frame (no React re-render per server update).
+function Follow({ at, children }: { at: () => { x: number; y: number } | null; children: ReactNode }) {
   const ref = useRef<Group>(null)
-  useFrame((_, dt) => {
-    const g = ref.current
-    if (!g) return
-    const k = 1 - Math.exp(-dt * 14)
-    if (Math.abs(g.position.x - x) > 3 || Math.abs(g.position.z + y) > 3) g.position.set(x, 0, -y)
-    else {
-      g.position.x += (x - g.position.x) * k
-      g.position.z += (-y - g.position.z) * k
-    }
+  useFrame(() => {
+    const p = at()
+    if (p && ref.current) ref.current.position.set(p.x, 0, -p.y)
   })
-  return (
-    <group ref={ref} position={[x, 0, -y]}>
-      {children}
-    </group>
-  )
+  return <group ref={ref}>{children}</group>
+}
+
+// Own hero: moved locally at once with the same rule as the server (prediction), then pulled gently towards the
+// server's position. A large gap (respawn, room change) snaps.
+const predicted = { x: 0, y: 0, ready: false }
+
+function usePredictedHero(id: string) {
+  useFrame((_, dt) => {
+    const server = latestHero(id)
+    if (!server) return
+    if (!predicted.ready) {
+      predicted.x = server.x
+      predicted.y = server.y
+      predicted.ready = true
+    }
+    const v = moveInput()
+    const moved = moveHero(predicted.x, predicted.y, v.x, v.y, Math.min(dt, 0.1))
+    const ex = server.x - moved.x
+    const ey = server.y - moved.y
+    if (Math.hypot(ex, ey) > 1.5) {
+      predicted.x = server.x
+      predicted.y = server.y
+      return
+    }
+    // While moving the server lags behind by the round trip, so only correct softly; when still, settle faster.
+    const k = 1 - Math.exp(-dt * (v.x === 0 && v.y === 0 ? 8 : 1.5))
+    predicted.x = moved.x + ex * k
+    predicted.y = moved.y + ey * k
+  })
+}
+
+function OwnHeroTracker({ id }: { id: string }) {
+  usePredictedHero(id)
+  useEffect(() => () => void (predicted.ready = false), [])
+  return null
 }
 
 function Room({ doorOpen }: { doorOpen: boolean }) {
@@ -172,6 +200,7 @@ export default function RoomScene() {
       <FitCamera />
       <ambientLight intensity={0.9} />
       <directionalLight position={[3, 10, 2]} intensity={1.6} />
+      {self?.role === 'hero' && s && <OwnHeroTracker id={state.you} />}
       <Room doorOpen={editing ? false : (s?.doorOpen ?? false)} />
       {editing && <NextRoomEditor />}
       {s && !editing && (
@@ -182,12 +211,12 @@ export default function RoomScene() {
             </group>
           ))}
           {s.enemies.map((e) => (
-            <Smoothed key={e.id} x={e.x} y={e.y}>
+            <Follow key={e.id} at={() => sampleEnemy(e.id)}>
               <mesh position={[0, 0.35, 0]} scale={0.7 + (0.3 * e.hp) / 3}>
                 <boxGeometry args={[0.6, 0.7, 0.6]} />
                 <meshStandardMaterial color="#ef4444" />
               </mesh>
-            </Smoothed>
+            </Follow>
           ))}
         </>
       )}
@@ -196,7 +225,7 @@ export default function RoomScene() {
         const player = state.players.find((p) => p.id === h.id)
         const color = PLAYER_COLORS[player?.color ?? 0]
         return (
-          <Smoothed key={h.id} x={h.x} y={h.y}>
+          <Follow key={h.id} at={h.id === state.you ? () => (predicted.ready ? predicted : null) : () => sampleHero(h.id)}>
             <mesh position={[0, 0.4, 0]}>
               <cylinderGeometry args={[0.32, 0.32, 0.8, 16]} />
               <meshStandardMaterial color={color} transparent opacity={editing ? 0.35 : 1} />
@@ -213,7 +242,7 @@ export default function RoomScene() {
                 <meshBasicMaterial color="#fde68a" transparent opacity={0.8} />
               </mesh>
             )}
-          </Smoothed>
+          </Follow>
         )
       })}
     </>

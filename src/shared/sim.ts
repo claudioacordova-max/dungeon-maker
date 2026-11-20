@@ -98,6 +98,24 @@ export function setInput(game: Game, heroId: string, dx: number, dy: number) {
   hero.dy = dy * scale
 }
 
+// Attack button: hits the nearest enemy in range. The swing shows even when nothing is in range.
+export function attack(game: Game, heroId: string) {
+  const hero = game.heroes.find((h) => h.id === heroId)
+  if (!hero || hero.dead || hero.attackCd > 0 || game.result !== 'playing') return
+  hero.attackCd = R.ATTACK_COOLDOWN
+  hero.attackFlash = 0.15
+  let target: Enemy | undefined
+  let best = R.ATTACK_RANGE
+  for (const enemy of game.enemies) {
+    const d = Math.hypot(enemy.x - hero.x, enemy.y - hero.y)
+    if (d <= best) {
+      best = d
+      target = enemy
+    }
+  }
+  if (target) target.hp -= 1
+}
+
 export function removeHero(game: Game, heroId: string) {
   game.heroes = game.heroes.filter((h) => h.id !== heroId)
 }
@@ -142,6 +160,14 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
 }
 
+// Shared with the client, which predicts its own hero with the same rule.
+export function moveHero(x: number, y: number, dx: number, dy: number, dt: number) {
+  return {
+    x: clamp(x + dx * R.HERO_SPEED * dt, R.HERO_RADIUS, R.ROOM_W - R.HERO_RADIUS),
+    y: clamp(y + dy * R.HERO_SPEED * dt, R.HERO_RADIUS, R.ROOM_H - R.HERO_RADIUS),
+  }
+}
+
 export function step(game: Game, dt: number) {
   if (game.result !== 'playing') return
   game.time += dt
@@ -160,26 +186,11 @@ export function step(game: Game, dt: number) {
       }
       continue
     }
-    hero.x = clamp(hero.x + hero.dx * R.HERO_SPEED * dt, R.HERO_RADIUS, R.ROOM_W - R.HERO_RADIUS)
-    hero.y = clamp(hero.y + hero.dy * R.HERO_SPEED * dt, R.HERO_RADIUS, R.ROOM_H - R.HERO_RADIUS)
+    const moved = moveHero(hero.x, hero.y, hero.dx, hero.dy, dt)
+    hero.x = moved.x
+    hero.y = moved.y
 
-    hero.attackCd -= dt
-    if (hero.attackCd <= 0) {
-      let target: Enemy | undefined
-      let best = R.ATTACK_RANGE
-      for (const enemy of game.enemies) {
-        const d = Math.hypot(enemy.x - hero.x, enemy.y - hero.y)
-        if (d <= best) {
-          best = d
-          target = enemy
-        }
-      }
-      if (target) {
-        target.hp -= 1
-        hero.attackCd = R.ATTACK_COOLDOWN
-        hero.attackFlash = 0.15
-      }
-    }
+    hero.attackCd = Math.max(0, hero.attackCd - dt)
   }
   game.enemies = game.enemies.filter((e) => e.hp > 0)
 

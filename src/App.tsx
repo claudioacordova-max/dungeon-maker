@@ -12,7 +12,8 @@ export default function App() {
 
   const game = (
     <div className="game">
-      <Canvas className="game-canvas" orthographic camera={{ position: [0, 30, 0], zoom: 30 }}>
+      {/* dpr capped at 2: phones report 3, which triples the pixels drawn for no visible gain here. */}
+      <Canvas className="game-canvas" orthographic dpr={[1, 2]} camera={{ position: [0, 30, 0], zoom: 30 }}>
         <color attach="background" args={['#0b1120']} />
         <RoomScene />
       </Canvas>

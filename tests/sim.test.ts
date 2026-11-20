@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as R from '../src/shared/rules.ts'
-import { createGame, place, remove, setInput, step, type Game } from '../src/shared/sim.ts'
+import { attack, createGame, place, remove, setInput, step, type Game } from '../src/shared/sim.ts'
 
 function run(game: Game, seconds: number) {
   for (let t = 0; t < seconds; t += 0.05) step(game, 0.05)
@@ -40,7 +40,7 @@ test('hits give the master points; an emptied bar costs one team life and the he
   const hero = g.heroes[0]
   hero.x = 4.5
   hero.y = 4.5
-  run(g, R.HIT_INVULNERABLE * R.HERO_HITS + 0.5)
+  for (let i = 0; i < 400 && !hero.dead; i++) step(g, 0.05)
   assert.equal(g.lives, R.TEAM_LIVES - 1)
   assert.equal(g.points, R.MASTER_START_POINTS + R.HERO_HITS * R.POINTS_PER_HIT)
   assert.ok(hero.dead)
@@ -96,11 +96,30 @@ test('the heroes win by leaving the last room', () => {
   assert.equal(g.result, 'heroes-won')
 })
 
-test('heroes attack the nearest enemy in range automatically', () => {
+test('the attack button hits the nearest enemy in range, once per cooldown', () => {
   const g = createGame(['a'])
-  g.enemies = [{ id: 1, x: 5, y: 2, hp: R.ENEMY_HP, attackCd: 99 }]
+  g.enemies = [
+    { id: 1, x: 5, y: 2, hp: R.ENEMY_HP, attackCd: 99 },
+    { id: 2, x: 8, y: 11, hp: R.ENEMY_HP, attackCd: 99 },
+  ]
   g.heroes[0].x = 4.5
   g.heroes[0].y = 1
-  run(g, R.ATTACK_COOLDOWN * R.ENEMY_HP + 0.3)
-  assert.equal(g.enemies.length, 0)
+  attack(g, 'a')
+  attack(g, 'a') // still cooling down: ignored
+  assert.equal(g.enemies[0].hp, R.ENEMY_HP - 1)
+  for (let i = 1; i < R.ENEMY_HP; i++) {
+    run(g, R.ATTACK_COOLDOWN + 0.05)
+    attack(g, 'a')
+  }
+  run(g, 0.05)
+  assert.deepEqual(g.enemies.map((e) => e.id), [2], 'the far enemy is out of range')
+})
+
+test('a fallen hero respawns after the respawn time', () => {
+  const g = createGame(['a'])
+  const hero = g.heroes[0]
+  hero.dead = true
+  hero.respawnAt = g.time + R.RESPAWN_SECONDS
+  run(g, R.RESPAWN_SECONDS + 0.1)
+  assert.equal(hero.dead, false)
 })

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { clearSnapshots, pushSnapshot } from './interp'
 import { CODE_LETTERS, type ClientMessage, type LobbyPlayer, type Phase, type ServerMessage, type Snapshot } from '../shared/protocol'
 
 // The deployed Worker hosts the room server. In `npm run dev` there is no local server, so the dev build talks to it too.
@@ -39,6 +40,7 @@ type NetState = {
   players: LobbyPlayer[]
   notice: string
   snapshot: Snapshot | null
+  latency: number // ms round trip to the room server, 0 = unknown
   setName: (name: string) => void
   createRoom: () => void
   joinRoom: (code: string) => void
@@ -48,7 +50,8 @@ type NetState = {
 
 let socket: WebSocket | null = null
 
-const initialRoom = { you: '', code: '', host: '', phase: 'lobby' as Phase, players: [], notice: '', snapshot: null }
+const initialRoom = { you: '', code: '', host: '', phase: 'lobby' as Phase, players: [], notice: '', snapshot: null, latency: 0 }
+let pingTimer: ReturnType<typeof setInterval> | null = null
 
 export const useNet = create<NetState>()((set, get) => {
   function connect(code: string, intent: 'create' | 'join', attempt = 0) {
@@ -65,6 +68,12 @@ export const useNet = create<NetState>()((set, get) => {
       switch (message.type) {
         case 'welcome':
           set({ status: 'room', you: message.you, code: message.code })
+          if (pingTimer) clearInterval(pingTimer)
+          pingTimer = setInterval(() => get().send({ type: 'ping', t: performance.now() }), 2000)
+          get().send({ type: 'ping', t: performance.now() })
+          break
+        case 'pong':
+          set({ latency: Math.round(performance.now() - message.t) })
           break
         case 'lobby':
           set((s) => ({
@@ -74,8 +83,10 @@ export const useNet = create<NetState>()((set, get) => {
             notice: message.reason ?? (message.phase === 'lobby' ? '' : s.notice),
             snapshot: message.phase === 'lobby' ? null : s.snapshot,
           }))
+          if (message.phase === 'lobby') clearSnapshots()
           break
         case 'state':
+          pushSnapshot(message.s)
           set({ snapshot: message.s })
           break
         case 'error':
@@ -91,6 +102,7 @@ export const useNet = create<NetState>()((set, get) => {
     ws.onclose = () => {
       if (socket !== ws || failed) return
       socket = null
+      stopPing()
       set({ status: 'home', error: ERRORS.closed, ...initialRoom })
     }
   }
@@ -110,6 +122,8 @@ export const useNet = create<NetState>()((set, get) => {
       const ws = socket
       socket = null
       ws?.close()
+      stopPing()
+      clearSnapshots()
       set({ status: 'home', error: '', ...initialRoom })
     },
     send: (message) => {
@@ -117,6 +131,11 @@ export const useNet = create<NetState>()((set, get) => {
     },
   }
 })
+
+function stopPing() {
+  if (pingTimer) clearInterval(pingTimer)
+  pingTimer = null
+}
 
 function localStorageGet(key: string): string {
   try {

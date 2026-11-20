@@ -16,7 +16,7 @@ Primera meta: prueba de concepto para comprobar si funciona el momento central, 
 - **Habitaciones** estilo Binding of Isaac, con vista cenital y pantalla vertical. Al vencer a todos los enemigos de la sala se abre la puerta; los héroes pasan a la siguiente sala, que es la que el máster dejó preparada. Si no preparó nada, es una sala vacía y el juego nunca se detiene.
 - **Máster:** ve a los héroes en vivo y solo edita la **siguiente** sala, nunca la actual. Coloca enemigos, trampas y cofres pagando con puntos.
 - **Puntos del máster:** empieza con algunos y gana más cada vez que un héroe recibe daño. Si el máster es cruel puede encadenar ventaja; se acepta así en esta prueba (el diseñador tiene ideas para corregirlo después).
-- **Héroes:** joystick con el pulgar para moverse y ataque automático al enemigo más cercano.
+- **Héroes:** joystick con el pulgar para moverse y **botón de atacar**, que golpea al enemigo más cercano a su alcance (cambio del diseñador, 2026-11-20; antes era automático).
 - **Daño y vidas:** cada héroe tiene su propia barra de golpes. Al vaciarse, el héroe cae, el equipo pierde una **vida grupal** y el héroe reaparece en la entrada de la sala tras unos segundos, con la barra llena. Las heridas se mantienen de sala en sala; los cofres curan.
 - **Final:** ganan los héroes al salir por la puerta de la última sala. Gana el máster si el equipo se queda sin vidas grupales.
 - Fuera de esta prueba: clases, subir de nivel, equipamiento, acertijos, pistas y la corrección del encadenamiento de ventaja del máster.
@@ -30,7 +30,7 @@ Primera meta: prueba de concepto para comprobar si funciona el momento central, 
 - Puntos iniciales del máster: 10 (propuesta). Por cada golpe que recibe un héroe: +1 (propuesta).
 - Coste: enemigo 2, trampa 1, cofre 0 (propuesta).
 - Cofre: cura 2 golpes al héroe que lo toca (propuesta).
-- Reaparición tras caer: 3 s (propuesta).
+- Reaparición tras caer: 1 s (diseñador, 2026-11-20).
 - La primera sala trae 2 enemigos de serie, para que haya algo que hacer mientras el máster prepara la segunda (propuesta).
 
 ## Preguntas abiertas
@@ -59,3 +59,4 @@ Prueba de concepto jugable en la versión desplegada (2026-11-20): salas con có
 - Comprobado con dos jugadores simulados contra el servidor desplegado; aún no probado por personas en dos dispositivos.
 - Si el máster se desconecta, la partida vuelve a la sala de espera; si la sala se queda vacía, su código deja de existir.
 - Los nombres de los héroes solo aparecen en la lista de la esquina, no sobre los personajes.
+- 2026-11-20, tras la primera prueba del diseñador: botón de atacar, reaparición en 1 s y trabajo sobre el lag (el propio héroe se mueve al instante en su pantalla y se corrige con el servidor; los demás se dibujan interpolados; el joystick se envía en cuanto cambia; resolución limitada a ×2). Arriba a la derecha se muestra la latencia con el servidor de la sala.

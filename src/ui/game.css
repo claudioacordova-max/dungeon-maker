@@ -263,3 +263,41 @@
 .join-row .ui-button {
   min-width: 0;
 }
+
+/* Hero controls: joystick bottom-left, attack bottom-right, party list between them. */
+.attack-button {
+  position: absolute;
+  right: var(--edge);
+  bottom: calc(var(--edge) + 14 * var(--ui-px));
+  display: grid;
+  place-items: center;
+  width: calc(100 * var(--ui-px));
+  height: calc(100 * var(--ui-px));
+  font-size: 2.2em;
+  color: #fff7ed;
+  background: radial-gradient(circle at 35% 30%, #fb7185, #be123c);
+  border: 2px solid rgb(255 255 255 / 0.35);
+  border-radius: 50%;
+  box-shadow: 0 0.15em 0.4em rgb(0 0 0 / 0.45);
+  touch-action: none;
+  cursor: pointer;
+}
+
+.attack-button:active {
+  transform: scale(0.93);
+  filter: brightness(1.2);
+}
+
+.party.party-hero-view {
+  right: calc(var(--edge) * 2 + 100 * var(--ui-px));
+  left: calc(var(--edge) * 2 + 130 * var(--ui-px));
+  width: auto;
+  padding: var(--space-xs) var(--space-s);
+  font-size: 0.72em;
+}
+
+.latency {
+  color: var(--color-text-muted);
+  font-family: var(--font-numeric);
+  font-size: 0.75em;
+}
