@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useMaster } from '../game/master'
 import { me, useNet } from '../net/connection'
 import { canAdd, difficulty } from '../shared/map'
@@ -84,6 +85,15 @@ function MasterPanel({ s }: { s: Snapshot }) {
   const setTool = useMaster((m) => m.setTool)
   const setSlot = useMaster((m) => m.setSlot)
   const toMap = useMaster((m) => m.toMap)
+  const pending = useMaster((m) => m.pending)
+  const setPending = useMaster((m) => m.setPending)
+  const editRoom = useMaster((m) => m.editRoom)
+  // A room just built opens for editing as soon as the server confirms it.
+  useEffect(() => {
+    if (!pending) return
+    const built = s.rooms.find((r) => r.gx === pending.gx && r.gy === pending.gy)
+    if (built) editRoom(built.id)
+  }, [pending, s.rooms, editRoom])
   const room = s.rooms.find((r) => r.id === roomId)
   const bossPlaced = s.rooms.some((r) => r.kind === 'boss')
   const bossNext = s.normalRooms >= MAX_ROOMS
@@ -165,6 +175,7 @@ function MasterPanel({ s }: { s: Snapshot }) {
               className="ui-button ui-button-primary small"
               onClick={() => {
                 send({ type: 'build', gx: slot.gx, gy: slot.gy, kind: 'normal' })
+                setPending(slot)
                 setSlot(null)
               }}
             >
@@ -176,6 +187,7 @@ function MasterPanel({ s }: { s: Snapshot }) {
               className="ui-button ui-button-boss small"
               onClick={() => {
                 send({ type: 'build', gx: slot.gx, gy: slot.gy, kind: 'boss' })
+                setPending(slot)
                 setSlot(null)
               }}
             >

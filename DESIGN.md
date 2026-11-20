@@ -87,10 +87,16 @@ Anterior, prueba de concepto multijugador, sin dependencias nuevas (el servidor 
 ## Estado
 
 <!-- Del agente. -->
-Prueba de concepto jugable en la versión desplegada (2026-11-20): salas con código, lista de jugadores, elección de máster, héroes con joystick (o WASD en el PC) y ataque automático, máster que prepara la siguiente sala con sus puntos, golpes, vidas grupales, cofres, puertas y final para cada bando.
+Versión 2 desplegada (2026-11-20):
 
-- Comprobado con dos jugadores simulados contra el servidor desplegado; aún no probado por personas en dos dispositivos.
-- Si el máster se desconecta, la partida vuelve a la sala de espera; si la sala se queda vacía, su código deja de existir.
-- Los nombres de los héroes solo aparecen en la lista de la esquina, no sobre los personajes.
-- 2026-11-20, tras la primera prueba del diseñador: botón de atacar, reaparición en 1 s y trabajo sobre el lag (el propio héroe se mueve al instante en su pantalla y se corrige con el servidor; los demás se dibujan interpolados; el joystick se envía en cuanto cambia; resolución limitada a ×2). Arriba a la derecha se muestra la latencia con el servidor de la sala.
-- Latencia medida el 2026-11-20 desde la red del diseñador: unos 190 ms de ida y vuelta al servidor de la sala, y casi lo mismo (unos 200 ms) a una respuesta simple del Worker sin sala. El retraso está en el camino hasta Cloudflare (las peticiones salen por São Paulo), no en el servidor de la sala; pedir que la sala se cree en Sudamérica no lo cambió. Con la predicción el propio héroe responde al instante; enemigos, otros héroes y el efecto de los golpes se ven unos 0,3 s tarde.
+- Sala de espera con elección de clase (Espadachín cuerpo a cuerpo, Arquera a distancia) y estética de juego de acción móvil.
+- Mapa por habitaciones: el máster construye al norte, este u oeste, hasta 6 salas y después la del jefe; edita cada sala con el medidor de dificultad (tope 10) y la marca lista; puede volver a editarla mientras ningún héroe haya entrado.
+- Héroes con joystick flotante a la izquierda y palanca de ataque a la derecha: tocar ataca apuntando solo, arrastrar apunta a mano, mantener 0,6 s carga el ataque potenciado (círculo del espadachín, disparo crítico de la arquera).
+- Enemigos: slime (daño al tocar), lanzador (apunta 0,5 s con una línea roja y lanza orbes), rey slime (salta sobre los héroes con zona roja y escupe abanicos de orbes). Ganan los héroes al derrotar al jefe.
+- Modelos 3D, animaciones, mazmorra y efectos hechos por Codex (GPT-6.2-Astra) en `src/models/`; vitrina en `?models`.
+- Ajuste del agente: 2 s de protección al reaparecer (antes un héroe podía morir varias veces seguidas junto a los slimes).
+
+Problemas conocidos:
+- Los slimes son muy letales contra un héroe que no se mueve: en la prueba automática el héroe perdió 2 vidas en la primera sala. Para balancear jugando.
+- Rendimiento en un teléfono real sin medir (Codex estimó ~1.500 triángulos y ≤8 llamadas de dibujo por personaje).
+- El paquete del juego pesa ~1,2 MB (343 KB comprimido).
