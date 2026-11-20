@@ -691,7 +691,7 @@ export default function World() {
         .filter((i) => roomIds.has(i.room))
         .map((i) => (
           <group key={i.id} position={[i.x, 0, -i.y]}>
-            {i.kind === 'chest' ? <Chest opened={false} /> : <TrapItem />}
+            {i.kind === 'chest' ? <Chest opened={i.opened} /> : <TrapItem />}
           </group>
         ))}
       {s.enemies

@@ -60,7 +60,7 @@ export type StrikeView = { id: number; x: number; y: number; r: number; remainin
 export type AimView = { enemy: number; dir: number; remaining: number } // thrower / boss aim before throwing
 export type OrbView = { id: number; x: number; y: number }
 export type ShotView = { id: number; owner: string; x: number; y: number; dir: number; crit: boolean }
-export type ItemView = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number }
+export type ItemView = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number; opened: boolean }
 
 export type Snapshot = {
   lives: number
@@ -96,6 +96,8 @@ export type ClientMessage =
   | { type: 'struck'; strike: number }
   | { type: 'orbHit'; orb: number }
   | { type: 'touched'; enemy: number }
+  // A chest the device saw this hero's attack reach: it opens and heals that hero.
+  | { type: 'openChest'; item: number }
   | { type: 'ping'; t: number }
   // Master
   | { type: 'build'; gx: number; gy: number; kind: 'normal' | 'boss' }

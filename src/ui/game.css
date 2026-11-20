@@ -752,16 +752,75 @@
   border-color: var(--ink);
 }
 
+.sound-settings {
+  position: relative;
+}
+
+.sound-settings.is-floating {
+  position: absolute;
+  top: var(--edge);
+  right: var(--edge);
+  z-index: 3;
+}
+
 .sound-toggle {
   padding: 0.5em;
   font-size: 0.9em;
 }
 
-.sound-toggle.is-floating {
+.sound-menu {
   position: absolute;
-  top: var(--edge);
-  right: var(--edge);
-  z-index: 2;
+  top: calc(100% + 0.5em);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  padding: 0.6em;
+  min-width: 9em;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8em;
+  padding: 0.4em 0.2em;
+  color: #fff;
+  font: inherit;
+  font-size: 0.85em;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.switch i {
+  position: relative;
+  width: 2.4em;
+  height: 1.3em;
+  background: #3a2a55;
+  border: 0.12em solid var(--ink);
+  border-radius: 999px;
+}
+
+.switch i::after {
+  content: '';
+  position: absolute;
+  top: 0.1em;
+  left: 0.1em;
+  width: 0.9em;
+  height: 0.9em;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 120ms;
+}
+
+.switch.is-on i {
+  background: #4ade80;
+}
+
+.switch.is-on i::after {
+  transform: translateX(1.1em);
 }
 
 /* The HUD and panels sit above the names drawn over the heroes. */

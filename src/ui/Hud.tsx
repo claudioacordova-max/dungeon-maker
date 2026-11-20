@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useMaster } from '../game/master'
 import { me, useNet } from '../net/connection'
 import { canAdd, difficulty } from '../shared/map'
@@ -88,6 +88,20 @@ function MasterPanel({ s }: { s: Snapshot }) {
   const setTool = useMaster((m) => m.setTool)
   const setSlot = useMaster((m) => m.setSlot)
   const toMap = useMaster((m) => m.toMap)
+  // The ready button waits for the server's answer (a double tap must not undo it), and going back to editing
+  // a ready room asks first.
+  const [awaiting, setAwaiting] = useState<{ room: number; ready: boolean } | null>(null)
+  const [confirmEdit, setConfirmEdit] = useState(false)
+  const current = s.rooms.find((r) => r.id === roomId)
+  useEffect(() => {
+    if (awaiting && current && current.id === awaiting.room && current.ready === awaiting.ready) setAwaiting(null)
+  }, [awaiting, current])
+  useEffect(() => {
+    if (!awaiting) return
+    const t = setTimeout(() => setAwaiting(null), 2000)
+    return () => clearTimeout(t)
+  }, [awaiting])
+  useEffect(() => setConfirmEdit(false), [roomId])
   const pending = useMaster((m) => m.pending)
   const setPending = useMaster((m) => m.setPending)
   const editRoom = useMaster((m) => m.editRoom)
@@ -141,13 +155,40 @@ function MasterPanel({ s }: { s: Snapshot }) {
               ))}
             </div>
             <div className="master-row">
-              <button
-                type="button"
-                className={room.ready ? 'ui-button small' : 'ui-button ui-button-primary small'}
-                onClick={() => send({ type: 'ready', room: room.id, ready: !room.ready })}
-              >
-                {room.ready ? 'Volver a editar' : 'Sala lista'}
-              </button>
+              {room.ready && confirmEdit ? (
+                <>
+                  <button
+                    type="button"
+                    className="ui-button small danger"
+                    disabled={!!awaiting}
+                    onClick={() => {
+                      setAwaiting({ room: room.id, ready: false })
+                      setConfirmEdit(false)
+                      send({ type: 'ready', room: room.id, ready: false })
+                    }}
+                  >
+                    Sí, editar
+                  </button>
+                  <button type="button" className="ui-button small" onClick={() => setConfirmEdit(false)}>
+                    No
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className={room.ready ? 'ui-button small' : 'ui-button ui-button-primary small'}
+                  disabled={!!awaiting}
+                  onClick={() => {
+                    if (room.ready) setConfirmEdit(true)
+                    else {
+                      setAwaiting({ room: room.id, ready: true })
+                      send({ type: 'ready', room: room.id, ready: true })
+                    }
+                  }}
+                >
+                  {awaiting ? '…' : room.ready ? 'Volver a editar' : 'Sala lista'}
+                </button>
+              )}
               {!room.ready && (
                 <button
                   type="button"

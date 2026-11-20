@@ -6,6 +6,7 @@ import {
   build,
   createGame,
   demolish,
+  openChest,
   place,
   removeHero,
   removeItem,
@@ -143,6 +144,9 @@ export class Room {
           return
         case 'touched':
           reportTouched(game, player.id, Number(message.enemy))
+          return
+        case 'openChest':
+          openChest(game, player.id, Number(message.item))
           return
       }
     } else {

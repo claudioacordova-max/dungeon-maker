@@ -8,6 +8,7 @@ import {
   build,
   createGame,
   demolish,
+  openChest,
   place,
   removeItem,
   reportOrb,
@@ -224,4 +225,27 @@ test('the boss jump is an announced strike; defeating the boss wins; no lives le
   s.y = g2.heroes[0].y
   reportTouched(g2, 'a', s.id)
   assert.equal(g2.result, 'master-won')
+})
+
+test('a chest opens when a hero hits it, heals that hero, and stays shut when walked over', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  g.enemies = []
+  build(g, 0, 1, 'normal')
+  const room = g.rooms[1]
+  place(g, room.id, 'chest', 5, 3)
+  setReady(g, room.id, true)
+  const chest = g.items.find((i) => i.kind === 'chest')!
+  const hero = g.heroes[0]
+  hero.hp = 1
+  hero.x = chest.x
+  hero.y = chest.y
+  run(g, 0.2)
+  assert.equal(hero.hp, 1, 'walking over it does nothing')
+  assert.equal(openChest(g, 'a', chest.id), false, 'no attack yet')
+  attack(g, 'a', 1, 'basic', 0, [], 0)
+  assert.ok(openChest(g, 'a', chest.id))
+  assert.equal(hero.hp, 1 + R.CHEST_HEAL)
+  assert.equal(openChest(g, 'a', chest.id), false, 'already open')
+  run(g, 1.5)
+  assert.ok(!g.items.includes(chest), 'it vanishes after opening')
 })

@@ -33,6 +33,7 @@ export type Hero = {
   respawnAt: number
   invulnerable: number
   readyAt: number // game time of the next allowed attack
+  lastAttackAt: number
   act: HeroAct | null
   shots: Map<number, { charged: boolean; at: number; used: boolean }>
 }
@@ -63,7 +64,7 @@ type Room = MapRoom & { kind: RoomKind; entered: boolean; plan: PlanItem[] }
 type Strike = { id: number; x: number; y: number; r: number; landsAt: number; claimed: Set<string> }
 type Orb = { id: number; room: number; x: number; y: number; vx: number; vy: number; left: number; hitBy: Set<string> }
 type Shot = { id: number; owner: string; x: number; y: number; dir: number; speed: number; left: number; crit: boolean }
-type Item = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number }
+type Item = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number; openedAt: number | null }
 type EnemyFrame = { time: number; pos: Map<number, { x: number; y: number }> }
 
 export type Game = {
@@ -132,6 +133,7 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
     respawnAt: 0,
     invulnerable: 0,
     readyAt: 0,
+    lastAttackAt: -99,
     act: null,
     shots: new Map(),
   }))
@@ -171,7 +173,7 @@ function spawnRoom(game: Game, room: Room) {
     const x = o.x + p.cx + 0.5
     const y = o.y + p.cy + 0.5
     if (p.kind === 'slime' || p.kind === 'thrower') spawnEnemy(game, room, p.kind, x, y)
-    else game.items.push({ id: game.nextId++, room: room.id, kind: p.kind, x, y })
+    else game.items.push({ id: game.nextId++, room: room.id, kind: p.kind, x, y, openedAt: null })
   }
   if (room.kind === 'boss') {
     const c = roomCenter(room)
@@ -342,6 +344,7 @@ export function attack(
   if (!Number.isInteger(seq) || seq <= (hero.act?.seq ?? 0)) return null // the device numbers its attacks
   const spec = R.HERO[hero.cls][kind === 'charged' ? 'charged' : 'basic']
   hero.readyAt = game.time + spec.cooldown
+  hero.lastAttackAt = game.time
   hero.facing = dir
   hero.act = { kind, dir, seq }
   if (hero.cls === 'melee') {
@@ -411,6 +414,18 @@ export function reportOrb(game: Game, heroId: string, orbId: number): boolean {
   orb.hitBy.add(heroId)
   game.orbs = game.orbs.filter((o) => o !== orb) // it bursts on the hero for everyone
   return damageHero(game, hero)
+}
+
+// A chest opens when a hero's attack reaches it (seen on that hero's device): it heals that hero.
+export function openChest(game: Game, heroId: string, itemId: number): boolean {
+  const hero = heroOf(game, heroId)
+  const chest = game.items.find((i) => i.id === itemId && i.kind === 'chest' && i.openedAt === null)
+  if (!hero || !chest || game.time - hero.lastAttackAt > 1.5) return false
+  const reach = (hero.cls === 'melee' ? R.HERO.melee.charged.range : R.HERO.ranged.charged.range) + R.HIT_RANGE_TOLERANCE + 0.5
+  if (dist(chest.x, chest.y, hero.x, hero.y) > reach) return false
+  chest.openedAt = game.time
+  hero.hp = Math.min(R.HERO_HITS, hero.hp + R.CHEST_HEAL)
+  return true
 }
 
 export function reportTouched(game: Game, heroId: string, enemyId: number): boolean {
@@ -607,18 +622,15 @@ export function step(game: Game, dt: number) {
   game.history.push({ time: game.time, pos: new Map(game.enemies.map((e) => [e.id, { x: e.x, y: e.y }])) })
   while (game.history.length > 0 && game.history[0].time < game.time - R.MAX_VIEW_DELAY - 0.2) game.history.shift()
 
-  // Traps and chests, on the positions the devices reported.
+  // Traps, on the positions the devices reported. Chests open when a hero hits them (openChest).
   for (const hero of alive) {
     for (const item of game.items) {
       if (dist(item.x, item.y, hero.x, hero.y) > 0.6) continue
       if (item.kind === 'trap') damageHero(game, hero)
-      else if (hero.hp < R.HERO_HITS) {
-        hero.hp = Math.min(R.HERO_HITS, hero.hp + R.CHEST_HEAL)
-        item.id = -1
-      }
     }
   }
-  game.items = game.items.filter((i) => i.id !== -1)
+  // Opened chests stay a moment (open lid) and then vanish.
+  game.items = game.items.filter((i) => i.openedAt === null || game.time - i.openedAt < 1.2)
   finishEnemies(game)
 }
 
@@ -669,7 +681,7 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       .map((e) => ({ enemy: e.id, dir: r2(e.aim), remaining: r2(e.stateTime) })),
     orbs: game.orbs.map((o) => ({ id: o.id, x: r2(o.x), y: r2(o.y) })),
     shots: game.shots.map((s) => ({ id: s.id, owner: s.owner, x: r2(s.x), y: r2(s.y), dir: r2(s.dir), crit: s.crit })),
-    items: game.items.map((i) => ({ id: i.id, room: i.room, kind: i.kind, x: i.x, y: i.y })),
+    items: game.items.map((i) => ({ id: i.id, room: i.room, kind: i.kind, x: i.x, y: i.y, opened: i.openedAt !== null })),
   }
 }
 

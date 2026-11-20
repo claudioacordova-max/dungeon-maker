@@ -7,30 +7,37 @@ let out: GainNode | null = null
 let sfxBus: GainNode | null = null
 let musicBus: GainNode | null = null
 let noiseBuffer: AudioBuffer | null = null
-let muted = readMuted()
 const lastPlayed = new Map<string, number>()
 
-function readMuted(): boolean {
+// Music and effects can be switched off separately; both choices are remembered on this device.
+const settings = { music: readSetting('dm-music'), sfx: readSetting('dm-sfx') }
+
+function readSetting(key: string): boolean {
   try {
-    return localStorage.getItem('dm-muted') === '1'
+    return localStorage.getItem(key) !== '0'
   } catch {
-    return false
+    return true
   }
 }
 
-export function isMuted() {
-  return muted
+export function soundSettings() {
+  return { ...settings }
 }
 
-export function setMuted(value: boolean) {
-  muted = value
+export function setSound(kind: 'music' | 'sfx', on: boolean) {
+  settings[kind] = on
   try {
-    localStorage.setItem('dm-muted', value ? '1' : '0')
+    localStorage.setItem(kind === 'music' ? 'dm-music' : 'dm-sfx', on ? '1' : '0')
   } catch {
     // not remembered in private mode
   }
-  if (out && ctx) out.gain.setTargetAtTime(value ? 0 : 1, ctx.currentTime, 0.03)
+  if (!ctx) return
+  if (kind === 'music' && musicBus) musicBus.gain.setTargetAtTime(on ? MUSIC_VOLUME : 0, ctx.currentTime, 0.05)
+  if (kind === 'sfx' && sfxBus) sfxBus.gain.setTargetAtTime(on ? SFX_VOLUME : 0, ctx.currentTime, 0.03)
 }
+
+const SFX_VOLUME = 0.55
+const MUSIC_VOLUME = 0.16
 
 export function unlockAudio() {
   if (!ctx) {
@@ -38,13 +45,13 @@ export function unlockAudio() {
     if (!AC) return
     ctx = new AC()
     out = ctx.createGain()
-    out.gain.value = muted ? 0 : 1
+    out.gain.value = 1
     out.connect(ctx.destination)
     sfxBus = ctx.createGain()
-    sfxBus.gain.value = 0.55
+    sfxBus.gain.value = settings.sfx ? SFX_VOLUME : 0
     sfxBus.connect(out)
     musicBus = ctx.createGain()
-    musicBus.gain.value = 0.16
+    musicBus.gain.value = settings.music ? MUSIC_VOLUME : 0
     musicBus.connect(out)
     noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
     const data = noiseBuffer.getChannelData(0)
@@ -94,7 +101,7 @@ function noise(n: Noise, scale: number) {
 
 // Plays a named effect at most every `gap` ms (several identical events in one frame sound as one).
 function play(name: string, scale: number, fn: (s: number) => void, gap = 45) {
-  if (!ctx || muted || scale <= 0.02) return
+  if (!ctx || !settings.sfx || scale <= 0.02) return
   const now = performance.now()
   if (now - (lastPlayed.get(name) ?? -1e9) < gap) return
   lastPlayed.set(name, now)

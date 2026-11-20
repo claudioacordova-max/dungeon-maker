@@ -56,6 +56,10 @@ export function playSnapshotSounds(prev: Snapshot | null, next: Snapshot, you: s
     }
   }
 
+  // Chests opened.
+  const prevItems = new Map(prev.items.map((i) => [i.id, i]))
+  for (const i of next.items) if (i.opened && prevItems.get(i.id)?.opened === false) sfx.chest(volumeAt(i.x, i.y, isHero))
+
   // Traps that fired on someone (a hit while standing on one is shown by the hurt sound).
   // Rooms: a door opens when a room is cleared; the master's building.
   const prevRooms = new Map(prev.rooms.map((r) => [r.id, r]))

@@ -151,6 +151,16 @@ function fire(charged: boolean, manualDir: number | null) {
         feedback.enemyFlash.set(e.id, now + 180)
       }
     }
+    for (const item of net.snapshot.items) {
+      if (item.kind !== 'chest' || item.opened) continue
+      const dx = item.x - local.x
+      const dy = item.y - local.y
+      const d = Math.hypot(dx, dy) - 0.35
+      const inside = charged
+        ? d <= melee.charged.range
+        : d <= melee.basic.range && (d < 0.3 || angleDiff(Math.atan2(dy, dx), dir) <= melee.basic.arc / 2)
+      if (inside) net.send({ type: 'openChest', item: item.id })
+    }
   } else {
     const s = HERO.ranged[charged ? 'charged' : 'basic']
     shots.push({ seq, x: local.x, y: local.y, dir, speed: s.speed, left: s.range, crit: charged })
@@ -180,6 +190,14 @@ export function frame(dt: number) {
         net.send({ type: 'shotHit', seq: shot.seq, target: e.id, viewDelay: (net.latency / 2 + INTERP_DELAY) / 1000 })
         ;(shot.crit ? sfx.critHit : sfx.hit)()
         feedback.enemyFlash.set(e.id, now + 180)
+        hit = true
+        break
+      }
+    }
+    if (!hit) {
+      for (const item of s.items) {
+        if (item.kind !== 'chest' || item.opened || Math.hypot(item.x - shot.x, item.y - shot.y) > 0.5) continue
+        net.send({ type: 'openChest', item: item.id })
         hit = true
         break
       }
