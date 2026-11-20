@@ -1,5 +1,8 @@
 // Pure game simulation, run by the room server. Coordinates in cells: x in [0, ROOM_W], y in [0, ROOM_H];
 // the entrance is at the bottom (y = 0) and the door at the top centre (y = ROOM_H).
+//
+// Authority (see protocol.ts): hero positions come from each hero's device (checked for speed); hits and strike
+// reports come from devices (checked for range, cooldown and timing); everything shared is decided here.
 import type { Cell, Placeable, PlanView, Snapshot } from './protocol.ts'
 import * as R from './rules.ts'
 
@@ -7,8 +10,8 @@ export type Hero = {
   id: string
   x: number
   y: number
-  dx: number
-  dy: number
+  epoch: number
+  lastPosTime: number
   hp: number
   dead: boolean
   respawnAt: number
@@ -16,9 +19,22 @@ export type Hero = {
   attackFlash: number
   invulnerable: number
 }
-type Enemy = { id: number; x: number; y: number; hp: number; attackCd: number }
+type EnemyState = 'chase' | 'windup' | 'recover'
+type Enemy = {
+  id: number
+  x: number
+  y: number
+  hp: number
+  state: EnemyState
+  stateTime: number // seconds left in windup / recover
+  cooldown: number
+  stun: number
+  strike: number // id of the current strike while winding up
+}
+type Strike = { id: number; x: number; y: number; r: number; landsAt: number; claimed: Set<string> }
 type Item = { id: number; kind: 'trap' | 'chest'; cx: number; cy: number }
 type Planned = Cell & { kind: Placeable }
+type EnemyFrame = { time: number; pos: Map<number, { x: number; y: number }> }
 
 export type Game = {
   time: number
@@ -27,8 +43,10 @@ export type Game = {
   points: number
   heroes: Hero[]
   enemies: Enemy[]
+  strikes: Strike[]
   items: Item[]
   next: Planned[]
+  history: EnemyFrame[] // recent enemy positions, to check hits against what a device saw
   result: 'playing' | 'heroes-won' | 'master-won'
   nextId: number
 }
@@ -44,6 +62,34 @@ function entranceX(index: number, count: number): number {
   return DOOR_X + (index - (count - 1) / 2) * 1.1
 }
 
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v))
+}
+
+// Movement rule shared with the device, which moves its own hero with it.
+export function moveHero(x: number, y: number, dx: number, dy: number, dt: number) {
+  return clampToRoom(x + dx * R.HERO_SPEED * dt, y + dy * R.HERO_SPEED * dt)
+}
+
+function clampToRoom(x: number, y: number) {
+  return {
+    x: clamp(x, R.HERO_RADIUS, R.ROOM_W - R.HERO_RADIUS),
+    y: clamp(y, R.HERO_RADIUS, R.ROOM_H - R.HERO_RADIUS),
+  }
+}
+
+// True when a point (a hero) is inside an announced strike.
+export function strikeReaches(strike: { x: number; y: number; r: number }, x: number, y: number): boolean {
+  return Math.hypot(strike.x - x, strike.y - y) <= strike.r + R.HERO_RADIUS
+}
+
+function teleport(game: Game, hero: Hero, x: number, y: number) {
+  hero.x = x
+  hero.y = y
+  hero.epoch += 1
+  hero.lastPosTime = game.time
+}
+
 export function createGame(heroIds: string[]): Game {
   const game: Game = {
     time: 0,
@@ -54,8 +100,8 @@ export function createGame(heroIds: string[]): Game {
       id,
       x: entranceX(i, heroIds.length),
       y: ENTRANCE_Y,
-      dx: 0,
-      dy: 0,
+      epoch: 1,
+      lastPosTime: 0,
       hp: R.HERO_HITS,
       dead: false,
       respawnAt: 0,
@@ -64,8 +110,10 @@ export function createGame(heroIds: string[]): Game {
       invulnerable: 0,
     })),
     enemies: [],
+    strikes: [],
     items: [],
     next: [],
+    history: [],
     result: 'playing',
     nextId: 1,
   }
@@ -80,40 +128,86 @@ export function createGame(heroIds: string[]): Game {
 function loadRoom(game: Game, plan: Planned[]) {
   game.enemies = []
   game.items = []
+  game.strikes = []
+  game.history = []
   for (const p of plan) {
     if (p.kind === 'enemy') {
-      game.enemies.push({ id: game.nextId++, x: p.cx + 0.5, y: p.cy + 0.5, hp: R.ENEMY_HP, attackCd: R.ENEMY_ATTACK_COOLDOWN })
+      game.enemies.push({
+        id: game.nextId++,
+        x: p.cx + 0.5,
+        y: p.cy + 0.5,
+        hp: R.ENEMY_HP,
+        state: 'chase',
+        stateTime: 0,
+        cooldown: R.ENEMY_ATTACK_COOLDOWN / 2,
+        stun: 0,
+        strike: 0,
+      })
     } else {
       game.items.push({ id: game.nextId++, kind: p.kind, cx: p.cx, cy: p.cy })
     }
   }
 }
 
-export function setInput(game: Game, heroId: string, dx: number, dy: number) {
+// A device reports where its hero is. Ignored after a server move until the device adopts it (epoch); faster than
+// allowed movement is cut down to the allowed distance.
+export function reportPosition(game: Game, heroId: string, x: number, y: number, epoch: number) {
   const hero = game.heroes.find((h) => h.id === heroId)
-  if (!hero || !Number.isFinite(dx) || !Number.isFinite(dy)) return
-  const len = Math.hypot(dx, dy)
-  const scale = len > 1 ? 1 / len : 1
-  hero.dx = dx * scale
-  hero.dy = dy * scale
+  if (!hero || hero.dead || epoch !== hero.epoch || !Number.isFinite(x) || !Number.isFinite(y)) return
+  const elapsed = Math.max(game.time - hero.lastPosTime, 0.1)
+  const allowed = R.HERO_SPEED * elapsed * R.MOVE_TOLERANCE + 0.25
+  const target = clampToRoom(x, y)
+  const dist = Math.hypot(target.x - hero.x, target.y - hero.y)
+  const k = dist > allowed ? allowed / dist : 1
+  hero.x += (target.x - hero.x) * k
+  hero.y += (target.y - hero.y) * k
+  hero.lastPosTime = game.time
 }
 
-// Attack button: hits the nearest enemy in range. The swing shows even when nothing is in range.
-export function attack(game: Game, heroId: string) {
+function enemyPositionAt(game: Game, enemyId: number, time: number): { x: number; y: number } | null {
+  let best: EnemyFrame | undefined
+  for (const frame of game.history) {
+    if (frame.time <= time) best = frame
+    else break
+  }
+  return (best ?? game.history[0])?.pos.get(enemyId) ?? null
+}
+
+// Attack button, as seen on the device: the target was the nearest enemy in range on that screen. The server checks
+// the cooldown and the range against where that enemy was `viewDelay` seconds ago, then applies the damage.
+export function hit(game: Game, heroId: string, target: number | null, viewDelay: number): boolean {
   const hero = game.heroes.find((h) => h.id === heroId)
-  if (!hero || hero.dead || hero.attackCd > 0 || game.result !== 'playing') return
+  if (!hero || hero.dead || game.result !== 'playing' || hero.attackCd > 0.08) return false
   hero.attackCd = R.ATTACK_COOLDOWN
   hero.attackFlash = 0.15
-  let target: Enemy | undefined
-  let best = R.ATTACK_RANGE
-  for (const enemy of game.enemies) {
-    const d = Math.hypot(enemy.x - hero.x, enemy.y - hero.y)
-    if (d <= best) {
-      best = d
-      target = enemy
-    }
+  const enemy = game.enemies.find((e) => e.id === target)
+  if (!enemy || enemy.hp <= 0) return false
+  const delay = clamp(Number(viewDelay) || 0, 0, R.MAX_VIEW_DELAY)
+  const seen = enemyPositionAt(game, enemy.id, game.time - delay) ?? enemy
+  const reach = R.ATTACK_RANGE + R.HIT_RANGE_TOLERANCE
+  if (Math.hypot(seen.x - hero.x, seen.y - hero.y) > reach && Math.hypot(enemy.x - hero.x, enemy.y - hero.y) > reach) {
+    return false
   }
-  if (target) target.hp -= 1
+  enemy.hp -= 1
+  enemy.stun = R.ENEMY_HIT_STUN
+  const d = Math.hypot(enemy.x - hero.x, enemy.y - hero.y) || 1
+  const pushed = clampToRoom(enemy.x + ((enemy.x - hero.x) / d) * R.ENEMY_KNOCKBACK, enemy.y + ((enemy.y - hero.y) / d) * R.ENEMY_KNOCKBACK)
+  enemy.x = pushed.x
+  enemy.y = pushed.y
+  return true
+}
+
+// A device saw an announced strike land on its hero. Accepted once per hero, after the strike landed on the server
+// and within the claim window, if the hero is plausibly near it.
+export function reportStruck(game: Game, heroId: string, strikeId: number): boolean {
+  const hero = game.heroes.find((h) => h.id === heroId)
+  const strike = game.strikes.find((s) => s.id === strikeId)
+  if (!hero || !strike || hero.dead || strike.claimed.has(heroId)) return false
+  if (game.time < strike.landsAt - R.ENEMY_TELEGRAPH || game.time > strike.landsAt + R.STRIKE_CLAIM_WINDOW) return false
+  if (Math.hypot(strike.x - hero.x, strike.y - hero.y) > strike.r + 2) return false
+  strike.claimed.add(heroId)
+  damage(game, hero)
+  return true
 }
 
 export function removeHero(game: Game, heroId: string) {
@@ -156,67 +250,79 @@ function damage(game: Game, hero: Hero) {
   }
 }
 
-function clamp(v: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, v))
-}
-
-// Shared with the client, which predicts its own hero with the same rule.
-export function moveHero(x: number, y: number, dx: number, dy: number, dt: number) {
-  return {
-    x: clamp(x + dx * R.HERO_SPEED * dt, R.HERO_RADIUS, R.ROOM_W - R.HERO_RADIUS),
-    y: clamp(y + dy * R.HERO_SPEED * dt, R.HERO_RADIUS, R.ROOM_H - R.HERO_RADIUS),
+function stepEnemy(game: Game, enemy: Enemy, alive: Hero[], dt: number) {
+  enemy.cooldown = Math.max(0, enemy.cooldown - dt)
+  enemy.stun = Math.max(0, enemy.stun - dt)
+  if (enemy.state === 'windup') {
+    enemy.stateTime -= dt
+    if (enemy.stateTime <= 0) {
+      enemy.state = 'recover'
+      enemy.stateTime = R.ENEMY_RECOVER
+      enemy.cooldown = R.ENEMY_ATTACK_COOLDOWN
+    }
+    return
   }
+  if (enemy.state === 'recover') {
+    enemy.stateTime -= dt
+    if (enemy.stateTime <= 0) enemy.state = 'chase'
+    return
+  }
+  let target: Hero | undefined
+  let best = Infinity
+  for (const hero of alive) {
+    const d = Math.hypot(hero.x - enemy.x, hero.y - enemy.y)
+    if (d < best) {
+      best = d
+      target = hero
+    }
+  }
+  if (!target) return
+  if (best <= R.ENEMY_REACH && enemy.cooldown <= 0) {
+    // Announce the strike: a fixed circle ahead of the enemy that lands after the telegraph time.
+    const id = game.nextId++
+    game.strikes.push({
+      id,
+      x: enemy.x + ((target.x - enemy.x) / (best || 1)) * R.ENEMY_STRIKE_OFFSET,
+      y: enemy.y + ((target.y - enemy.y) / (best || 1)) * R.ENEMY_STRIKE_OFFSET,
+      r: R.ENEMY_STRIKE_RADIUS,
+      landsAt: game.time + R.ENEMY_TELEGRAPH,
+      claimed: new Set(),
+    })
+    enemy.state = 'windup'
+    enemy.stateTime = R.ENEMY_TELEGRAPH
+    enemy.strike = id
+    return
+  }
+  if (enemy.stun > 0 || best <= R.ENEMY_REACH * 0.7) return
+  enemy.x += ((target.x - enemy.x) / best) * R.ENEMY_SPEED * dt
+  enemy.y += ((target.y - enemy.y) / best) * R.ENEMY_SPEED * dt
 }
 
 export function step(game: Game, dt: number) {
   if (game.result !== 'playing') return
   game.time += dt
-  const alive = game.heroes.filter((h) => !h.dead)
 
   for (const hero of game.heroes) {
     hero.attackFlash = Math.max(0, hero.attackFlash - dt)
     hero.invulnerable = Math.max(0, hero.invulnerable - dt)
-    if (hero.dead) {
-      if (game.time >= hero.respawnAt) {
-        hero.dead = false
-        hero.hp = R.HERO_HITS
-        hero.x = DOOR_X
-        hero.y = ENTRANCE_Y
-        hero.invulnerable = R.HIT_INVULNERABLE
-      }
-      continue
-    }
-    const moved = moveHero(hero.x, hero.y, hero.dx, hero.dy, dt)
-    hero.x = moved.x
-    hero.y = moved.y
-
     hero.attackCd = Math.max(0, hero.attackCd - dt)
+    if (hero.dead && game.time >= hero.respawnAt) {
+      hero.dead = false
+      hero.hp = R.HERO_HITS
+      hero.invulnerable = R.HIT_INVULNERABLE
+      teleport(game, hero, DOOR_X, ENTRANCE_Y)
+    }
   }
+
   game.enemies = game.enemies.filter((e) => e.hp > 0)
+  const alive = game.heroes.filter((h) => !h.dead)
+  for (const enemy of game.enemies) stepEnemy(game, enemy, alive, dt)
+  game.strikes = game.strikes.filter((s) => game.time <= s.landsAt + R.STRIKE_CLAIM_WINDOW)
 
-  for (const enemy of game.enemies) {
-    enemy.attackCd = Math.max(0, enemy.attackCd - dt)
-    let target: Hero | undefined
-    let best = Infinity
-    for (const hero of alive) {
-      if (hero.dead) continue
-      const d = Math.hypot(hero.x - enemy.x, hero.y - enemy.y)
-      if (d < best) {
-        best = d
-        target = hero
-      }
-    }
-    if (!target) continue
-    if (best > R.ENEMY_REACH * 0.8) {
-      enemy.x += ((target.x - enemy.x) / best) * R.ENEMY_SPEED * dt
-      enemy.y += ((target.y - enemy.y) / best) * R.ENEMY_SPEED * dt
-    }
-    if (best <= R.ENEMY_REACH && enemy.attackCd <= 0) {
-      damage(game, target)
-      enemy.attackCd = R.ENEMY_ATTACK_COOLDOWN
-    }
-  }
+  game.history.push({ time: game.time, pos: new Map(game.enemies.map((e) => [e.id, { x: e.x, y: e.y }])) })
+  while (game.history.length > 0 && game.history[0].time < game.time - R.MAX_VIEW_DELAY - 0.2) game.history.shift()
 
+  // Traps and chests, checked on the positions the devices reported.
   for (const hero of game.heroes) {
     if (hero.dead) continue
     for (const item of game.items) {
@@ -243,10 +349,7 @@ export function step(game: Game, dt: number) {
     game.room += 1
     loadRoom(game, game.next)
     game.next = []
-    game.heroes.forEach((hero, i) => {
-      hero.x = entranceX(i, game.heroes.length)
-      hero.y = ENTRANCE_Y
-    })
+    game.heroes.forEach((hero, i) => teleport(game, hero, entranceX(i, game.heroes.length), ENTRANCE_Y))
   }
 }
 
@@ -262,12 +365,23 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       id: h.id,
       x: round(h.x),
       y: round(h.y),
+      epoch: h.epoch,
       hp: h.hp,
       dead: h.dead,
       respawnIn: h.dead ? Math.max(0, Math.ceil(h.respawnAt - game.time)) : 0,
       attacking: h.attackFlash > 0,
     })),
-    enemies: game.enemies.map((e) => ({ id: e.id, x: round(e.x), y: round(e.y), hp: e.hp })),
+    enemies: game.enemies.map((e) => ({
+      id: e.id,
+      x: round(e.x),
+      y: round(e.y),
+      hp: e.hp,
+      stunned: e.stun > 0,
+      windup: e.state === 'windup',
+    })),
+    strikes: game.strikes
+      .filter((s) => s.landsAt >= game.time)
+      .map((s) => ({ id: s.id, x: round(s.x), y: round(s.y), r: s.r, remaining: round(s.landsAt - game.time) })),
     items: game.items.map((i) => ({ ...i })),
     next,
   }

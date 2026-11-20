@@ -1,6 +1,18 @@
 import { create } from 'zustand'
+import { onSnapshot, resetHero } from '../game/hero'
 import { clearSnapshots, pushSnapshot } from './interp'
 import { CODE_LETTERS, type ClientMessage, type LobbyPlayer, type Phase, type ServerMessage, type Snapshot } from '../shared/protocol'
+
+// Development aids from the URL: ?lag=300 adds that many ms of round trip (half each way) to test the worst case
+// without a slow network; ?ghost draws where the server has each hero and enemy.
+const params = new URLSearchParams(location.search)
+export const SIM_LAG = Math.max(0, Math.min(2000, Number(params.get('lag')) || 0))
+export const SHOW_GHOSTS = params.has('ghost')
+
+function later(fn: () => void) {
+  if (SIM_LAG > 0) setTimeout(fn, SIM_LAG / 2)
+  else fn()
+}
 
 // The deployed Worker hosts the room server. In `npm run dev` there is no local server, so the dev build talks to it too.
 const DEPLOYED_HOST = 'dungeon-maker.claudioa-cordova.workers.dev'
@@ -62,7 +74,7 @@ export const useNet = create<NetState>()((set, get) => {
     socket = ws
     let failed = false
 
-    ws.onmessage = (event) => {
+    ws.onmessage = (event) => later(() => {
       if (socket !== ws) return
       const message = JSON.parse(String(event.data)) as ServerMessage
       switch (message.type) {
@@ -83,10 +95,14 @@ export const useNet = create<NetState>()((set, get) => {
             notice: message.reason ?? (message.phase === 'lobby' ? '' : s.notice),
             snapshot: message.phase === 'lobby' ? null : s.snapshot,
           }))
-          if (message.phase === 'lobby') clearSnapshots()
+          if (message.phase === 'lobby') {
+            clearSnapshots()
+            resetHero()
+          }
           break
         case 'state':
           pushSnapshot(message.s)
+          onSnapshot(message.s, get().you)
           set({ snapshot: message.s })
           break
         case 'error':
@@ -98,7 +114,7 @@ export const useNet = create<NetState>()((set, get) => {
           }
           break
       }
-    }
+    })
     ws.onclose = () => {
       if (socket !== ws || failed) return
       socket = null
@@ -124,10 +140,15 @@ export const useNet = create<NetState>()((set, get) => {
       ws?.close()
       stopPing()
       clearSnapshots()
+      resetHero()
       set({ status: 'home', error: '', ...initialRoom })
     },
     send: (message) => {
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
+      const ws = socket
+      const data = JSON.stringify(message)
+      later(() => {
+        if (ws?.readyState === WebSocket.OPEN) ws.send(data)
+      })
     },
   }
 })

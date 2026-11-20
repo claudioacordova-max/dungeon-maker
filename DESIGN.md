@@ -17,6 +17,7 @@ Primera meta: prueba de concepto para comprobar si funciona el momento central, 
 - **Máster:** ve a los héroes en vivo y solo edita la **siguiente** sala, nunca la actual. Coloca enemigos, trampas y cofres pagando con puntos.
 - **Puntos del máster:** empieza con algunos y gana más cada vez que un héroe recibe daño. Si el máster es cruel puede encadenar ventaja; se acepta así en esta prueba (el diseñador tiene ideas para corregirlo después).
 - **Héroes:** joystick con el pulgar para moverse y **botón de atacar**, que golpea al enemigo más cercano a su alcance (cambio del diseñador, 2026-11-20; antes era automático).
+- **Ataques enemigos anunciados** (diseñador, 2026-11-20): antes de golpear, el enemigo se detiene y marca en el suelo una zona roja que se llena; al llenarse, golpea a quien esté dentro. Golpear a un enemigo lo deja aturdido un instante.
 - **Daño y vidas:** cada héroe tiene su propia barra de golpes. Al vaciarse, el héroe cae, el equipo pierde una **vida grupal** y el héroe reaparece en la entrada de la sala tras unos segundos, con la barra llena. Las heridas se mantienen de sala en sala; los cofres curan.
 - **Final:** ganan los héroes al salir por la puerta de la última sala. Gana el máster si el equipo se queda sin vidas grupales.
 - Fuera de esta prueba: clases, subir de nivel, equipamiento, acertijos, pistas y la corrección del encadenamiento de ventaja del máster.
@@ -31,6 +32,7 @@ Primera meta: prueba de concepto para comprobar si funciona el momento central, 
 - Coste: enemigo 2, trampa 1, cofre 0 (propuesta).
 - Cofre: cura 2 golpes al héroe que lo toca (propuesta).
 - Reaparición tras caer: 1 s (diseñador, 2026-11-20).
+- Aviso de ataque enemigo: 0,5 s (diseñador, 2026-11-20). Aturdimiento del enemigo golpeado: 0,25 s (propuesta).
 - La primera sala trae 2 enemigos de serie, para que haya algo que hacer mientras el máster prepara la segunda (propuesta).
 
 ## Preguntas abiertas
@@ -41,10 +43,27 @@ Primera meta: prueba de concepto para comprobar si funciona el momento central, 
 - Progresión de los héroes: recompensas, equipamiento y niveles.
 - Si se limita al máster por recursos o se le deja libertad total.
 
+## Red
+
+<!-- Del agente. Acordado con el diseñador el 2026-11-20. -->
+Una sola partida compartida, en el servidor de la sala. Para que las acciones propias se sientan inmediatas con 200–350 ms de latencia:
+
+- **El dispositivo de cada héroe decide:** dónde está su héroe (el servidor solo limita la velocidad), a qué enemigo golpeó según lo que veía (el servidor lo comprueba contra dónde estaba ese enemigo en ese momento) y si una zona roja lo alcanzó (si en su pantalla esquivó, esquivó).
+- **El servidor decide todo lo compartido:** vida y muerte de los enemigos, vidas del equipo, trampas y cofres, puertas, salas y lo que pone el máster.
+- Los demás héroes y los enemigos se ven unos 0,1–0,3 s en el pasado, interpolados.
+- Herramientas de prueba en la URL: `?lag=300` añade 300 ms de ida y vuelta para probar el peor caso; `?ghost` dibuja en alambre dónde tiene el servidor cada héroe y enemigo.
+
 ## Plan actual
 
 <!-- Del agente. -->
-Prueba de concepto multijugador, sin dependencias nuevas (el servidor de cada sala es un Durable Object en el mismo Worker de Cloudflare; se prueba en la versión desplegada):
+Red con acciones propias inmediatas (2026-11-20):
+
+1. [x] Simulador de lag y posición del héroe decidida en su dispositivo.
+2. [x] Golpes resueltos en pantalla y validados en el servidor.
+3. [x] Ataques enemigos anunciados y aturdimiento.
+4. [x] Fantasmas de depuración.
+
+Anterior, prueba de concepto multijugador, sin dependencias nuevas (el servidor de cada sala es un Durable Object en el mismo Worker de Cloudflare; se prueba en la versión desplegada):
 
 1. [x] Salas: crear, entrar con código, lista de jugadores, elegir máster y empezar.
 2. [x] Héroes juntos: moverse en una sala y verse en tiempo real.

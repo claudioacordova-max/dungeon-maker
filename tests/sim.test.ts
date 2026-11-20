@@ -1,11 +1,15 @@
-// Rules from DESIGN.md, checked on the pure simulation (run with `npm test`).
+// Rules from DESIGN.md and the netcode checks, on the pure simulation (run with `npm test`).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as R from '../src/shared/rules.ts'
-import { attack, createGame, place, remove, setInput, step, type Game } from '../src/shared/sim.ts'
+import { createGame, hit, place, remove, reportPosition, reportStruck, step, type Game } from '../src/shared/sim.ts'
 
 function run(game: Game, seconds: number) {
   for (let t = 0; t < seconds; t += 0.05) step(game, 0.05)
+}
+
+function enemy(id: number, x: number, y: number) {
+  return { id, x, y, hp: R.ENEMY_HP, state: 'chase' as const, stateTime: 0, cooldown: 99, stun: 0, strike: 0 }
 }
 
 test('a new game: team lives, full hit bars, master points, first room with enemies', () => {
@@ -33,6 +37,21 @@ test('the master cannot spend points it does not have', () => {
   assert.ok(place(g, 'trap', 3, 5))
 })
 
+test('the device owns its hero position, within the speed limit and the current epoch', () => {
+  const g = createGame(['a'])
+  const hero = g.heroes[0]
+  const start = { x: hero.x, y: hero.y }
+  run(g, 0.5)
+  reportPosition(g, 'a', start.x, start.y + 1, hero.epoch)
+  assert.equal(hero.y, start.y + 1, 'a plausible move is accepted as is')
+  reportPosition(g, 'a', start.x, 12, hero.epoch)
+  assert.ok(hero.y < 12, 'a teleport is cut down to the allowed distance')
+  const y = hero.y
+  run(g, 0.5)
+  reportPosition(g, 'a', start.x, y + 0.5, hero.epoch - 1)
+  assert.equal(hero.y, y, 'a report from before a server move is ignored')
+})
+
 test('hits give the master points; an emptied bar costs one team life and the hero respawns full', () => {
   const g = createGame(['a'])
   g.enemies = []
@@ -43,11 +62,12 @@ test('hits give the master points; an emptied bar costs one team life and the he
   for (let i = 0; i < 400 && !hero.dead; i++) step(g, 0.05)
   assert.equal(g.lives, R.TEAM_LIVES - 1)
   assert.equal(g.points, R.MASTER_START_POINTS + R.HERO_HITS * R.POINTS_PER_HIT)
-  assert.ok(hero.dead)
   g.items = []
-  run(g, R.RESPAWN_SECONDS + 0.2)
+  const epoch = hero.epoch
+  run(g, R.RESPAWN_SECONDS + 0.1)
   assert.equal(hero.dead, false)
   assert.equal(hero.hp, R.HERO_HITS)
+  assert.equal(hero.epoch, epoch + 1, 'the respawn moves the hero: the device must adopt it')
 })
 
 test('the master wins when the team has no lives left', () => {
@@ -62,7 +82,7 @@ test('the master wins when the team has no lives left', () => {
   assert.equal(g.result, 'master-won')
 })
 
-test('wounds carry over; a chest heals; the door opens when the room is clear and leads to the planned room', () => {
+test('wounds carry over; a chest heals; the door leads to the planned room and moves the heroes', () => {
   const g = createGame(['a'])
   const hero = g.heroes[0]
   g.enemies = []
@@ -70,14 +90,13 @@ test('wounds carry over; a chest heals; the door opens when the room is clear an
   place(g, 'chest', 4, 2)
   place(g, 'enemy', 1, 9)
   hero.x = R.ROOM_W / 2
-  hero.y = R.ROOM_H - 0.5
-  setInput(g, 'a', 0, 1)
-  run(g, 0.2)
+  hero.y = R.ROOM_H - 0.4
+  const epoch = hero.epoch
+  run(g, 0.1)
   assert.equal(g.room, 2)
+  assert.equal(hero.epoch, epoch + 1)
   assert.equal(hero.hp, 1, 'wounds persist between rooms')
   assert.equal(g.enemies.length, 1)
-  assert.equal(g.items.length, 1)
-  setInput(g, 'a', 0, 0)
   hero.x = 4.5
   hero.y = 2.5
   run(g, 0.1)
@@ -90,36 +109,45 @@ test('the heroes win by leaving the last room', () => {
   g.room = R.ROOMS_TO_WIN
   g.enemies = []
   g.heroes[0].x = R.ROOM_W / 2
-  g.heroes[0].y = R.ROOM_H - 0.5
-  setInput(g, 'a', 0, 1)
-  run(g, 0.2)
+  g.heroes[0].y = R.ROOM_H - 0.4
+  run(g, 0.1)
   assert.equal(g.result, 'heroes-won')
 })
 
-test('the attack button hits the nearest enemy in range, once per cooldown', () => {
+test('a hit seen on the device counts if the enemy was in range where the device saw it', () => {
   const g = createGame(['a'])
-  g.enemies = [
-    { id: 1, x: 5, y: 2, hp: R.ENEMY_HP, attackCd: 99 },
-    { id: 2, x: 8, y: 11, hp: R.ENEMY_HP, attackCd: 99 },
-  ]
-  g.heroes[0].x = 4.5
-  g.heroes[0].y = 1
-  attack(g, 'a')
-  attack(g, 'a') // still cooling down: ignored
+  g.enemies = [enemy(1, 4.5, 3)]
+  const hero = g.heroes[0]
+  hero.x = 4.5
+  hero.y = 1
+  run(g, 0.3) // history: the enemy was at y = 3
+  g.enemies[0].y = 8 // it then moved away on the server
+  assert.ok(hit(g, 'a', 1, 0.2), 'checked against where it was 0.2 s ago')
   assert.equal(g.enemies[0].hp, R.ENEMY_HP - 1)
-  for (let i = 1; i < R.ENEMY_HP; i++) {
-    run(g, R.ATTACK_COOLDOWN + 0.05)
-    attack(g, 'a')
-  }
-  run(g, 0.05)
-  assert.deepEqual(g.enemies.map((e) => e.id), [2], 'the far enemy is out of range')
+  assert.ok(g.enemies[0].stun > 0, 'a hit stuns the enemy')
+  assert.equal(hit(g, 'a', 1, 0.2), false, 'cooldown')
+  run(g, R.ATTACK_COOLDOWN)
+  assert.equal(hit(g, 'a', 1, 0), false, 'out of range where it is now and no delay given')
 })
 
-test('a fallen hero respawns after the respawn time', () => {
-  const g = createGame(['a'])
-  const hero = g.heroes[0]
-  hero.dead = true
-  hero.respawnAt = g.time + R.RESPAWN_SECONDS
-  run(g, R.RESPAWN_SECONDS + 0.1)
-  assert.equal(hero.dead, false)
+test('an enemy announces its strike; only heroes whose device reports it lose a hit, once per strike', () => {
+  const g = createGame(['a', 'b'])
+  g.enemies = [{ ...enemy(1, 4.5, 3), cooldown: 0 }]
+  const [a, b] = g.heroes
+  a.x = 4.5
+  a.y = 2.2
+  b.x = 5
+  b.y = 2.5
+  step(g, 0.05)
+  assert.equal(g.enemies[0].state, 'windup')
+  assert.equal(g.strikes.length, 1)
+  const strike = g.strikes[0]
+  assert.equal(a.hp, R.HERO_HITS, 'nothing happens during the telegraph')
+  run(g, R.ENEMY_TELEGRAPH)
+  assert.ok(reportStruck(g, 'a', strike.id))
+  assert.equal(reportStruck(g, 'a', strike.id), false, 'once per strike')
+  assert.equal(a.hp, R.HERO_HITS - 1)
+  assert.equal(b.hp, R.HERO_HITS, 'b dodged on its own screen and did not report')
+  run(g, R.STRIKE_CLAIM_WINDOW + 0.2)
+  assert.equal(reportStruck(g, 'b', strike.id), false, 'too late')
 })

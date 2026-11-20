@@ -2,7 +2,7 @@
 // snapshots around that moment. Smooth motion at the server's 20 updates per second, without React re-renders.
 import type { Snapshot } from '../shared/protocol'
 
-const INTERP_DELAY = 110 // ms: a bit more than two server ticks
+export const INTERP_DELAY = 110 // ms: a bit more than two server ticks
 const KEEP = 12
 
 type Frame = { at: number; heroes: Map<string, { x: number; y: number }>; enemies: Map<number, { x: number; y: number }> }
@@ -45,4 +45,9 @@ export const sampleEnemy = (id: number) => sample((f) => f.enemies, id)
 // Latest server position of a hero (for reconciling the locally predicted hero).
 export function latestHero(id: string): { x: number; y: number } | null {
   return frames.length ? (frames[frames.length - 1].heroes.get(id) ?? null) : null
+}
+
+// Latest server position of an enemy (debug ghosts).
+export function latestEnemy(id: number): { x: number; y: number } | null {
+  return frames.length ? (frames[frames.length - 1].enemies.get(id) ?? null) : null
 }

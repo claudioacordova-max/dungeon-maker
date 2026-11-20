@@ -1,7 +1,7 @@
 // One Durable Object per room code: keeps the lobby and runs the authoritative game loop in memory.
 import type { ClientMessage, LobbyPlayer, Phase, Role, ServerMessage } from '../src/shared/protocol.ts'
 import { MAX_HEROES, TICK_HZ } from '../src/shared/rules.ts'
-import { attack, createGame, place, remove, removeHero, setInput, snapshot, step, type Game } from '../src/shared/sim.ts'
+import { createGame, hit, place, remove, removeHero, reportPosition, reportStruck, snapshot, step, type Game } from '../src/shared/sim.ts'
 
 type Player = LobbyPlayer & { socket: WebSocket }
 
@@ -97,11 +97,19 @@ export class Room {
         return this.setRole(player, message.role)
       case 'start':
         return this.start(player)
-      case 'input':
-        if (this.game && player.role === 'hero') setInput(this.game, player.id, Number(message.dx), Number(message.dy))
+      case 'pos':
+        if (this.game && player.role === 'hero') {
+          reportPosition(this.game, player.id, Number(message.x), Number(message.y), Number(message.epoch))
+        }
         return
-      case 'attack':
-        if (this.game && player.role === 'hero') attack(this.game, player.id)
+      case 'hit':
+        if (this.game && player.role === 'hero') {
+          const target = message.target === null ? null : Number(message.target)
+          hit(this.game, player.id, target, Number(message.viewDelay))
+        }
+        return
+      case 'struck':
+        if (this.game && player.role === 'hero') reportStruck(this.game, player.id, Number(message.strike))
         return
       case 'ping':
         return this.send(player, { type: 'pong', t: Number(message.t) })

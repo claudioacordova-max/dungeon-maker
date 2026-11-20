@@ -1,13 +1,13 @@
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
-import type { Group, OrthographicCamera } from 'three'
+import type { Group, Mesh, MeshStandardMaterial, OrthographicCamera } from 'three'
+import { feedback, frame as heroFrame, local, resetHero, visibleStrikes } from '../game/hero'
 import { useMaster } from '../game/master'
-import { moveInput } from '../game/input'
-import { me, useNet } from '../net/connection'
-import { latestHero, sampleEnemy, sampleHero } from '../net/interp'
+import { me, SHOW_GHOSTS, useNet } from '../net/connection'
+import { latestEnemy, latestHero, sampleEnemy, sampleHero } from '../net/interp'
 import type { Placeable } from '../shared/protocol'
-import { ROOM_H, ROOM_W } from '../shared/rules'
-import { isPlaceable, moveHero } from '../shared/sim'
+import { ENEMY_HP, ROOM_H, ROOM_W } from '../shared/rules'
+import { isPlaceable } from '../shared/sim'
 import { PLAYER_COLORS } from '../ui/screens'
 
 // Top-down room. Simulation (x, y) maps to world (x, 0, -y): the door (y = ROOM_H) is at the top of the screen.
@@ -42,39 +42,125 @@ function Follow({ at, children }: { at: () => { x: number; y: number } | null; c
   return <group ref={ref}>{children}</group>
 }
 
-// Own hero: moved locally at once with the same rule as the server (prediction), then pulled gently towards the
-// server's position. A large gap (respawn, room change) snaps.
-const predicted = { x: 0, y: 0, ready: false }
-
-function usePredictedHero(id: string) {
-  useFrame((_, dt) => {
-    const server = latestHero(id)
-    if (!server) return
-    if (!predicted.ready) {
-      predicted.x = server.x
-      predicted.y = server.y
-      predicted.ready = true
-    }
-    const v = moveInput()
-    const moved = moveHero(predicted.x, predicted.y, v.x, v.y, Math.min(dt, 0.1))
-    const ex = server.x - moved.x
-    const ey = server.y - moved.y
-    if (Math.hypot(ex, ey) > 1.5) {
-      predicted.x = server.x
-      predicted.y = server.y
-      return
-    }
-    // While moving the server lags behind by the round trip, so only correct softly; when still, settle faster.
-    const k = 1 - Math.exp(-dt * (v.x === 0 && v.y === 0 ? 8 : 1.5))
-    predicted.x = moved.x + ex * k
-    predicted.y = moved.y + ey * k
-  })
+// Runs the own hero (game/hero.ts) every frame: movement, position reports and announced strikes.
+function LocalHero() {
+  useEffect(() => resetHero, [])
+  useFrame((_, dt) => heroFrame(dt))
+  return null
 }
 
-function OwnHeroTracker({ id }: { id: string }) {
-  usePredictedHero(id)
-  useEffect(() => () => void (predicted.ready = false), [])
-  return null
+const ownPosition = () => (local.ready ? local : null)
+
+// Own hero, drawn where this device has it, with the swing and hurt feedback shown at once.
+function OwnHero({ color }: { color: string }) {
+  const swing = useRef<Mesh>(null)
+  const body = useRef<MeshStandardMaterial>(null)
+  useFrame(() => {
+    const now = performance.now()
+    if (swing.current) swing.current.visible = feedback.swingUntil > now
+    if (body.current) body.current.emissive.set(feedback.hurtUntil > now ? '#ef4444' : '#000000')
+  })
+  return (
+    <Follow at={ownPosition}>
+      <mesh position={[0, 0.4, 0]}>
+        <cylinderGeometry args={[0.32, 0.32, 0.8, 16]} />
+        <meshStandardMaterial ref={body} color={color} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <ringGeometry args={[0.42, 0.52, 24]} />
+        <meshBasicMaterial color="#ffffff" />
+      </mesh>
+      <mesh ref={swing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} visible={false}>
+        <ringGeometry args={[0.6, 0.75, 24]} />
+        <meshBasicMaterial color="#fde68a" transparent opacity={0.85} />
+      </mesh>
+    </Follow>
+  )
+}
+
+// Enemy: white flash when hit (at once on the hitter's screen, then as the server's stun for everyone), orange and
+// a bit larger while winding up a strike.
+function Enemy({ id, hp, stunned, windup }: { id: number; hp: number; stunned: boolean; windup: boolean }) {
+  const material = useRef<MeshStandardMaterial>(null)
+  useFrame(() => {
+    const m = material.current
+    if (!m) return
+    const flashing = (feedback.enemyFlash.get(id) ?? 0) > performance.now() || stunned
+    m.color.set(flashing ? '#ffffff' : windup ? '#fb923c' : '#ef4444')
+    m.emissive.set(windup ? '#7c2d12' : '#000000')
+  })
+  return (
+    <Follow at={() => sampleEnemy(id)}>
+      <mesh position={[0, 0.35, 0]} scale={(0.7 + (0.3 * hp) / ENEMY_HP) * (windup ? 1.12 : 1)}>
+        <boxGeometry args={[0.6, 0.7, 0.6]} />
+        <meshStandardMaterial ref={material} color="#ef4444" />
+      </mesh>
+    </Follow>
+  )
+}
+
+// Announced enemy strikes on this screen: a red circle that fills up until it lands (fixed pool of meshes).
+const ZONES = 8
+function StrikeZones() {
+  const outer = useRef<(Mesh | null)[]>([])
+  const inner = useRef<(Mesh | null)[]>([])
+  useFrame(() => {
+    const zones = visibleStrikes()
+    for (let i = 0; i < ZONES; i++) {
+      const o = outer.current[i]
+      const f = inner.current[i]
+      const z = zones[i]
+      if (!o || !f) continue
+      o.visible = f.visible = !!z
+      if (!z) continue
+      o.position.set(z.x, 0.02, -z.y)
+      o.scale.setScalar(z.r)
+      f.position.set(z.x, 0.025, -z.y)
+      f.scale.setScalar(Math.max(0.01, z.r * z.progress))
+    }
+  })
+  return (
+    <>
+      {Array.from({ length: ZONES }, (_, i) => (
+        <group key={i}>
+          <mesh ref={(m) => void (outer.current[i] = m)} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+            <circleGeometry args={[1, 32]} />
+            <meshBasicMaterial color="#ef4444" transparent opacity={0.22} depthWrite={false} />
+          </mesh>
+          <mesh ref={(m) => void (inner.current[i] = m)} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+            <circleGeometry args={[1, 32]} />
+            <meshBasicMaterial color="#ef4444" transparent opacity={0.5} depthWrite={false} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  )
+}
+
+// ?ghost: wireframes where the server has each hero and enemy right now.
+function Ghosts() {
+  const s = useNet((st) => st.snapshot)
+  if (!s) return null
+  return (
+    <>
+      {s.heroes.map((h) => (
+        <Follow key={h.id} at={() => latestHero(h.id)}>
+          <mesh position={[0, 0.4, 0]}>
+            <cylinderGeometry args={[0.32, 0.32, 0.8, 12]} />
+            <meshBasicMaterial color="#ffffff" wireframe />
+          </mesh>
+        </Follow>
+      ))}
+      {s.enemies.map((e) => (
+        <Follow key={e.id} at={() => latestEnemy(e.id)}>
+          <mesh position={[0, 0.35, 0]}>
+            <boxGeometry args={[0.6, 0.7, 0.6]} />
+            <meshBasicMaterial color="#ffffff" wireframe />
+          </mesh>
+        </Follow>
+      ))}
+    </>
+  )
 }
 
 function Room({ doorOpen }: { doorOpen: boolean }) {
@@ -200,7 +286,7 @@ export default function RoomScene() {
       <FitCamera />
       <ambientLight intensity={0.9} />
       <directionalLight position={[3, 10, 2]} intensity={1.6} />
-      {self?.role === 'hero' && s && <OwnHeroTracker id={state.you} />}
+      {self?.role === 'hero' && s && <LocalHero />}
       <Room doorOpen={editing ? false : (s?.doorOpen ?? false)} />
       {editing && <NextRoomEditor />}
       {s && !editing && (
@@ -211,31 +297,22 @@ export default function RoomScene() {
             </group>
           ))}
           {s.enemies.map((e) => (
-            <Follow key={e.id} at={() => sampleEnemy(e.id)}>
-              <mesh position={[0, 0.35, 0]} scale={0.7 + (0.3 * e.hp) / 3}>
-                <boxGeometry args={[0.6, 0.7, 0.6]} />
-                <meshStandardMaterial color="#ef4444" />
-              </mesh>
-            </Follow>
+            <Enemy key={e.id} id={e.id} hp={e.hp} stunned={e.stunned} windup={e.windup} />
           ))}
+          <StrikeZones />
         </>
       )}
       {s?.heroes.map((h) => {
         if (h.dead) return null
         const player = state.players.find((p) => p.id === h.id)
         const color = PLAYER_COLORS[player?.color ?? 0]
+        if (h.id === state.you) return <OwnHero key={h.id} color={color} />
         return (
-          <Follow key={h.id} at={h.id === state.you ? () => (predicted.ready ? predicted : null) : () => sampleHero(h.id)}>
+          <Follow key={h.id} at={() => sampleHero(h.id)}>
             <mesh position={[0, 0.4, 0]}>
               <cylinderGeometry args={[0.32, 0.32, 0.8, 16]} />
               <meshStandardMaterial color={color} transparent opacity={editing ? 0.35 : 1} />
             </mesh>
-            {h.id === state.you && (
-              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-                <ringGeometry args={[0.42, 0.52, 24]} />
-                <meshBasicMaterial color="#ffffff" />
-              </mesh>
-            )}
             {h.attacking && !editing && (
               <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
                 <ringGeometry args={[0.6, 0.75, 24]} />
@@ -245,6 +322,7 @@ export default function RoomScene() {
           </Follow>
         )
       })}
+      {SHOW_GHOSTS && <Ghosts />}
     </>
   )
 }
