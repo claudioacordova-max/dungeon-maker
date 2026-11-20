@@ -60,3 +60,48 @@ export function BowIcon() {
     </svg>
   )
 }
+
+export function UserIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="5" r="3.2" fill="currentColor" />
+      <path d="M2 15c0-3.6 2.7-5.6 6-5.6s6 2 6 5.6z" fill="currentColor" />
+    </svg>
+  )
+}
+
+export function HammerIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 20 13 11M20 20 11 11" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
+      <path d="M10 4l5 5-2 2-5-5zM14 4l-5 5 2 2 5-5z" fill="currentColor" />
+    </svg>
+  )
+}
+
+export function ScanIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3" stroke="currentColor" strokeWidth="1.6" fill="none" />
+    </svg>
+  )
+}
+
+export function EnterIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M9 2h5v12H9M2 8h8M7 5l3 3-3 3" stroke="currentColor" strokeWidth="1.7" fill="none" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function ShareIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="12" cy="3.5" r="2" fill="currentColor" />
+      <circle cx="4" cy="8" r="2" fill="currentColor" />
+      <circle cx="12" cy="12.5" r="2" fill="currentColor" />
+      <path d="M5.7 7l4.6-2.5M5.7 9l4.6 2.5" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  )
+}

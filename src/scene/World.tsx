@@ -570,7 +570,7 @@ function Slots({ s }: { s: Snapshot }) {
               }}
             >
               <planeGeometry args={[ROOM_W - 0.6, ROOM_H - 0.6]} />
-              <meshBasicMaterial color={bossNext ? '#a855f7' : '#38bdf8'} transparent opacity={active ? 0.45 : 0.18} depthWrite={false} />
+              <meshBasicMaterial color={bossNext ? '#a855f7' : '#ffc533'} transparent opacity={active ? 0.45 : 0.18} depthWrite={false} />
             </mesh>
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
               <planeGeometry args={[3, 0.6]} />
