@@ -1,3 +1,5 @@
+import { unlockAudio } from '../audio/sfx'
+
 // Hero input. Touch/mouse: a floating movement stick (left) and an attack stick (right): tap = attack with
 // auto-aim, drag = aim by hand, hold = charge the powered attack (released on lift). Keyboard: WASD/arrows to
 // move, Space held to charge (auto-aim). Directions use the game's axes: +x east, +y north (up the screen).
@@ -55,6 +57,9 @@ let started = false
 export function startInput() {
   if (started) return
   started = true
+  // Browsers allow sound only after a gesture: unlock it on the first touch, click or key.
+  addEventListener('pointerdown', unlockAudio, { capture: true })
+  addEventListener('keydown', unlockAudio, { capture: true })
   addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return
     if (KEY_DIRS[e.code]) keys.add(e.code)

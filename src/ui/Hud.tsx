@@ -5,6 +5,8 @@ import { canAdd, difficulty } from '../shared/map'
 import type { Placeable, Snapshot } from '../shared/protocol'
 import { DIFFICULTY, MAX_ROOMS, ROOM_DIFFICULTY_CAP, TEAM_LIVES } from '../shared/rules'
 import { AttackStick, MoveStick } from './Controls'
+import MiniMap from './MiniMap'
+import SoundToggle from './SoundToggle'
 import { ExitIcon, HeartIcon } from './icons'
 import { PLAYER_COLORS } from './screens'
 
@@ -34,6 +36,7 @@ export default function Hud() {
         </div>
         <div className="hud-top-right">
           <span className="latency">{state.latency > 0 ? `${state.latency} ms` : ''}</span>
+          <SoundToggle />
           <button type="button" className="ui-button ui-icon-button exit" aria-label="Salir de la partida" onClick={state.leave}>
             <ExitIcon />
           </button>
@@ -167,6 +170,7 @@ function MasterPanel({ s }: { s: Snapshot }) {
 
   return (
     <div className="master-panel panel">
+      <MiniMap s={s} />
       {slot && !bossPlaced ? (
         <div className="master-row">
           {!bossNext ? (
@@ -203,8 +207,8 @@ function MasterPanel({ s }: { s: Snapshot }) {
           {bossPlaced
             ? 'Mapa completo. Toca una sala para revisarla.'
             : bossNext
-              ? 'Ya tienes 6 salas: toca un espacio morado para poner la sala del jefe.'
-              : 'Toca un espacio azul para construir una sala, o una sala para editarla.'}
+              ? 'Ya tienes 6 salas: toca un + morado para la sala del jefe.'
+              : 'Toca un + para construir una sala, o una sala para editarla.'}
         </p>
       )}
     </div>

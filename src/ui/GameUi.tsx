@@ -1,4 +1,6 @@
+import { sfx } from '../audio/sfx'
 import { useNet } from '../net/connection'
+import SoundToggle from './SoundToggle'
 import Hud from './Hud'
 import { ConnectingScreen, EndScreen, HomeScreen, LobbyScreen } from './screens'
 
@@ -9,7 +11,13 @@ export default function GameUi() {
   const hasSnapshot = useNet((s) => !!s.snapshot)
 
   return (
-    <div className="ui">
+    <div
+      className="ui"
+      onClickCapture={(e) => {
+        if ((e.target as HTMLElement).closest('button')) sfx.click()
+      }}
+    >
+      {status !== 'room' || phase === 'lobby' ? <SoundToggle floating /> : null}
       {status === 'home' && <HomeScreen />}
       {status === 'connecting' && <ConnectingScreen />}
       {status === 'room' && phase === 'lobby' && <LobbyScreen />}

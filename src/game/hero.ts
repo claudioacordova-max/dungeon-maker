@@ -1,6 +1,7 @@
 // The own hero, owned by this device (see DESIGN.md, section Red): moved here at once, reported to the server,
 // which only overrides it when it moves the hero itself (start, respawn: a new epoch). Attacks, shots and enemy
 // attacks are resolved here, against what this screen shows, and reported to the server.
+import { sfx } from '../audio/sfx'
 import { useNet } from '../net/connection'
 import { INTERP_DELAY, sampleEnemy, sampleOrb } from '../net/interp'
 import { angleDiff, moveHero } from '../shared/map'
@@ -90,6 +91,7 @@ export function visibleStrikes(): { id: number; x: number; y: number; r: number;
 }
 
 function hurt(now: number) {
+  sfx.heroHurt()
   feedback.hurtAt = now
   invulnerableUntil = now + HIT_INVULNERABLE * 1000
 }
@@ -130,6 +132,8 @@ function fire(charged: boolean, manualDir: number | null) {
   feedback.attackDir = dir
   const viewDelay = (net.latency / 2 + INTERP_DELAY) / 1000
   const hits: number[] = []
+  if (local.cls === 'melee') (charged ? sfx.spin : sfx.swing)()
+  else (charged ? sfx.critShot : sfx.shot)()
   if (local.cls === 'melee') {
     const melee = HERO.melee
     for (const e of net.snapshot.enemies) {
@@ -142,6 +146,7 @@ function fire(charged: boolean, manualDir: number | null) {
         ? d <= melee.charged.range
         : d <= melee.basic.range && (d < 0.3 || angleDiff(Math.atan2(dy, dx), dir) <= melee.basic.arc / 2)
       if (inside) {
+        if (hits.length === 0) (charged ? sfx.critHit : sfx.hit)()
         hits.push(e.id)
         feedback.enemyFlash.set(e.id, now + 180)
       }
@@ -173,6 +178,7 @@ export function frame(dt: number) {
       const p = sampleEnemy(e.id)
       if (p && Math.hypot(p.x - shot.x, p.y - shot.y) <= enemyRadius(e.kind) + 0.2) {
         net.send({ type: 'shotHit', seq: shot.seq, target: e.id, viewDelay: (net.latency / 2 + INTERP_DELAY) / 1000 })
+        ;(shot.crit ? sfx.critHit : sfx.hit)()
         feedback.enemyFlash.set(e.id, now + 180)
         hit = true
         break
@@ -200,7 +206,9 @@ export function frame(dt: number) {
   const a = attackInput()
   if (a.held) {
     if (holdStart < 0) holdStart = now
+    const before = local.charge
     local.charge = Math.min(1, (now - holdStart) / 1000 / CHARGE_TIME)
+    if (before < 1 && local.charge >= 1) sfx.chargeFull()
     local.aim = a.aiming ? a.dir : null
   } else if (holdStart >= 0) {
     const charged = local.charge >= 1

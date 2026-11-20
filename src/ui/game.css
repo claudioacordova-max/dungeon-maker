@@ -645,3 +645,130 @@
   line-height: 1.35;
   text-align: center;
 }
+
+/* Master minimap: rooms and free slots as buttons (touch-friendly), north up. */
+.minimap {
+  display: grid;
+  gap: calc(4 * var(--ui-px));
+  justify-content: center;
+  padding: 0.3em 0;
+}
+
+.mini-room,
+.mini-slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 0;
+  color: #fff;
+  font: inherit;
+  font-size: 0.95em;
+  border: 0.14em solid var(--ink);
+  border-radius: 0.35em;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.mini-room {
+  background: linear-gradient(180deg, #e9d5b5, #c9a97d);
+  color: var(--ink);
+  box-shadow: 0 0.18em 0 var(--ink);
+}
+
+.mini-room.is-draft {
+  background: repeating-linear-gradient(135deg, #fbbf24 0 6px, #f59e0b 6px 12px);
+}
+
+.mini-room.is-boss {
+  background: linear-gradient(180deg, #d58bff, #9333ea);
+  color: #fff;
+}
+
+.mini-room.is-boss.is-draft {
+  background: repeating-linear-gradient(135deg, #c084fc 0 6px, #9333ea 6px 12px);
+}
+
+.mini-room.is-start {
+  background: linear-gradient(180deg, #a7f3d0, #34d399);
+  cursor: default;
+}
+
+.mini-room:disabled {
+  opacity: 1;
+}
+
+.mini-label {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.mini-enemies {
+  position: absolute;
+  top: -0.45em;
+  right: -0.45em;
+  min-width: 1.3em;
+  padding: 0 0.25em;
+  color: #fff;
+  font-size: 0.6em;
+  line-height: 1.3em;
+  background: #ef4444;
+  border: 0.12em solid var(--ink);
+  border-radius: 999px;
+}
+
+.mini-heroes {
+  position: absolute;
+  bottom: 0.15em;
+  display: flex;
+  gap: 0.12em;
+}
+
+.mini-heroes i {
+  width: 0.45em;
+  height: 0.45em;
+  border: 0.08em solid var(--ink);
+  border-radius: 50%;
+}
+
+.mini-slot {
+  color: #bfe3ff;
+  font-size: 1.3em;
+  background: rgb(56 189 248 / 0.18);
+  border-style: dashed;
+  border-color: #7dd3fc;
+}
+
+.mini-slot.is-boss {
+  color: #e9d5ff;
+  background: rgb(168 85 247 / 0.22);
+  border-color: #c084fc;
+}
+
+.mini-slot.is-active {
+  color: var(--ink);
+  background: #ffce2e;
+  border-style: solid;
+  border-color: var(--ink);
+}
+
+.sound-toggle {
+  padding: 0.5em;
+  font-size: 0.9em;
+}
+
+.sound-toggle.is-floating {
+  position: absolute;
+  top: var(--edge);
+  right: var(--edge);
+  z-index: 2;
+}
+
+/* The HUD and panels sit above the names drawn over the heroes. */
+.ui {
+  z-index: 10;
+}
+
+.latency {
+  white-space: nowrap;
+}

@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { playSnapshotSounds } from '../audio/events'
+import { sfx, startMusic, stopMusic } from '../audio/sfx'
 import { onSnapshot, resetHero } from '../game/hero'
 import { clearSnapshots, pushSnapshot } from './interp'
 import { CODE_LETTERS, type ClientMessage, type LobbyPlayer, type Phase, type ServerMessage, type Snapshot } from '../shared/protocol'
@@ -80,6 +82,7 @@ export const useNet = create<NetState>()((set, get) => {
       switch (message.type) {
         case 'welcome':
           set({ status: 'room', you: message.you, code: message.code })
+          startMusic()
           if (pingTimer) clearInterval(pingTimer)
           pingTimer = setInterval(() => get().send({ type: 'ping', t: performance.now() }), 2000)
           get().send({ type: 'ping', t: performance.now() })
@@ -87,7 +90,14 @@ export const useNet = create<NetState>()((set, get) => {
         case 'pong':
           set({ latency: Math.round(performance.now() - message.t) })
           break
-        case 'lobby':
+        case 'lobby': {
+          const before = get().phase
+          const self = message.players.find((p) => p.id === get().you)
+          if (message.phase !== before && (message.phase === 'heroes-won' || message.phase === 'master-won')) {
+            const won = (message.phase === 'heroes-won') === (self?.role === 'hero')
+            if (won) sfx.victory()
+            else sfx.defeat()
+          }
           set((s) => ({
             host: message.host,
             phase: message.phase,
@@ -100,11 +110,16 @@ export const useNet = create<NetState>()((set, get) => {
             resetHero()
           }
           break
-        case 'state':
+        }
+        case 'state': {
+          const prev = get().snapshot
+          const role = get().players.find((p) => p.id === get().you)?.role
           pushSnapshot(message.s)
           onSnapshot(message.s, get().you)
+          playSnapshotSounds(prev, message.s, get().you, role === 'hero')
           set({ snapshot: message.s })
           break
+        }
         case 'error':
           failed = true
           if (message.code === 'taken' && intent === 'create' && attempt < 3) {
@@ -119,6 +134,7 @@ export const useNet = create<NetState>()((set, get) => {
       if (socket !== ws || failed) return
       socket = null
       stopPing()
+      stopMusic()
       set({ status: 'home', error: ERRORS.closed, ...initialRoom })
     }
   }
@@ -139,6 +155,7 @@ export const useNet = create<NetState>()((set, get) => {
       socket = null
       ws?.close()
       stopPing()
+      stopMusic()
       clearSnapshots()
       resetHero()
       set({ status: 'home', error: '', ...initialRoom })
