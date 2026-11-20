@@ -186,6 +186,8 @@ export const useNet = create<NetState>()((set, get) => {
     if (dead || performance.now() - lastMessageAt > STALE_MS) rejoin()
   }
   setInterval(checkAlive, 1000)
+  // Development only: window.__dmDrop() cuts the connection, to test rejoining.
+  if (import.meta.env.DEV) (window as unknown as { __dmDrop: () => void }).__dmDrop = () => socket?.close()
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       lastMessageAt = Math.min(lastMessageAt, performance.now() - STALE_MS + 2500) // decide within ~2.5 s
