@@ -1,17 +1,25 @@
 import { create } from 'zustand'
 import type { Placeable } from '../shared/protocol'
 
-// Local UI state of the master: which room is shown and which tool places on tap.
+// Local UI state of the master: the whole map, or one room being edited; the tool used on tap; a chosen slot.
 type MasterState = {
-  view: 'current' | 'next'
+  mode: 'map' | 'room'
+  room: number | null
   tool: Placeable | 'erase'
-  setView: (view: 'current' | 'next') => void
+  slot: { gx: number; gy: number } | null
+  editRoom: (room: number) => void
+  toMap: () => void
   setTool: (tool: Placeable | 'erase') => void
+  setSlot: (slot: { gx: number; gy: number } | null) => void
 }
 
 export const useMaster = create<MasterState>()((set) => ({
-  view: 'next',
-  tool: 'enemy',
-  setView: (view) => set({ view }),
+  mode: 'map',
+  room: null,
+  tool: 'slime',
+  slot: null,
+  editRoom: (room) => set({ mode: 'room', room, slot: null }),
+  toMap: () => set({ mode: 'map', room: null }),
   setTool: (tool) => set({ tool }),
+  setSlot: (slot) => set({ slot }),
 }))

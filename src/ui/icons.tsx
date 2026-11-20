@@ -52,3 +52,11 @@ export function ExitIcon() {
     </svg>
   )
 }
+
+export function BowIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4 2c5 1 9 5 10 10M4 2l10 10M3 6l1-4 4-1" stroke="currentColor" strokeWidth="1.4" fill="none" />
+    </svg>
+  )
+}

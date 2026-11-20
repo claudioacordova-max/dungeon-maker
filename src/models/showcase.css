@@ -1,0 +1,149 @@
+.dm-gallery {
+  position: fixed;
+  inset: 0;
+  isolation: isolate;
+  overflow: hidden;
+  color: #ffedcc;
+  background-color: #1e192e;
+  background-image: radial-gradient(ellipse at 50% 48%, #51405a, #302840 52%, #1e192e 90%);
+  font-family: var(--font-ui, system-ui, sans-serif);
+}
+.dm-gallery::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(#e7c7c414 .8px, transparent 1px);
+  background-size: 12px 12px;
+}
+.dm-gallery-title, .dm-playback {
+  position: absolute;
+  left: max(5%, env(safe-area-inset-left));
+  z-index: 2;
+}
+.dm-gallery-title {
+  top: max(4%, env(safe-area-inset-top));
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  pointer-events: none;
+}
+.dm-crest {
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 43px;
+  background: #ffc465;
+  clip-path: polygon(0 0,100% 0,100% 72%,50% 100%,0 72%);
+}
+.dm-crest i {
+  position: relative;
+  width: 8px;
+  height: 24px;
+  border-radius: 5px 5px 1px 1px;
+  background: #482b42;
+  transform: rotate(32deg) translate(-1px,-2px);
+}
+.dm-crest i::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: -5px;
+  width: 18px;
+  height: 4px;
+  background: inherit;
+}
+.dm-wordmark {
+  color: #ffc675;
+  font-size: clamp(10px, .95vw, 13px);
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.dm-gallery-title h1 {
+  margin: 0;
+  color: #fff2d9;
+  font-size: clamp(22px, 2.6vw, 40px);
+  letter-spacing: -.045em;
+  line-height: 1.15;
+}
+.dm-gallery[data-focused="true"] .dm-gallery-title {
+  padding: 8px 13px 9px 9px;
+  border-radius: 10px;
+  background: #302639ed;
+}
+.dm-marker-layer { position: absolute; inset: 0; pointer-events: none; }
+.dm-gallery button { font: inherit; cursor: pointer; }
+.dm-gallery [hidden] { display: none !important; }
+.dm-marker {
+  position: absolute;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+  min-width: 37px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid #865e58;
+  background: #332838f2;
+  color: #fff1d5;
+  box-shadow: 0 2px 0 #3627394a;
+  text-align: center;
+  white-space: nowrap;
+}
+.dm-marker::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(44px, 100%);
+  height: max(44px, 100%);
+}
+.dm-marker strong, .dm-marker small { display: block; }
+.dm-marker strong { font-size: clamp(10px, 1.1vw, 14px); line-height: 1.1; }
+.dm-marker small { color: #ffca87; font: 600 clamp(8px,.8vw,10px)/1.1 var(--font-numeric, monospace); }
+.dm-marker small:empty { display: none; }
+.dm-playback {
+  bottom: max(4%, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.dm-transport { display: flex; border: 1px solid #756071; border-radius: 12px; background: #302638; overflow: hidden; }
+.dm-playback button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 16px;
+  color: #ffebca;
+  font-size: 13px;
+  font-weight: 700;
+}
+.dm-transport button { border: 0; background: none; }
+.dm-transport button + button { border-left: 1px solid #685367; }
+.dm-back { border-radius: 12px; border: 1px solid #756071; background: #302638; }
+.dm-gallery button:hover { background-color: #543c51; }
+.dm-gallery button:active { background-color: #6a485a; }
+.dm-gallery button:focus-visible { outline: 3px solid #ffca72; outline-offset: 1px; }
+.dm-pause-icon, .dm-next-icon { width: 11px; height: 12px; display: block; color: #ffc675; }
+.dm-pause-icon { border-left: 4px solid; border-right: 4px solid; }
+[aria-pressed="true"] .dm-pause-icon, .dm-next-icon::before {
+  border: 0;
+  height: 0;
+  width: 0;
+  border-block: 6px solid transparent;
+  border-left: 9px solid #ffc675;
+}
+.dm-next-icon { border-right: 2px solid; }
+.dm-next-icon::before { display: block; content: ""; }
+@media (max-width: 520px) {
+  .dm-marker { min-width: 29px; padding: 3px 4px; }
+}
+@media (max-height: 540px) {
+  .dm-gallery-title { top: 10px; }
+  .dm-playback { bottom: 8px; }
+}

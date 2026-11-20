@@ -1,131 +1,199 @@
-import { me, useNet } from '../net/connection'
-import { COST, HERO_HITS, ROOMS_TO_WIN, TEAM_LIVES } from '../shared/rules'
-import type { Placeable } from '../shared/protocol'
 import { useMaster } from '../game/master'
-import { DoorIcon, ExitIcon, GemIcon, HeartIcon, SwordIcon } from './icons'
-import { attack } from '../game/input'
-import Joystick from './Joystick'
+import { me, useNet } from '../net/connection'
+import { canAdd, difficulty } from '../shared/map'
+import type { Placeable, Snapshot } from '../shared/protocol'
+import { DIFFICULTY, MAX_ROOMS, ROOM_DIFFICULTY_CAP, TEAM_LIVES } from '../shared/rules'
+import { AttackStick, MoveStick } from './Controls'
+import { ExitIcon, HeartIcon } from './icons'
 import { PLAYER_COLORS } from './screens'
 
-// In-game HUD anchored to the stage edges. Heroes get the joystick; the master gets the build palette.
+// In-game HUD over the scene. Heroes: lives, party and the two sticks. Master: map counters and build tools.
 export default function Hud() {
   const state = useNet()
   const s = state.snapshot
   const self = me(state)
   if (!s || !self) return null
   const isMaster = self.role === 'master'
+  const own = s.heroes.find((h) => h.id === state.you)
 
   return (
     <div className="hud">
-      <div className="hud-corner hud-top-left panel hud-lives" role="group" aria-label={`Vidas del equipo: ${s.lives}`}>
-        {Array.from({ length: TEAM_LIVES }, (_, i) => (
-          <HeartIcon key={i} empty={i >= s.lives} />
-        ))}
+      <div className="hud-top">
+        <div className="chip lives" role="group" aria-label={`Vidas del equipo: ${s.lives}`}>
+          {Array.from({ length: TEAM_LIVES }, (_, i) => (
+            <HeartIcon key={i} empty={i >= s.lives} />
+          ))}
+        </div>
+        <div className="chip rooms" aria-label={`Habitaciones ${s.normalRooms} de ${MAX_ROOMS}`}>
+          <span className="chip-label">Salas</span>
+          <b>
+            {s.normalRooms}/{MAX_ROOMS}
+          </b>
+          {s.rooms.some((r) => r.kind === 'boss') && <span className="boss-tag">Jefe</span>}
+        </div>
+        <div className="hud-top-right">
+          <span className="latency">{state.latency > 0 ? `${state.latency} ms` : ''}</span>
+          <button type="button" className="ui-button ui-icon-button exit" aria-label="Salir de la partida" onClick={state.leave}>
+            <ExitIcon />
+          </button>
+        </div>
       </div>
 
-      <div className="hud-top-center panel" role="group" aria-label={`Sala ${s.room} de ${ROOMS_TO_WIN}`}>
-        <DoorIcon />
-        <span className="hud-value">
-          {s.room}/{ROOMS_TO_WIN}
-        </span>
-      </div>
-
-      <div className="hud-corner hud-top-right">
-        <span className="latency" aria-label={`Latencia: ${state.latency} ms`}>
-          {state.latency > 0 ? `${state.latency} ms` : '…'}
-        </span>
-        <button type="button" className="ui-button ui-icon-button" aria-label="Salir de la partida" onClick={state.leave}>
-          <ExitIcon />
-        </button>
-      </div>
-
-      <ul className={isMaster ? 'party panel' : 'party panel party-hero-view'} aria-label="Héroes">
+      <ul className="party" aria-label="Héroes">
         {s.heroes.map((h) => {
           const player = state.players.find((p) => p.id === h.id)
           return (
             <li key={h.id} className={h.dead ? 'party-hero is-down' : 'party-hero'}>
               <span className="player-dot" style={{ background: PLAYER_COLORS[player?.color ?? 0] }} />
               <span className="party-name">{player?.name ?? '?'}</span>
-              {h.dead ? (
-                <span className="party-respawn">{h.respawnIn}s</span>
-              ) : (
-                <span className="hit-pips" aria-label={`${h.hp} de ${HERO_HITS} golpes`}>
-                  {Array.from({ length: HERO_HITS }, (_, i) => (
-                    <span key={i} className={i < h.hp ? 'pip' : 'pip is-empty'} />
-                  ))}
-                </span>
-              )}
+              {h.dead && <span className="party-respawn">{h.respawnIn}s</span>}
             </li>
           )
         })}
       </ul>
 
       {isMaster ? (
-        <MasterPanel points={s.points} />
+        <MasterPanel s={s} />
       ) : (
-        <>
-          <Joystick />
-          <button
-            type="button"
-            className="attack-button"
-            aria-label="Atacar"
-            onPointerDown={(e) => {
-              e.preventDefault()
-              attack()
-            }}
-          >
-            <SwordIcon />
-          </button>
-        </>
+        own &&
+        !own.dead && (
+          <>
+            <MoveStick />
+            <AttackStick melee={own.cls === 'melee'} />
+          </>
+        )
       )}
+      {own?.dead && <div className="down-banner">Reapareciendo…</div>}
     </div>
   )
 }
 
-const TOOLS: { kind: Placeable | 'erase'; label: string }[] = [
-  { kind: 'enemy', label: 'Enemigo' },
+const TOOLS: { kind: Placeable; label: string }[] = [
+  { kind: 'slime', label: 'Slime' },
+  { kind: 'thrower', label: 'Lanzador' },
   { kind: 'trap', label: 'Trampa' },
   { kind: 'chest', label: 'Cofre' },
-  { kind: 'erase', label: 'Quitar' },
 ]
 
-function MasterPanel({ points }: { points: number }) {
-  const view = useMaster((m) => m.view)
+function MasterPanel({ s }: { s: Snapshot }) {
+  const send = useNet((st) => st.send)
+  const mode = useMaster((m) => m.mode)
+  const roomId = useMaster((m) => m.room)
   const tool = useMaster((m) => m.tool)
-  const setView = useMaster((m) => m.setView)
+  const slot = useMaster((m) => m.slot)
   const setTool = useMaster((m) => m.setTool)
+  const setSlot = useMaster((m) => m.setSlot)
+  const toMap = useMaster((m) => m.toMap)
+  const room = s.rooms.find((r) => r.id === roomId)
+  const bossPlaced = s.rooms.some((r) => r.kind === 'boss')
+  const bossNext = s.normalRooms >= MAX_ROOMS
+
+  if (mode === 'room' && room) {
+    const plan = room.plan ?? []
+    const value = difficulty(plan)
+    const locked = room.entered || room.kind === 'start'
+    return (
+      <div className="master-panel panel">
+        <div className="master-row">
+          <button type="button" className="ui-button small" onClick={toMap}>
+            Mapa
+          </button>
+          <div className="meter" aria-label={`Dificultad ${value} de ${ROOM_DIFFICULTY_CAP}`}>
+            <span className="meter-label">{room.kind === 'boss' ? 'Sala del jefe' : 'Dificultad'}</span>
+            <span className="meter-bar">
+              <i style={{ width: `${Math.max(0, Math.min(1, value / ROOM_DIFFICULTY_CAP)) * 100}%` }} />
+            </span>
+            <b>
+              {value}/{ROOM_DIFFICULTY_CAP}
+            </b>
+          </div>
+        </div>
+        {locked ? (
+          <p className="master-note">Los héroes ya entraron: esta sala no se puede cambiar.</p>
+        ) : (
+          <>
+            <div className="palette" role="group" aria-label="Elementos">
+              {TOOLS.map((t) => (
+                <button
+                  key={t.kind}
+                  type="button"
+                  className={tool === t.kind ? 'ui-button tool is-selected' : 'ui-button tool'}
+                  aria-pressed={tool === t.kind}
+                  disabled={!canAdd(plan, t.kind)}
+                  onClick={() => setTool(t.kind)}
+                >
+                  <span>{t.label}</span>
+                  <small>{DIFFICULTY[t.kind] > 0 ? `+${DIFFICULTY[t.kind]}` : DIFFICULTY[t.kind]}</small>
+                </button>
+              ))}
+            </div>
+            <div className="master-row">
+              <button
+                type="button"
+                className={room.ready ? 'ui-button small' : 'ui-button ui-button-primary small'}
+                onClick={() => send({ type: 'ready', room: room.id, ready: !room.ready })}
+              >
+                {room.ready ? 'Volver a editar' : 'Sala lista'}
+              </button>
+              {!room.ready && (
+                <button
+                  type="button"
+                  className="ui-button small danger"
+                  onClick={() => {
+                    send({ type: 'demolish', room: room.id })
+                    toMap()
+                  }}
+                >
+                  Quitar sala
+                </button>
+              )}
+            </div>
+            <p className="master-note">Toca una casilla para poner {TOOLS.find((t) => t.kind === tool)?.label.toLowerCase()}; tócala de nuevo para quitarlo.</p>
+          </>
+        )}
+      </div>
+    )
+  }
 
   return (
-    <div className="master-panel">
-      <div className="master-top panel">
-        <span className="master-points" role="group" aria-label={`Puntos: ${points}`}>
-          <GemIcon />
-          <span className="hud-value">{points}</span>
-        </span>
-        <button
-          type="button"
-          className="ui-button master-view"
-          onClick={() => setView(view === 'next' ? 'current' : 'next')}
-        >
-          {view === 'next' ? 'Ver sala actual' : 'Preparar siguiente'}
-        </button>
-      </div>
-      {view === 'next' && (
-        <div className="palette" role="group" aria-label="Herramientas">
-          {TOOLS.map((t) => (
+    <div className="master-panel panel">
+      {slot && !bossPlaced ? (
+        <div className="master-row">
+          {!bossNext ? (
             <button
-              key={t.kind}
               type="button"
-              className={tool === t.kind ? 'ui-button palette-tool is-selected' : 'ui-button palette-tool'}
-              aria-pressed={tool === t.kind}
-              disabled={t.kind !== 'erase' && points < COST[t.kind]}
-              onClick={() => setTool(t.kind)}
+              className="ui-button ui-button-primary small"
+              onClick={() => {
+                send({ type: 'build', gx: slot.gx, gy: slot.gy, kind: 'normal' })
+                setSlot(null)
+              }}
             >
-              <span>{t.label}</span>
-              {t.kind !== 'erase' && <small className="palette-cost">{COST[t.kind]}</small>}
+              Construir sala
             </button>
-          ))}
+          ) : (
+            <button
+              type="button"
+              className="ui-button ui-button-boss small"
+              onClick={() => {
+                send({ type: 'build', gx: slot.gx, gy: slot.gy, kind: 'boss' })
+                setSlot(null)
+              }}
+            >
+              Sala del jefe
+            </button>
+          )}
+          <button type="button" className="ui-button small" onClick={() => setSlot(null)}>
+            Cancelar
+          </button>
         </div>
+      ) : (
+        <p className="master-note">
+          {bossPlaced
+            ? 'Mapa completo. Toca una sala para revisarla.'
+            : bossNext
+              ? 'Ya tienes 6 salas: toca un espacio morado para poner la sala del jefe.'
+              : 'Toca un espacio azul para construir una sala, o una sala para editarla.'}
+        </p>
       )}
     </div>
   )

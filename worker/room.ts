@@ -1,7 +1,24 @@
 // One Durable Object per room code: keeps the lobby and runs the authoritative game loop in memory.
-import type { ClientMessage, LobbyPlayer, Phase, Role, ServerMessage } from '../src/shared/protocol.ts'
+import type { ClientMessage, HeroClass, LobbyPlayer, Phase, Role, ServerMessage } from '../src/shared/protocol.ts'
 import { MAX_HEROES, TICK_HZ } from '../src/shared/rules.ts'
-import { createGame, hit, place, remove, removeHero, reportPosition, reportStruck, snapshot, step, type Game } from '../src/shared/sim.ts'
+import {
+  attack,
+  build,
+  createGame,
+  demolish,
+  place,
+  removeHero,
+  removeItem,
+  reportOrb,
+  reportPosition,
+  reportStruck,
+  reportTouched,
+  setReady,
+  shotHit,
+  snapshot,
+  step,
+  type Game,
+} from '../src/shared/sim.ts'
 
 type Player = LobbyPlayer & { socket: WebSocket }
 
@@ -49,7 +66,7 @@ export class Room {
     const id = crypto.randomUUID().slice(0, 8)
     const used = new Set(this.players.map((p) => p.color))
     const color = [0, 1, 2, 3, 4].find((c) => !used.has(c)) ?? 0
-    const player: Player = { id, name, role: 'hero', color, socket: server }
+    const player: Player = { id, name, role: 'hero', cls: 'melee', color, socket: server }
     this.players.push(player)
     if (!this.host) this.host = id
 
@@ -81,7 +98,7 @@ export class Room {
   }
 
   private broadcastLobby(reason?: string) {
-    const players = this.players.map(({ id, name, role, color }) => ({ id, name, role, color }))
+    const players = this.players.map(({ id, name, role, cls, color }) => ({ id, name, role, cls, color }))
     for (const p of this.players) this.send(p, { type: 'lobby', host: this.host, phase: this.phase, players, reason })
   }
 
@@ -97,28 +114,57 @@ export class Room {
         return this.setRole(player, message.role)
       case 'start':
         return this.start(player)
-      case 'pos':
-        if (this.game && player.role === 'hero') {
-          reportPosition(this.game, player.id, Number(message.x), Number(message.y), Number(message.epoch))
+      case 'class':
+        if (this.phase === 'lobby' && (message.cls === 'melee' || message.cls === 'ranged')) {
+          player.cls = message.cls as HeroClass
+          this.broadcastLobby()
         }
-        return
-      case 'hit':
-        if (this.game && player.role === 'hero') {
-          const target = message.target === null ? null : Number(message.target)
-          hit(this.game, player.id, target, Number(message.viewDelay))
-        }
-        return
-      case 'struck':
-        if (this.game && player.role === 'hero') reportStruck(this.game, player.id, Number(message.strike))
         return
       case 'ping':
         return this.send(player, { type: 'pong', t: Number(message.t) })
-      case 'place':
-        if (this.game && player.role === 'master') place(this.game, message.kind, Number(message.cx), Number(message.cy))
-        return
-      case 'remove':
-        if (this.game && player.role === 'master') remove(this.game, Number(message.cx), Number(message.cy))
-        return
+    }
+    const game = this.game
+    if (!game) return
+    if (player.role === 'hero') {
+      switch (message.type) {
+        case 'pos':
+          return reportPosition(game, player.id, Number(message.x), Number(message.y), Number(message.facing), Number(message.epoch))
+        case 'attack':
+          attack(game, player.id, Number(message.seq), message.kind === 'charged' ? 'charged' : 'basic', Number(message.dir), message.hits, Number(message.viewDelay))
+          return
+        case 'shotHit':
+          shotHit(game, player.id, Number(message.seq), Number(message.target), Number(message.viewDelay))
+          return
+        case 'struck':
+          reportStruck(game, player.id, Number(message.strike))
+          return
+        case 'orbHit':
+          reportOrb(game, player.id, Number(message.orb))
+          return
+        case 'touched':
+          reportTouched(game, player.id, Number(message.enemy))
+          return
+      }
+    } else {
+      switch (message.type) {
+        case 'build':
+          build(game, Number(message.gx), Number(message.gy), message.kind === 'boss' ? 'boss' : 'normal')
+          return
+        case 'demolish':
+          demolish(game, Number(message.room))
+          return
+        case 'place':
+          place(game, Number(message.room), message.kind, Number(message.cx), Number(message.cy))
+          return
+        case 'remove':
+          removeItem(game, Number(message.room), Number(message.cx), Number(message.cy))
+          return
+        case 'ready':
+          setReady(game, Number(message.room), message.ready === true)
+          return
+      }
+    }
+    switch (message.type) {
       case 'lobby':
         if (this.phase === 'heroes-won' || this.phase === 'master-won') this.toLobby()
         return
@@ -141,7 +187,7 @@ export class Room {
     if (this.phase !== 'lobby' || player.id !== this.host) return
     const heroes = this.players.filter((p) => p.role === 'hero')
     if (!this.players.some((p) => p.role === 'master') || heroes.length < 1 || heroes.length > MAX_HEROES) return
-    this.game = createGame(heroes.map((h) => h.id))
+    this.game = createGame(heroes.map((h) => ({ id: h.id, cls: h.cls })))
     this.phase = 'playing'
     this.broadcastLobby()
     this.lastTick = Date.now()

@@ -1,17 +1,32 @@
 import { useState, type ReactNode } from 'react'
 import { me, useNet } from '../net/connection'
+import type { HeroClass } from '../shared/protocol'
 import { MAX_HEROES } from '../shared/rules'
-import { CrownIcon, SwordIcon } from './icons'
+import { BowIcon, CrownIcon, SwordIcon } from './icons'
 
-function Screen({ label, children }: { label: string; children: ReactNode }) {
+function Screen({ label, children, wide = false }: { label: string; children: ReactNode; wide?: boolean }) {
   return (
     <section className="screen" aria-label={label}>
-      <div className="screen-panel panel">{children}</div>
+      <div className={wide ? 'screen-panel panel is-wide' : 'screen-panel panel'}>{children}</div>
     </section>
   )
 }
 
-export const PLAYER_COLORS = ['#60a5fa', '#f472b6', '#facc15', '#a78bfa', '#fb923c']
+export const PLAYER_COLORS = ['#38bdf8', '#f472b6', '#facc15', '#a3e635', '#fb923c']
+
+const CLASSES: { cls: HeroClass; name: string; role: string }[] = [
+  { cls: 'melee', name: 'Espadachín', role: 'Cuerpo a cuerpo' },
+  { cls: 'ranged', name: 'Arquera', role: 'A distancia' },
+]
+
+function Logo() {
+  return (
+    <h1 className="logo">
+      <span>Dungeon</span>
+      <span>Maker</span>
+    </h1>
+  )
+}
 
 export function HomeScreen() {
   const name = useNet((s) => s.name)
@@ -25,18 +40,12 @@ export function HomeScreen() {
 
   return (
     <Screen label="Inicio">
-      <h1 className="screen-title">{document.title}</h1>
+      <Logo />
       <label className="field">
         <span className="field-label">Tu nombre</span>
-        <input
-          className="field-input"
-          value={name}
-          maxLength={16}
-          autoComplete="off"
-          onChange={(e) => setName(e.target.value)}
-        />
+        <input className="field-input" value={name} maxLength={16} autoComplete="off" onChange={(e) => setName(e.target.value)} />
       </label>
-      <button type="button" className="ui-button ui-button-primary" disabled={!hasName} onClick={createRoom}>
+      <button type="button" className="ui-button ui-button-primary big" disabled={!hasName} onClick={createRoom}>
         Crear sala
       </button>
       <div className="join-row">
@@ -76,52 +85,72 @@ export function LobbyScreen() {
   const canStart = isHost && !!master && heroes.length >= 1 && heroes.length <= MAX_HEROES
 
   return (
-    <Screen label="Sala">
-      <p className="lobby-code-label">Código de la sala</p>
-      <p className="lobby-code">{state.code}</p>
+    <Screen label="Sala" wide>
+      <div className="lobby-head">
+        <span className="field-label">Código de la sala</span>
+        <span className="lobby-code">{state.code}</span>
+      </div>
       {state.notice && <p className="screen-error">{state.notice}</p>}
       <ul className="lobby-list">
         {state.players.map((p) => (
-          <li key={p.id} className="lobby-player">
+          <li key={p.id} className={p.id === state.you ? 'lobby-player is-you' : 'lobby-player'}>
             <span className="player-dot" style={{ background: PLAYER_COLORS[p.color] }} />
-            <span className="lobby-name">
-              {p.name}
-              {p.id === state.you && ' (tú)'}
-            </span>
-            <span className="lobby-role" aria-label={p.role === 'master' ? 'Máster' : 'Héroe'}>
-              {p.role === 'master' ? <CrownIcon /> : <SwordIcon />}
+            <span className="lobby-name">{p.name}</span>
+            <span className="lobby-role">
+              {p.role === 'master' ? (
+                <>
+                  <CrownIcon /> Máster
+                </>
+              ) : p.cls === 'melee' ? (
+                <>
+                  <SwordIcon /> Espadachín
+                </>
+              ) : (
+                <>
+                  <BowIcon /> Arquera
+                </>
+              )}
             </span>
           </li>
         ))}
       </ul>
-      {self?.role === 'hero' ? (
-        <button
-          type="button"
-          className="ui-button"
-          disabled={!!master}
-          onClick={() => state.send({ type: 'role', role: 'master' })}
-        >
-          Ser el máster
-        </button>
-      ) : (
-        <button type="button" className="ui-button" onClick={() => state.send({ type: 'role', role: 'hero' })}>
-          Ser héroe
-        </button>
+      {self?.role === 'hero' && (
+        <div className="class-pick" role="group" aria-label="Clase">
+          {CLASSES.map((c) => (
+            <button
+              key={c.cls}
+              type="button"
+              className={self.cls === c.cls ? 'class-card is-selected' : 'class-card'}
+              aria-pressed={self.cls === c.cls}
+              onClick={() => state.send({ type: 'class', cls: c.cls })}
+            >
+              <span className="class-icon">{c.cls === 'melee' ? <SwordIcon /> : <BowIcon />}</span>
+              <b>{c.name}</b>
+              <small>{c.role}</small>
+            </button>
+          ))}
+        </div>
       )}
-      {isHost ? (
-        <button
-          type="button"
-          className="ui-button ui-button-primary"
-          disabled={!canStart}
-          onClick={() => state.send({ type: 'start' })}
-        >
-          Empezar
-        </button>
-      ) : (
-        <p className="screen-hint">El anfitrión empieza la partida.</p>
-      )}
+      <div className="lobby-actions">
+        {self?.role === 'hero' ? (
+          <button type="button" className="ui-button" disabled={!!master} onClick={() => state.send({ type: 'role', role: 'master' })}>
+            Ser el máster
+          </button>
+        ) : (
+          <button type="button" className="ui-button" onClick={() => state.send({ type: 'role', role: 'hero' })}>
+            Ser héroe
+          </button>
+        )}
+        {isHost ? (
+          <button type="button" className="ui-button ui-button-primary" disabled={!canStart} onClick={() => state.send({ type: 'start' })}>
+            Empezar
+          </button>
+        ) : (
+          <span className="screen-hint">El anfitrión empieza.</span>
+        )}
+      </div>
       {isHost && !canStart && <p className="screen-hint">Hace falta un máster y al menos un héroe.</p>}
-      <button type="button" className="ui-button" onClick={state.leave}>
+      <button type="button" className="ui-button small ghost" onClick={state.leave}>
         Salir
       </button>
     </Screen>
@@ -132,13 +161,14 @@ export function EndScreen() {
   const phase = useNet((s) => s.phase)
   const send = useNet((s) => s.send)
   const leave = useNet((s) => s.leave)
+  const heroesWon = phase === 'heroes-won'
   return (
     <Screen label="Fin de la partida">
-      <h2 className="screen-title">{phase === 'heroes-won' ? 'Ganan los héroes' : 'Gana el máster'}</h2>
-      <button type="button" className="ui-button ui-button-primary" onClick={() => send({ type: 'lobby' })}>
+      <h2 className={heroesWon ? 'result is-win' : 'result is-loss'}>{heroesWon ? '¡Victoria de los héroes!' : '¡Gana el máster!'}</h2>
+      <button type="button" className="ui-button ui-button-primary big" onClick={() => send({ type: 'lobby' })}>
         Volver a la sala
       </button>
-      <button type="button" className="ui-button" onClick={leave}>
+      <button type="button" className="ui-button small ghost" onClick={leave}>
         Salir
       </button>
     </Screen>

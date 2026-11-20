@@ -1,153 +1,227 @@
-// Rules from DESIGN.md and the netcode checks, on the pure simulation (run with `npm test`).
+// Rules from DESIGN.md (v2) and the netcode checks, on the pure simulation (run with `npm test`).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { buildableSlots, difficulty, doorState, walkable } from '../src/shared/map.ts'
 import * as R from '../src/shared/rules.ts'
-import { createGame, hit, place, remove, reportPosition, reportStruck, step, type Game } from '../src/shared/sim.ts'
+import {
+  attack,
+  build,
+  createGame,
+  demolish,
+  place,
+  removeItem,
+  reportOrb,
+  reportPosition,
+  reportStruck,
+  reportTouched,
+  setReady,
+  shotHit,
+  step,
+  type Game,
+} from '../src/shared/sim.ts'
 
 function run(game: Game, seconds: number) {
   for (let t = 0; t < seconds; t += 0.05) step(game, 0.05)
 }
 
-function enemy(id: number, x: number, y: number) {
-  return { id, x, y, hp: R.ENEMY_HP, state: 'chase' as const, stateTime: 0, cooldown: 99, stun: 0, strike: 0 }
-}
+const start = (g: Game) => g.rooms[0]
 
-test('a new game: team lives, full hit bars, master points, first room with enemies', () => {
-  const g = createGame(['a', 'b'])
+test('a new game: start room with two slimes, team lives, full hit bars, heroes with their class', () => {
+  const g = createGame([
+    { id: 'a', cls: 'melee' },
+    { id: 'b', cls: 'ranged' },
+  ])
   assert.equal(g.lives, R.TEAM_LIVES)
-  assert.equal(g.points, R.MASTER_START_POINTS)
   assert.ok(g.heroes.every((h) => h.hp === R.HERO_HITS))
-  assert.equal(g.enemies.length, R.FIRST_ROOM_ENEMIES)
+  assert.deepEqual(g.heroes.map((h) => h.cls), ['melee', 'ranged'])
+  assert.equal(g.enemies.filter((e) => e.kind === 'slime').length, R.START_ROOM_SLIMES)
 })
 
-test('the master pays to place in the next room and gets the cost back on removal', () => {
-  const g = createGame(['a'])
-  assert.ok(place(g, 'enemy', 4, 6))
-  assert.equal(g.points, R.MASTER_START_POINTS - R.COST.enemy)
-  assert.equal(place(g, 'trap', 4, 6), false, 'cell already used')
-  assert.equal(place(g, 'trap', 4, 0), false, 'entrance rows are not buildable')
-  assert.ok(remove(g, 4, 6))
-  assert.equal(g.points, R.MASTER_START_POINTS)
+test('the master builds north, east or west of existing rooms; 6 rooms, then the boss room, which is the last', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  assert.equal(build(g, 0, -1, 'normal'), false, 'never back south')
+  assert.equal(build(g, 0, 1, 'boss'), false, 'the boss room needs the 6 rooms first')
+  const slots = [
+    [0, 1],
+    [1, 0],
+    [-1, 0],
+    [0, 2],
+    [1, 1],
+    [-1, 1],
+  ]
+  for (const [gx, gy] of slots) assert.ok(build(g, gx, gy, 'normal'), `room at ${gx},${gy}`)
+  assert.equal(build(g, 0, 3, 'normal'), false, 'no 7th normal room')
+  assert.ok(build(g, 0, 3, 'boss'))
+  assert.equal(build(g, 1, 2, 'normal'), false, 'nothing after the boss room')
+  assert.ok(buildableSlots(g.rooms).length > 0)
 })
 
-test('the master cannot spend points it does not have', () => {
-  const g = createGame(['a'])
-  g.points = 1
-  assert.equal(place(g, 'enemy', 3, 5), false)
-  assert.ok(place(g, 'trap', 3, 5))
+test('difficulty per room: enemies and traps add, chests subtract, the total cannot pass the cap', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  build(g, 0, 1, 'normal')
+  const room = g.rooms[1]
+  for (let i = 0; i < 5; i++) assert.ok(place(g, room.id, 'slime', 1 + i, 3))
+  assert.equal(difficulty(room.plan), 10)
+  assert.equal(place(g, room.id, 'trap', 1, 5), false, 'over the cap')
+  assert.ok(place(g, room.id, 'chest', 5, 6), 'a chest lowers the difficulty')
+  assert.ok(place(g, room.id, 'thrower', 6, 6))
+  assert.equal(removeItem(g, room.id, 5, 6), false, 'removing the chest would pass the cap')
+  assert.ok(removeItem(g, room.id, 6, 6))
+  assert.ok(removeItem(g, room.id, 5, 6))
 })
 
-test('the device owns its hero position, within the speed limit and the current epoch', () => {
-  const g = createGame(['a'])
+test('a door to a room still being built is locked; ready rooms open once one side has no enemies', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  build(g, 0, 1, 'normal')
+  const room = g.rooms[1]
+  place(g, room.id, 'slime', 4, 4)
+  assert.equal(doorState(g.rooms, start(g), 'n'), 'locked')
+  setReady(g, room.id, true)
+  assert.equal(doorState(g.rooms, start(g), 'n'), 'closed', 'both rooms still have enemies')
+  g.enemies = g.enemies.filter((e) => e.room !== start(g).id)
+  run(g, 0.05)
+  assert.equal(doorState(g.rooms, start(g), 'n'), 'open')
+  const doorX = R.ROOM_W / 2
+  assert.ok(walkable(g.rooms, doorX, R.ROOM_H, R.HERO_RADIUS), 'the doorway is walkable')
+  assert.equal(walkable(g.rooms, 2, R.ROOM_H, R.HERO_RADIUS), false, 'the wall is not')
+})
+
+test('the master cannot edit a room a hero has entered, and can demolish only unfinished leaf rooms', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  build(g, 0, 1, 'normal')
+  build(g, 0, 2, 'normal')
+  const [, r1, r2] = g.rooms
+  assert.equal(demolish(g, r1.id), false, 'r2 depends on it')
+  assert.ok(demolish(g, r2.id))
+  setReady(g, r1.id, true)
+  g.enemies = []
+  run(g, 0.05)
   const hero = g.heroes[0]
-  const start = { x: hero.x, y: hero.y }
+  run(g, 1)
+  reportPosition(g, 'a', R.ROOM_W / 2, R.ROOM_H - 1, 0, hero.epoch)
+  for (let i = 0; i < 6; i++) {
+    run(g, 0.5)
+    reportPosition(g, 'a', R.ROOM_W / 2, R.ROOM_H + 1 + i, 0, hero.epoch)
+  }
+  assert.ok(r1.entered)
+  assert.equal(place(g, r1.id, 'slime', 3, 3), false)
+})
+
+test('device positions: plausible moves accepted, teleports cut, walls refused, stale epochs ignored', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  const hero = g.heroes[0]
+  const y0 = hero.y
   run(g, 0.5)
-  reportPosition(g, 'a', start.x, start.y + 1, hero.epoch)
-  assert.equal(hero.y, start.y + 1, 'a plausible move is accepted as is')
-  reportPosition(g, 'a', start.x, 12, hero.epoch)
-  assert.ok(hero.y < 12, 'a teleport is cut down to the allowed distance')
-  const y = hero.y
+  reportPosition(g, 'a', hero.x, y0 + 1, 0, hero.epoch)
+  assert.equal(hero.y, y0 + 1)
+  reportPosition(g, 'a', hero.x, 12, 0, hero.epoch)
+  assert.ok(hero.y < 12)
+  const y1 = hero.y
   run(g, 0.5)
-  reportPosition(g, 'a', start.x, y + 0.5, hero.epoch - 1)
-  assert.equal(hero.y, y, 'a report from before a server move is ignored')
+  reportPosition(g, 'a', hero.x, y1 + 0.5, 0, hero.epoch - 1)
+  assert.equal(hero.y, y1)
 })
 
-test('hits give the master points; an emptied bar costs one team life and the hero respawns full', () => {
-  const g = createGame(['a'])
-  g.enemies = []
-  g.items = [{ id: 99, kind: 'trap', cx: 4, cy: 4 }]
+test('melee: the hits the device saw count if plausible; cooldown applies; charged hits harder', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
   const hero = g.heroes[0]
-  hero.x = 4.5
-  hero.y = 4.5
-  for (let i = 0; i < 400 && !hero.dead; i++) step(g, 0.05)
-  assert.equal(g.lives, R.TEAM_LIVES - 1)
-  assert.equal(g.points, R.MASTER_START_POINTS + R.HERO_HITS * R.POINTS_PER_HIT)
-  g.items = []
-  const epoch = hero.epoch
-  run(g, R.RESPAWN_SECONDS + 0.1)
-  assert.equal(hero.dead, false)
-  assert.equal(hero.hp, R.HERO_HITS)
-  assert.equal(hero.epoch, epoch + 1, 'the respawn moves the hero: the device must adopt it')
+  const [s1, s2] = g.enemies
+  s1.x = hero.x + 1
+  s1.y = hero.y
+  s2.x = hero.x + 8
+  s2.y = hero.y + 8
+  run(g, 0.1)
+  s1.x = hero.x + 1
+  s1.y = hero.y
+  assert.ok(attack(g, 'a', 1, 'basic', 0, [s1.id, s2.id], 0.1))
+  assert.equal(s1.hp, R.ENEMY.slime.hp - R.HERO.melee.basic.damage)
+  assert.equal(s2.hp, R.ENEMY.slime.hp, 'too far: refused')
+  assert.equal(attack(g, 'a', 2, 'basic', 0, [s1.id], 0.1), null, 'cooldown')
+  run(g, 0.5)
+  s1.x = hero.x + 1
+  s1.y = hero.y
+  attack(g, 'a', 3, 'charged', 0, [s1.id], 0)
+  assert.ok(!g.enemies.includes(s1), 'the charged hit finished it')
 })
 
-test('the master wins when the team has no lives left', () => {
-  const g = createGame(['a'])
-  g.lives = 1
-  g.heroes[0].hp = 1
-  g.enemies = []
-  g.items = [{ id: 99, kind: 'trap', cx: 4, cy: 4 }]
-  g.heroes[0].x = 4.5
-  g.heroes[0].y = 4.5
-  run(g, 0.2)
-  assert.equal(g.result, 'master-won')
-})
-
-test('wounds carry over; a chest heals; the door leads to the planned room and moves the heroes', () => {
-  const g = createGame(['a'])
+test('ranged: a shot flies for everyone; its hit counts once; the precise shot is a critical', () => {
+  const g = createGame([{ id: 'a', cls: 'ranged' }])
   const hero = g.heroes[0]
-  g.enemies = []
-  hero.hp = 1
-  place(g, 'chest', 4, 2)
-  place(g, 'enemy', 1, 9)
-  hero.x = R.ROOM_W / 2
-  hero.y = R.ROOM_H - 0.4
-  const epoch = hero.epoch
+  const slime = g.enemies[0]
+  slime.x = hero.x
+  slime.y = hero.y + 4
   run(g, 0.1)
-  assert.equal(g.room, 2)
-  assert.equal(hero.epoch, epoch + 1)
-  assert.equal(hero.hp, 1, 'wounds persist between rooms')
-  assert.equal(g.enemies.length, 1)
-  hero.x = 4.5
-  hero.y = 2.5
-  run(g, 0.1)
-  assert.equal(hero.hp, 1 + R.CHEST_HEAL)
-  assert.equal(g.items.length, 0)
+  const seq = attack(g, 'a', 4, 'basic', Math.PI / 2, [], 0)!
+  assert.equal(g.shots.length, 1)
+  assert.ok(shotHit(g, 'a', seq, slime.id, 0.1))
+  assert.equal(shotHit(g, 'a', seq, slime.id, 0.1), false, 'once')
+  run(g, 0.5)
+  const crit = attack(g, 'a', 5, 'charged', Math.PI / 2, [], 0)!
+  assert.ok(shotHit(g, 'a', crit, slime.id, 0))
+  assert.ok(!g.enemies.includes(slime))
 })
 
-test('the heroes win by leaving the last room', () => {
-  const g = createGame(['a'])
-  g.room = R.ROOMS_TO_WIN
-  g.enemies = []
-  g.heroes[0].x = R.ROOM_W / 2
-  g.heroes[0].y = R.ROOM_H - 0.4
-  run(g, 0.1)
-  assert.equal(g.result, 'heroes-won')
-})
-
-test('a hit seen on the device counts if the enemy was in range where the device saw it', () => {
-  const g = createGame(['a'])
-  g.enemies = [enemy(1, 4.5, 3)]
+test('slime contact, thrower orbs and boss jumps hurt only when the device reports them, with cooldowns', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
   const hero = g.heroes[0]
-  hero.x = 4.5
-  hero.y = 1
-  run(g, 0.3) // history: the enemy was at y = 3
-  g.enemies[0].y = 8 // it then moved away on the server
-  assert.ok(hit(g, 'a', 1, 0.2), 'checked against where it was 0.2 s ago')
-  assert.equal(g.enemies[0].hp, R.ENEMY_HP - 1)
-  assert.ok(g.enemies[0].stun > 0, 'a hit stuns the enemy')
-  assert.equal(hit(g, 'a', 1, 0.2), false, 'cooldown')
-  run(g, R.ATTACK_COOLDOWN)
-  assert.equal(hit(g, 'a', 1, 0), false, 'out of range where it is now and no delay given')
-})
-
-test('an enemy announces its strike; only heroes whose device reports it lose a hit, once per strike', () => {
-  const g = createGame(['a', 'b'])
-  g.enemies = [{ ...enemy(1, 4.5, 3), cooldown: 0 }]
-  const [a, b] = g.heroes
-  a.x = 4.5
-  a.y = 2.2
-  b.x = 5
-  b.y = 2.5
+  const slime = g.enemies[0]
+  slime.x = hero.x + 0.6
+  slime.y = hero.y
+  assert.ok(reportTouched(g, 'a', slime.id))
+  assert.equal(reportTouched(g, 'a', slime.id), false, 'touch cooldown')
+  assert.equal(hero.hp, R.HERO_HITS - 1)
+  run(g, 1)
+  // A thrower aims (telegraph) then throws an orb.
+  g.enemies = []
+  build(g, 0, 1, 'normal')
+  const room = g.rooms[1]
+  place(g, room.id, 'thrower', 5, 2)
+  setReady(g, room.id, true)
+  const thrower = g.enemies.find((e) => e.kind === 'thrower')!
+  thrower.cooldown = 0
+  hero.x = thrower.x
+  hero.y = thrower.y + 4
   step(g, 0.05)
-  assert.equal(g.enemies[0].state, 'windup')
-  assert.equal(g.strikes.length, 1)
+  assert.equal(thrower.state, 'windup')
+  run(g, R.ENEMY_TELEGRAPH + 0.1)
+  assert.equal(g.orbs.length, 1)
+  const hp = hero.hp
+  hero.invulnerable = 0
+  assert.ok(reportOrb(g, 'a', g.orbs[0].id))
+  assert.equal(hero.hp, hp - 1)
+  assert.equal(g.orbs.length, 0, 'the orb bursts for everyone')
+})
+
+test('the boss jump is an announced strike; defeating the boss wins; no lives left loses', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]) build(g, gx, gy, 'normal')
+  assert.ok(build(g, 0, 7, 'boss'))
+  const boss = g.rooms.at(-1)!
+  setReady(g, boss.id, true)
+  const king = g.enemies.find((e) => e.kind === 'king')!
+  assert.equal(king.hp, R.BOSS_HP)
+  const hero = g.heroes[0]
+  hero.x = king.x
+  hero.y = king.y - 3
+  king.cooldown = 0
+  step(g, 0.05)
+  assert.equal(king.state, 'jump')
   const strike = g.strikes[0]
-  assert.equal(a.hp, R.HERO_HITS, 'nothing happens during the telegraph')
   run(g, R.ENEMY_TELEGRAPH)
   assert.ok(reportStruck(g, 'a', strike.id))
-  assert.equal(reportStruck(g, 'a', strike.id), false, 'once per strike')
-  assert.equal(a.hp, R.HERO_HITS - 1)
-  assert.equal(b.hp, R.HERO_HITS, 'b dodged on its own screen and did not report')
-  run(g, R.STRIKE_CLAIM_WINDOW + 0.2)
-  assert.equal(reportStruck(g, 'b', strike.id), false, 'too late')
+  king.hp = 1
+  run(g, 0.5)
+  hero.x = king.x + 1
+  hero.y = king.y
+  attack(g, 'a', 6, 'basic', 0, [king.id], 0)
+  assert.equal(g.result, 'heroes-won')
+
+  const g2 = createGame([{ id: 'a', cls: 'melee' }])
+  g2.lives = 1
+  g2.heroes[0].hp = 1
+  const s = g2.enemies[0]
+  s.x = g2.heroes[0].x + 0.5
+  s.y = g2.heroes[0].y
+  reportTouched(g2, 'a', s.id)
+  assert.equal(g2.result, 'master-won')
 })

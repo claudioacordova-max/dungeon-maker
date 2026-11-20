@@ -1,9 +1,11 @@
-// Hero input: on-screen joystick and attack button (touch or mouse), or WASD/arrows + Space on a keyboard.
-// Movement is applied on this device (hero.ts), which reports the resulting position to the server.
-import { attack } from './hero'
+// Hero input. Touch/mouse: a floating movement stick (left) and an attack stick (right): tap = attack with
+// auto-aim, drag = aim by hand, hold = charge the powered attack (released on lift). Keyboard: WASD/arrows to
+// move, Space held to charge (auto-aim). Directions use the game's axes: +x east, +y north (up the screen).
 
-const joystick = { x: 0, y: 0 }
+const move = { x: 0, y: 0 }
+const attack = { held: false, aiming: false, dir: 0 }
 const keys = new Set<string>()
+let spaceHeld = false
 
 const KEY_DIRS: Record<string, [number, number]> = {
   KeyW: [0, 1],
@@ -18,7 +20,7 @@ const KEY_DIRS: Record<string, [number, number]> = {
 
 // Current movement direction, length 0..1.
 export function moveInput(): { x: number; y: number } {
-  if (joystick.x !== 0 || joystick.y !== 0) return joystick
+  if (move.x !== 0 || move.y !== 0) return move
   let x = 0
   let y = 0
   for (const code of keys) {
@@ -32,12 +34,21 @@ export function moveInput(): { x: number; y: number } {
   return len > 0 ? { x: x / len, y: y / len } : { x: 0, y: 0 }
 }
 
-export function setJoystick(x: number, y: number) {
-  joystick.x = x
-  joystick.y = y
+export function attackInput(): { held: boolean; aiming: boolean; dir: number } {
+  if (spaceHeld && !attack.held) return { held: true, aiming: false, dir: 0 }
+  return attack
 }
 
-export { attack }
+export function setMoveStick(x: number, y: number) {
+  move.x = x
+  move.y = y
+}
+
+export function setAttackStick(held: boolean, aiming: boolean, dir: number) {
+  attack.held = held
+  attack.aiming = aiming
+  attack.dir = dir
+}
 
 let started = false
 
@@ -47,11 +58,17 @@ export function startInput() {
   addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return
     if (KEY_DIRS[e.code]) keys.add(e.code)
-    else if (e.code === 'Space' && !e.repeat) {
+    else if (e.code === 'Space') {
       e.preventDefault()
-      attack()
+      spaceHeld = true
     }
   })
-  addEventListener('keyup', (e) => keys.delete(e.code))
-  addEventListener('blur', () => keys.clear())
+  addEventListener('keyup', (e) => {
+    keys.delete(e.code)
+    if (e.code === 'Space') spaceHeld = false
+  })
+  addEventListener('blur', () => {
+    keys.clear()
+    spaceHeld = false
+  })
 }
