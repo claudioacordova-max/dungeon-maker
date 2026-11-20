@@ -1,3 +1,4 @@
 {
-  "target": "mobile-portrait"
+  "target": "mobile-portrait",
+  "mode": "agil"
 }
