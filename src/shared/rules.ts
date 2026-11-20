@@ -39,6 +39,7 @@ export const ENEMY = {
 
 export const ENEMY_KNOCKBACK = 0.35
 export const HIT_INVULNERABLE = 0.8
+export const RESPAWN_INVULNERABLE = 2 // seconds of protection after reappearing
 export const TICK_HZ = 20
 
 // Netcode tolerances (server checks on what devices report).

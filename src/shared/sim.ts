@@ -569,7 +569,7 @@ export function step(game: Game, dt: number) {
     if (hero.dead && game.time >= hero.respawnAt) {
       hero.dead = false
       hero.hp = R.HERO_HITS
-      hero.invulnerable = R.HIT_INVULNERABLE
+      hero.invulnerable = R.RESPAWN_INVULNERABLE
       const mate = game.heroes.find((h) => !h.dead && h !== hero)
       if (mate) teleport(game, hero, mate.x, mate.y)
       else {
