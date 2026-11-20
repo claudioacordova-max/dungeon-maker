@@ -1,7 +1,7 @@
 // One Durable Object per room code: keeps the lobby and runs the authoritative game loop in memory.
 import type { ClientMessage, LobbyPlayer, Phase, Role, ServerMessage } from '../src/shared/protocol.ts'
 import { MAX_HEROES, TICK_HZ } from '../src/shared/rules.ts'
-import { createGame, place, remove, removeHero, setInput, snapshot, step, type Game } from '../src/shared/sim.ts'
+import { attack, createGame, place, remove, removeHero, setInput, snapshot, step, type Game } from '../src/shared/sim.ts'
 
 type Player = LobbyPlayer & { socket: WebSocket }
 
@@ -100,6 +100,11 @@ export class Room {
       case 'input':
         if (this.game && player.role === 'hero') setInput(this.game, player.id, Number(message.dx), Number(message.dy))
         return
+      case 'attack':
+        if (this.game && player.role === 'hero') attack(this.game, player.id)
+        return
+      case 'ping':
+        return this.send(player, { type: 'pong', t: Number(message.t) })
       case 'place':
         if (this.game && player.role === 'master') place(this.game, message.kind, Number(message.cx), Number(message.cy))
         return
