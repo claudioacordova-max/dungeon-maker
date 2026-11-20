@@ -5,43 +5,57 @@ Documento vivo del juego en modo ágil. Las secciones **del diseñador** solo ca
 ## Idea
 
 <!-- Del diseñador. -->
-Mazmorra multijugador asimétrica para el móvil: un jugador es el **máster** de la mazmorra y construye en tiempo real las salas que vienen, mientras una party cooperativa de **héroes** (1 a 4) las recorre. Como un Mario Maker en tiempo real, con héroes de dungeon crawler muy simple (estilo Diablo antiguo, más simple aún).
+Mazmorra multijugador asimétrica para el móvil: un jugador es el **máster** de la mazmorra y construye en tiempo real el mapa que viene, mientras una party cooperativa de **héroes** (1 a 4) lo recorre. Como un Mario Maker en tiempo real, con héroes de acción móvil.
 
-Primera meta: prueba de concepto para comprobar si funciona el momento central, los héroes avanzan mientras el máster les prepara lo siguiente.
+Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: modelos 3D con animaciones, controles sobre la pantalla de juego, interfaz y menús coherentes con ese estilo. Debe correr fluido en el celular.
 
 ## Reglas
 
-<!-- Del diseñador. Acordadas el 2026-11-20 para la prueba de concepto. -->
+<!-- Del diseñador. Prueba de concepto acordada el 2026-11-20; segunda versión el 2026-11-20 (marcada «v2»). -->
 - **Sala de juego estilo Pinturillo:** sin registro, solo un nombre. Alguien crea una sala con código; los demás entran con el código y todos se ven en la lista. Alguien elige "Ser el máster"; el anfitrión empieza cuando hay un máster y al menos un héroe (máximo cuatro héroes).
-- **Habitaciones** estilo Binding of Isaac, con vista cenital y pantalla vertical. Al vencer a todos los enemigos de la sala se abre la puerta; los héroes pasan a la siguiente sala, que es la que el máster dejó preparada. Si no preparó nada, es una sala vacía y el juego nunca se detiene.
-- **Máster:** ve a los héroes en vivo y solo edita la **siguiente** sala, nunca la actual. Coloca enemigos, trampas y cofres pagando con puntos.
-- **Puntos del máster:** empieza con algunos y gana más cada vez que un héroe recibe daño. Si el máster es cruel puede encadenar ventaja; se acepta así en esta prueba (el diseñador tiene ideas para corregirlo después).
-- **Héroes:** joystick con el pulgar para moverse y **botón de atacar**, que golpea al enemigo más cercano a su alcance (cambio del diseñador, 2026-11-20; antes era automático).
-- **Ataques enemigos anunciados** (diseñador, 2026-11-20): antes de golpear, el enemigo se detiene y marca en el suelo una zona roja que se llena; al llenarse, golpea a quien esté dentro. Golpear a un enemigo lo deja aturdido un instante.
-- **Daño y vidas:** cada héroe tiene su propia barra de golpes. Al vaciarse, el héroe cae, el equipo pierde una **vida grupal** y el héroe reaparece en la entrada de la sala tras unos segundos, con la barra llena. Las heridas se mantienen de sala en sala; los cofres curan.
-- **Final:** ganan los héroes al salir por la puerta de la última sala. Gana el máster si el equipo se queda sin vidas grupales.
-- Fuera de esta prueba: clases, subir de nivel, equipamiento, acertijos, pistas y la corrección del encadenamiento de ventaja del máster.
+- **Clases (v2):** cada héroe elige su clase en la sala de espera; se pueden repetir.
+  - **Cuerpo a cuerpo:** ataque básico en un cono corto hacia el frente (un golpe de hoja). Manteniendo presionado se carga un ataque en círculo alrededor, de mayor alcance.
+  - **A distancia:** ataque básico con un disparo. Manteniendo presionado se carga un disparo certero, que es crítico.
+- **Mapa por habitaciones (v2):** el máster construye habitaciones hacia el frente y hacia los costados, y puede ir adelantando varias en paralelo mientras los héroes avanzan. Hasta 6 habitaciones y después una habitación de jefe, que siempre es la última en colocarse.
+- **Puerta a una habitación sin terminar (v2):** queda cerrada hasta que el máster la marque como lista; si el máster se atrasa, los héroes esperan.
+- **Dificultad por habitación (v2):** cada habitación tiene un tope de dificultad. Los elementos negativos suman (enemigos, trampas) y los positivos restan (cofres); el total no puede pasar el tope. Valor estático por ahora; se balanceará según la fuerza de los héroes. El máster ya no gana puntos cuando los héroes reciben daño.
+- **Enemigos (v2):** un **slime** que hace daño al tocar a los héroes, y un enemigo **a distancia** que lanza proyectiles. Jefe: **slime gigante**.
+- **Ataques enemigos anunciados** (2026-11-20): antes de golpear, el enemigo se detiene y marca en el suelo una zona roja que se llena; al llenarse, golpea a quien esté dentro. Golpear a un enemigo lo deja aturdido un instante.
+- **Controles (v2):** sobre la pantalla de juego, como en los juegos móviles: joystick de movimiento abajo a la izquierda y ataque abajo a la derecha.
+- **Daño y vidas:** cada héroe tiene su propia barra de golpes. Al vaciarse, el héroe cae, el equipo pierde una **vida grupal** y el héroe reaparece tras unos segundos con la barra llena. Las heridas se mantienen de habitación en habitación; los cofres curan.
+- **Final (v2):** ganan los héroes al derrotar al jefe. Gana el máster si el equipo se queda sin vidas grupales.
+- Fuera de esta versión: subir de nivel, equipamiento, acertijos, pistas.
 
 ## Números
 
-<!-- Del diseñador. Valores para la prueba; los marcados como propuesta los eligió el agente y se ajustan jugando. -->
+<!-- Del diseñador. Los marcados como propuesta los eligió el agente y se ajustan jugando. -->
 - Vidas grupales del equipo: 3.
 - Golpes que aguanta un héroe: 4.
-- Salas para ganar: 5.
-- Puntos iniciales del máster: 10 (propuesta). Por cada golpe que recibe un héroe: +1 (propuesta).
-- Coste: enemigo 2, trampa 1, cofre 0 (propuesta).
+- Habitaciones del máster: hasta 6, más la del jefe (diseñador, v2).
+- Tope de dificultad por habitación: 10 (diseñador dijo «10 o 6»; se empieza con 10).
+- Dificultad: enemigo +2 (diseñador), enemigo a distancia +3 (propuesta), trampa +1 (propuesta), cofre −5 (diseñador).
 - Cofre: cura 2 golpes al héroe que lo toca (propuesta).
-- Reaparición tras caer: 1 s (diseñador, 2026-11-20).
-- Aviso de ataque enemigo: 0,5 s (diseñador, 2026-11-20). Aturdimiento del enemigo golpeado: 0,25 s (propuesta).
-- La primera sala trae 2 enemigos de serie, para que haya algo que hacer mientras el máster prepara la segunda (propuesta).
+- Reaparición tras caer: 1 s (diseñador).
+- Aviso de ataque enemigo: 0,5 s (diseñador). Aturdimiento del enemigo golpeado: 0,25 s (propuesta).
+- La habitación inicial trae 2 slimes de serie (propuesta).
+- Carga del ataque potenciado: 0,6 s manteniendo presionado (propuesta). Vida del jefe: 30 golpes básicos (propuesta).
 
 ## Preguntas abiertas
 
 <!-- Del diseñador. -->
-- Cómo evitar que el máster que va ganando gane cada vez más (el diseñador tiene ideas para después).
-- Si los roles y clases de los héroes se eligen en la sala de juego o al empezar.
+- Balance del tope de dificultad según la fuerza de los héroes (el diseñador lo ajustará).
+- Si conviene limitar cuántos cofres caben en una habitación (hoy un cofre libera 5 de dificultad).
 - Progresión de los héroes: recompensas, equipamiento y niveles.
-- Si se limita al máster por recursos o se le deja libertad total.
+
+## Decisiones del agente (v2, por confirmar jugando)
+
+<!-- Del agente: huecos que la petición no cubría. -->
+- La habitación inicial existe desde el principio y no cuenta entre las 6. El máster solo puede añadir habitaciones contiguas a una existente (arriba, izquierda o derecha); no puede editar una habitación donde ya entró un héroe.
+- Una puerta entre dos habitaciones se abre cuando ambas están listas y al menos una ya no tiene enemigos. Así los héroes entran a pelear y pueden volver atrás por donde vinieron.
+- Los enemigos solo actúan cuando hay un héroe en su habitación y no salen de ella.
+- Un héroe caído reaparece junto a un compañero vivo, o en la habitación inicial si no queda ninguno.
+- Cámara inclinada que sigue a cada héroe; el máster ve el mapa completo desde arriba y puede acercarse a una habitación para editarla.
+- Apuntar como en los juegos de acción móviles: tocar el botón de ataque apunta solo al enemigo más cercano; arrastrarlo apunta a mano.
 
 ## Red
 
