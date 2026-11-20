@@ -21,7 +21,10 @@ import {
   type Game,
 } from '../src/shared/sim.ts'
 
-type Player = LobbyPlayer & { socket: WebSocket }
+type Player = LobbyPlayer & { socket: WebSocket; token: string; awayTimer: ReturnType<typeof setTimeout> | null }
+
+// A player whose connection drops keeps their place this long (phones pause pages, e.g. while sharing the code).
+const GRACE_MS = 30000
 
 const MAX_NAME = 16
 
@@ -51,6 +54,27 @@ export class Room {
       return new Response(null, { status: 101, webSocket: client })
     }
 
+    if (intent === 'rejoin') {
+      const id = url.searchParams.get('id')
+      const token = url.searchParams.get('token')
+      const player = this.players.find((p) => p.id === id && p.token === token)
+      if (!this.created || !player) return refuse('gone')
+      const old = player.socket
+      player.socket = server
+      if (player.awayTimer) clearTimeout(player.awayTimer)
+      player.awayTimer = null
+      player.away = false
+      try {
+        old.close(1000, 'replaced')
+      } catch {
+        // already closed
+      }
+      this.listen(player, server)
+      this.send(player, { type: 'welcome', you: player.id, code: this.code, token: player.token })
+      this.broadcastLobby()
+      return new Response(null, { status: 101, webSocket: client })
+    }
+
     if (this.players.length === 0) this.reset()
     if (intent === 'create') {
       if (this.created) return refuse('taken')
@@ -67,17 +91,31 @@ export class Room {
     const id = crypto.randomUUID().slice(0, 8)
     const used = new Set(this.players.map((p) => p.color))
     const color = [0, 1, 2, 3, 4].find((c) => !used.has(c)) ?? 0
-    const player: Player = { id, name, role: 'hero', cls: 'melee', color, socket: server }
+    const token = crypto.randomUUID()
+    const player: Player = { id, name, role: 'hero', cls: 'melee', color, socket: server, token, awayTimer: null }
     this.players.push(player)
     if (!this.host) this.host = id
 
-    server.addEventListener('message', (event) => this.onMessage(player, event.data))
-    server.addEventListener('close', () => this.onLeave(player))
-    server.addEventListener('error', () => this.onLeave(player))
-
-    this.send(player, { type: 'welcome', you: id, code: this.code })
+    this.listen(player, server)
+    this.send(player, { type: 'welcome', you: id, code: this.code, token })
     this.broadcastLobby()
     return new Response(null, { status: 101, webSocket: client })
+  }
+
+  private listen(player: Player, socket: WebSocket) {
+    socket.addEventListener('message', (event) => {
+      if (player.socket === socket) this.onMessage(player, event.data)
+    })
+    socket.addEventListener('close', () => this.onDrop(player, socket))
+    socket.addEventListener('error', () => this.onDrop(player, socket))
+  }
+
+  // Connection lost: keep the player (and their hero) for GRACE_MS so they can rejoin.
+  private onDrop(player: Player, socket: WebSocket) {
+    if (player.socket !== socket || player.awayTimer || !this.players.includes(player)) return
+    player.away = true
+    player.awayTimer = setTimeout(() => this.onLeave(player), GRACE_MS)
+    this.broadcastLobby()
   }
 
   private reset() {
@@ -99,7 +137,7 @@ export class Room {
   }
 
   private broadcastLobby(reason?: string) {
-    const players = this.players.map(({ id, name, role, cls, color }) => ({ id, name, role, cls, color }))
+    const players = this.players.map(({ id, name, role, cls, color, away }) => ({ id, name, role, cls, color, away }))
     for (const p of this.players) this.send(p, { type: 'lobby', host: this.host, phase: this.phase, players, reason })
   }
 
@@ -123,6 +161,8 @@ export class Room {
         return
       case 'ping':
         return this.send(player, { type: 'pong', t: Number(message.t) })
+      case 'leave':
+        return this.onLeave(player)
     }
     const game = this.game
     if (!game) return
@@ -235,6 +275,8 @@ export class Room {
 
   private onLeave(player: Player) {
     if (!this.players.includes(player)) return
+    if (player.awayTimer) clearTimeout(player.awayTimer)
+    player.awayTimer = null
     this.players = this.players.filter((p) => p !== player)
     if (this.players.length === 0) return this.reset()
     if (this.host === player.id) this.host = this.players[0].id

@@ -19,7 +19,7 @@ const HINT_BY_CONTINENT: Record<string, DurableObjectLocationHint> = {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
-    if (url.pathname === '/api/health') return new Response('ok v2-3')
+    if (url.pathname === '/api/health') return new Response('ok v2-4')
     const match = url.pathname.match(/^\/api\/room\/([A-Z]{4})$/)
     if (match && ROOM_CODE.test(match[1])) {
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected WebSocket', { status: 426 })

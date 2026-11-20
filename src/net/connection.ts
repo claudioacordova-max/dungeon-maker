@@ -19,11 +19,13 @@ function later(fn: () => void) {
 // The deployed Worker hosts the room server. In `npm run dev` there is no local server, so the dev build talks to it too.
 const DEPLOYED_HOST = 'dungeon-maker.claudioa-cordova.workers.dev'
 
-function socketUrl(code: string, intent: 'create' | 'join', name: string): string {
+type Intent = 'create' | 'join' | 'rejoin'
+
+function socketUrl(code: string, intent: Intent, name: string, extra = ''): string {
   const local = import.meta.env.DEV
   const host = local ? DEPLOYED_HOST : location.host
   const scheme = local || location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${scheme}://${host}/api/room/${code}?intent=${intent}&name=${encodeURIComponent(name)}`
+  return `${scheme}://${host}/api/room/${code}?intent=${intent}&name=${encodeURIComponent(name)}${extra}`
 }
 
 export function randomCode(): string {
@@ -38,6 +40,7 @@ const ERRORS: Record<string, string> = {
   full: 'La sala está llena.',
   started: 'La partida ya empezó en esa sala.',
   'bad-request': 'No se pudo conectar.',
+  gone: 'La sala ya no te esperaba: estuviste desconectado demasiado tiempo.',
   closed: 'Se perdió la conexión con la sala.',
 }
 
@@ -45,6 +48,7 @@ type Status = 'home' | 'connecting' | 'room'
 
 type NetState = {
   status: Status
+  reconnecting: boolean
   error: string
   name: string
   you: string
@@ -63,84 +67,135 @@ type NetState = {
 }
 
 let socket: WebSocket | null = null
+// Who we are in the current room, to come back as the same player after a dropped connection.
+let session: { code: string; id: string; token: string } | null = null
+let lastMessageAt = 0
+let rejoinAttempts = 0
+let rejoinTimer: ReturnType<typeof setTimeout> | null = null
 
 const initialRoom = { you: '', code: '', host: '', phase: 'lobby' as Phase, players: [], notice: '', snapshot: null, latency: 0 }
 let pingTimer: ReturnType<typeof setInterval> | null = null
 
+const STALE_MS = 7000 // no message for this long while in a room: the connection is dead (pings go every 2 s)
+const MAX_REJOINS = 5
+
 export const useNet = create<NetState>()((set, get) => {
-  function connect(code: string, intent: 'create' | 'join', attempt = 0) {
-    socket?.close()
+  function goHome(error: string) {
+    socket = null
+    session = null
+    stopPing()
+    stopMusic()
+    clearSnapshots()
+    resetHero()
+    if (rejoinTimer) clearTimeout(rejoinTimer)
+    set({ status: 'home', reconnecting: false, error, ...initialRoom })
+  }
+
+  function open(code: string, intent: Intent, attempt = 0) {
+    const old = socket
+    socket = null
+    old?.close()
     const name = get().name.trim() || 'Jugador'
-    set({ status: 'connecting', error: '', ...initialRoom })
-    const ws = new WebSocket(socketUrl(code, intent, name))
+    if (intent !== 'rejoin') set({ status: 'connecting', error: '', ...initialRoom })
+    const extra = intent === 'rejoin' && session ? `&id=${session.id}&token=${session.token}` : ''
+    const ws = new WebSocket(socketUrl(code, intent, name, extra))
     socket = ws
+    lastMessageAt = performance.now()
     let failed = false
 
-    ws.onmessage = (event) => later(() => {
-      if (socket !== ws) return
-      const message = JSON.parse(String(event.data)) as ServerMessage
-      switch (message.type) {
-        case 'welcome':
-          set({ status: 'room', you: message.you, code: message.code })
-          startMusic()
-          if (pingTimer) clearInterval(pingTimer)
-          pingTimer = setInterval(() => get().send({ type: 'ping', t: performance.now() }), 2000)
-          get().send({ type: 'ping', t: performance.now() })
-          break
-        case 'pong':
-          set({ latency: Math.round(performance.now() - message.t) })
-          break
-        case 'lobby': {
-          const before = get().phase
-          const self = message.players.find((p) => p.id === get().you)
-          if (message.phase !== before && (message.phase === 'heroes-won' || message.phase === 'master-won')) {
-            const won = (message.phase === 'heroes-won') === (self?.role === 'hero')
-            if (won) sfx.victory()
-            else sfx.defeat()
+    ws.onmessage = (event) =>
+      later(() => {
+        if (socket !== ws) return
+        lastMessageAt = performance.now()
+        const message = JSON.parse(String(event.data)) as ServerMessage
+        switch (message.type) {
+          case 'welcome':
+            session = { code: message.code, id: message.you, token: message.token }
+            rejoinAttempts = 0
+            set({ status: 'room', reconnecting: false, you: message.you, code: message.code })
+            startMusic()
+            if (pingTimer) clearInterval(pingTimer)
+            pingTimer = setInterval(() => get().send({ type: 'ping', t: performance.now() }), 2000)
+            get().send({ type: 'ping', t: performance.now() })
+            break
+          case 'pong':
+            set({ latency: Math.round(performance.now() - message.t) })
+            break
+          case 'lobby': {
+            const before = get().phase
+            const self = message.players.find((p) => p.id === get().you)
+            if (message.phase !== before && (message.phase === 'heroes-won' || message.phase === 'master-won')) {
+              const won = (message.phase === 'heroes-won') === (self?.role === 'hero')
+              if (won) sfx.victory()
+              else sfx.defeat()
+            }
+            set((s) => ({
+              host: message.host,
+              phase: message.phase,
+              players: message.players,
+              notice: message.reason ?? (message.phase === 'lobby' ? '' : s.notice),
+              snapshot: message.phase === 'lobby' ? null : s.snapshot,
+            }))
+            if (message.phase === 'lobby') {
+              clearSnapshots()
+              resetHero()
+            }
+            break
           }
-          set((s) => ({
-            host: message.host,
-            phase: message.phase,
-            players: message.players,
-            notice: message.reason ?? (message.phase === 'lobby' ? '' : s.notice),
-            snapshot: message.phase === 'lobby' ? null : s.snapshot,
-          }))
-          if (message.phase === 'lobby') {
-            clearSnapshots()
-            resetHero()
+          case 'state': {
+            const prev = get().snapshot
+            const role = get().players.find((p) => p.id === get().you)?.role
+            pushSnapshot(message.s)
+            onSnapshot(message.s, get().you)
+            playSnapshotSounds(prev, message.s, get().you, role === 'hero')
+            set({ snapshot: message.s })
+            break
           }
-          break
+          case 'error':
+            failed = true
+            if (message.code === 'taken' && intent === 'create' && attempt < 3) open(randomCode(), 'create', attempt + 1)
+            else goHome(ERRORS[message.code] ?? ERRORS['bad-request'])
+            break
         }
-        case 'state': {
-          const prev = get().snapshot
-          const role = get().players.find((p) => p.id === get().you)?.role
-          pushSnapshot(message.s)
-          onSnapshot(message.s, get().you)
-          playSnapshotSounds(prev, message.s, get().you, role === 'hero')
-          set({ snapshot: message.s })
-          break
-        }
-        case 'error':
-          failed = true
-          if (message.code === 'taken' && intent === 'create' && attempt < 3) {
-            connect(randomCode(), 'create', attempt + 1)
-          } else {
-            set({ status: 'home', error: ERRORS[message.code] ?? ERRORS['bad-request'] })
-          }
-          break
-      }
-    })
+      })
     ws.onclose = () => {
       if (socket !== ws || failed) return
-      socket = null
-      stopPing()
-      stopMusic()
-      set({ status: 'home', error: ERRORS.closed, ...initialRoom })
+      // In a room: try to come back as the same player; otherwise back to the home screen.
+      if (session) rejoin()
+      else goHome(ERRORS.closed)
     }
   }
 
+  // Reconnects to the same room as the same player (role, class and hero kept by the server for a few seconds).
+  function rejoin() {
+    if (!session || rejoinTimer) return
+    if (rejoinAttempts >= MAX_REJOINS) return goHome(ERRORS.closed)
+    set({ reconnecting: true })
+    const delay = rejoinAttempts === 0 ? 0 : Math.min(3000, 500 * 2 ** (rejoinAttempts - 1))
+    rejoinAttempts += 1
+    rejoinTimer = setTimeout(() => {
+      rejoinTimer = null
+      if (session) open(session.code, 'rejoin')
+    }, delay)
+  }
+
+  // A phone may freeze the page (e.g. while sharing the code in another app) and kill the connection silently.
+  function checkAlive() {
+    if (!session || get().status !== 'room') return
+    const dead = !socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING
+    if (dead || performance.now() - lastMessageAt > STALE_MS) rejoin()
+  }
+  setInterval(checkAlive, 1000)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      lastMessageAt = Math.min(lastMessageAt, performance.now() - STALE_MS + 2500) // decide within ~2.5 s
+      checkAlive()
+    }
+  })
+
   return {
     status: 'home',
+    reconnecting: false,
     error: '',
     name: localStorageGet('dm-name'),
     ...initialRoom,
@@ -148,17 +203,13 @@ export const useNet = create<NetState>()((set, get) => {
       set({ name })
       localStorageSet('dm-name', name)
     },
-    createRoom: () => connect(randomCode(), 'create'),
-    joinRoom: (code) => connect(code.trim().toUpperCase(), 'join'),
+    createRoom: () => open(randomCode(), 'create'),
+    joinRoom: (code) => open(code.trim().toUpperCase(), 'join'),
     leave: () => {
       const ws = socket
-      socket = null
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'leave' } satisfies ClientMessage))
       ws?.close()
-      stopPing()
-      stopMusic()
-      clearSnapshots()
-      resetHero()
-      set({ status: 'home', error: '', ...initialRoom })
+      goHome('')
     },
     send: (message) => {
       const ws = socket

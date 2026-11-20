@@ -9,6 +9,7 @@ export default function GameUi() {
   const status = useNet((s) => s.status)
   const phase = useNet((s) => s.phase)
   const hasSnapshot = useNet((s) => !!s.snapshot)
+  const reconnecting = useNet((s) => s.reconnecting)
 
   return (
     <div
@@ -18,6 +19,7 @@ export default function GameUi() {
       }}
     >
       {status !== 'room' || phase === 'lobby' ? <SoundToggle floating /> : null}
+      {reconnecting && <div className="reconnect-toast">Reconectando…</div>}
       {status === 'home' && <HomeScreen />}
       {status === 'connecting' && <ConnectingScreen />}
       {status === 'room' && phase === 'lobby' && <LobbyScreen />}

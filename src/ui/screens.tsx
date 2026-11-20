@@ -144,9 +144,23 @@ export function LobbyScreen() {
   const heroes = state.players.filter((p) => p.role === 'hero')
   const canStart = isHost && !!master && heroes.length >= 1 && heroes.length <= MAX_HEROES
   useEffect(preloadGame, [])
-  const selected: Pick['id'] | undefined = self ? (self.role === 'master' ? 'master' : self.cls) : undefined
+  const confirmed: Pick['id'] | undefined = self ? (self.role === 'master' ? 'master' : self.cls) : undefined
+  // The card lights up at once (optimistic); if the server says otherwise (e.g. someone else took the master),
+  // the confirmed choice comes back within a moment.
+  const [optimistic, setOptimistic] = useState<{ id: Pick['id']; at: number } | null>(null)
+  useEffect(() => {
+    if (!optimistic) return
+    if (optimistic.id === confirmed) {
+      setOptimistic(null)
+      return
+    }
+    const t = setTimeout(() => setOptimistic(null), 1500)
+    return () => clearTimeout(t)
+  }, [optimistic, confirmed])
+  const selected = optimistic?.id ?? confirmed
 
   function choose(id: Pick['id']) {
+    setOptimistic({ id, at: performance.now() })
     if (id === 'master') {
       state.send({ type: 'role', role: 'master' })
       return
@@ -184,6 +198,7 @@ export function LobbyScreen() {
             <li key={p.id} className={p.id === state.you ? 'lobby-player is-you' : 'lobby-player'}>
               <span className="player-dot" style={{ background: PLAYER_COLORS[p.color] }} />
               <span className="lobby-name">{p.name}</span>
+              {p.away && <span className="away-tag">Reconectando…</span>}
               {p.id === state.host && <span className="host-tag">Anfitrión</span>}
               <span className="lobby-role">
                 {p.role === 'master' ? (

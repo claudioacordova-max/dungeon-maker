@@ -15,7 +15,7 @@ export type RoomKind = 'start' | 'normal' | 'boss'
 export type Dir = 'n' | 'e' | 's' | 'w'
 export type DoorState = 'none' | 'closed' | 'open' | 'locked'
 
-export type LobbyPlayer = { id: string; name: string; role: Role; cls: HeroClass; color: number }
+export type LobbyPlayer = { id: string; name: string; role: Role; cls: HeroClass; color: number; away?: boolean }
 
 export type Phase = 'lobby' | 'playing' | 'heroes-won' | 'master-won'
 
@@ -76,10 +76,11 @@ export type Snapshot = {
 }
 
 export type ServerMessage =
-  | { type: 'welcome'; you: string; code: string }
+  // token: lets this player rejoin as the same player after a dropped connection (intent=rejoin&id&token).
+  | { type: 'welcome'; you: string; code: string; token: string }
   | { type: 'lobby'; host: string; phase: Phase; players: LobbyPlayer[]; reason?: string }
   | { type: 'state'; s: Snapshot }
-  | { type: 'error'; code: 'no-room' | 'taken' | 'full' | 'started' | 'bad-request' }
+  | { type: 'error'; code: 'no-room' | 'taken' | 'full' | 'started' | 'bad-request' | 'gone' }
   | { type: 'pong'; t: number }
 
 export type ClientMessage =
@@ -106,6 +107,7 @@ export type ClientMessage =
   | { type: 'remove'; room: number; cx: number; cy: number }
   | { type: 'ready'; room: number; ready: boolean }
   | { type: 'lobby' }
+  | { type: 'leave' } // leaving on purpose (no grace period)
 
 export const ROOM_CODE = /^[A-Z]{4}$/
 export const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ' // no I/O, easy to read aloud
