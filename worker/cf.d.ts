@@ -18,7 +18,13 @@ interface DurableObjectStub {
   fetch(request: Request): Promise<Response>
 }
 
+type DurableObjectLocationHint = 'wnam' | 'enam' | 'sam' | 'weur' | 'eeur' | 'apac' | 'oc' | 'afr' | 'me'
+
 interface DurableObjectNamespace {
   idFromName(name: string): DurableObjectId
-  get(id: DurableObjectId): DurableObjectStub
+  get(id: DurableObjectId, options?: { locationHint?: DurableObjectLocationHint }): DurableObjectStub
+}
+
+interface Request {
+  readonly cf?: { continent?: string; colo?: string }
 }
