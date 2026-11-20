@@ -256,3 +256,10 @@
   color: var(--color-text-muted);
   font-family: var(--font-numeric);
 }
+
+/* The shell's buttons have a wide minimum; compact controls here size to their grid cell. */
+.palette-tool,
+.master-view,
+.join-row .ui-button {
+  min-width: 0;
+}

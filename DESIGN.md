@@ -46,12 +46,16 @@ Primera meta: prueba de concepto para comprobar si funciona el momento central, 
 <!-- Del agente. -->
 Prueba de concepto multijugador, sin dependencias nuevas (el servidor de cada sala es un Durable Object en el mismo Worker de Cloudflare; se prueba en la versión desplegada):
 
-1. [ ] Salas: crear, entrar con código, lista de jugadores, elegir máster y empezar.
-2. [ ] Héroes juntos: moverse en una sala y verse en tiempo real.
-3. [ ] Máster: colocar enemigos, trampas y cofres en la siguiente sala con sus puntos; puertas.
-4. [ ] Combate: enemigos que persiguen, ataque automático, golpes, vidas grupales, cofres y final para cada bando.
+1. [x] Salas: crear, entrar con código, lista de jugadores, elegir máster y empezar.
+2. [x] Héroes juntos: moverse en una sala y verse en tiempo real.
+3. [x] Máster: colocar enemigos, trampas y cofres en la siguiente sala con sus puntos; puertas.
+4. [x] Combate: enemigos que persiguen, ataque automático, golpes, vidas grupales, cofres y final para cada bando.
 
 ## Estado
 
 <!-- Del agente. -->
-Plantilla vacía de la Factory, desplegada en Cloudflare Workers. Aún no hay nada jugable.
+Prueba de concepto jugable en la versión desplegada (2026-11-20): salas con código, lista de jugadores, elección de máster, héroes con joystick (o WASD en el PC) y ataque automático, máster que prepara la siguiente sala con sus puntos, golpes, vidas grupales, cofres, puertas y final para cada bando.
+
+- Comprobado con dos jugadores simulados contra el servidor desplegado; aún no probado por personas en dos dispositivos.
+- Si el máster se desconecta, la partida vuelve a la sala de espera; si la sala se queda vacía, su código deja de existir.
+- Los nombres de los héroes solo aparecen en la lista de la esquina, no sobre los personajes.
