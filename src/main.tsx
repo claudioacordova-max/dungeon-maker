@@ -4,6 +4,7 @@ import App from './App'
 import { isMobileTarget, target } from './game/target'
 import './ui/tokens.css'
 import './ui/shell.css'
+import './ui/game.css' // after the shell, so game rules win
 
 // shell.css styles each target profile from this attribute.
 document.documentElement.dataset.target = target

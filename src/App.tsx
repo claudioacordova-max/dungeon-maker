@@ -4,7 +4,6 @@ import { startInput } from './game/input'
 import { isMobileTarget } from './game/target'
 import RoomScene from './scene/RoomScene'
 import GameUi from './ui/GameUi'
-import './ui/game.css'
 
 // Game shell: canvas with the UI overlay on top. Mobile targets: a stage with a fixed short axis and a flexible
 // long axis (shell.css). The room is drawn top-down with an orthographic camera (RoomScene).
