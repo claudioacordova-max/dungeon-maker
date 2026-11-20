@@ -1,17 +1,20 @@
-import { useGame } from '../game/store'
+import { useNet } from '../net/connection'
 import Hud from './Hud'
-import { GameOverScreen, PauseScreen, TitleScreen } from './screens'
+import { ConnectingScreen, EndScreen, HomeScreen, LobbyScreen } from './screens'
 
 // UI overlay above the canvas. It ignores the pointer; only its controls and screens take it.
 export default function GameUi() {
-  const screen = useGame((s) => s.screen)
+  const status = useNet((s) => s.status)
+  const phase = useNet((s) => s.phase)
+  const hasSnapshot = useNet((s) => !!s.snapshot)
 
   return (
     <div className="ui">
-      {(screen === 'playing' || screen === 'paused') && <Hud />}
-      {screen === 'title' && <TitleScreen />}
-      {screen === 'paused' && <PauseScreen />}
-      {screen === 'gameover' && <GameOverScreen />}
+      {status === 'home' && <HomeScreen />}
+      {status === 'connecting' && <ConnectingScreen />}
+      {status === 'room' && phase === 'lobby' && <LobbyScreen />}
+      {status === 'room' && phase !== 'lobby' && hasSnapshot && <Hud />}
+      {status === 'room' && (phase === 'heroes-won' || phase === 'master-won') && <EndScreen />}
     </div>
   )
 }

@@ -1,0 +1,258 @@
+/* Dungeon Maker UI on top of the Factory shell (tokens.css, shell.css). Sizes in em: they scale with the stage. */
+
+/* Home and lobby */
+.screen-panel {
+  width: min(20em, 90%);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.field-label,
+.lobby-code-label {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.8em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.field-input {
+  width: 100%;
+  min-height: 2.75em;
+  padding: 0 0.8em;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 1.05em;
+  background: var(--button-bg-active);
+  border: 1px solid var(--button-border);
+  border-radius: var(--panel-radius);
+  outline: none;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.field-input:focus-visible {
+  border-color: var(--color-focus);
+}
+
+.join-row {
+  display: flex;
+  gap: var(--space-s);
+  width: 100%;
+}
+
+.code-input {
+  flex: 1;
+  font-family: var(--font-numeric);
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.screen-panel > .ui-button {
+  width: 100%;
+}
+
+.screen-error {
+  margin: 0;
+  color: #fda4af;
+  font-size: 0.9em;
+  text-align: center;
+}
+
+.lobby-code {
+  margin: 0;
+  font-family: var(--font-numeric);
+  font-size: 2.6em;
+  letter-spacing: 0.25em;
+  color: var(--color-accent);
+}
+
+.lobby-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lobby-player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  min-height: 2.5em;
+  padding: 0 var(--space-m);
+  background: rgb(255 255 255 / 0.04);
+  border-radius: var(--panel-radius);
+}
+
+.lobby-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lobby-role {
+  display: flex;
+  font-size: 1.2em;
+}
+
+.player-dot {
+  width: 0.75em;
+  height: 0.75em;
+  flex: none;
+  border-radius: 50%;
+}
+
+/* HUD */
+.hud-lives {
+  gap: var(--space-xs);
+  font-size: 1.2em;
+}
+
+.hud-top-center {
+  position: absolute;
+  top: var(--edge);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-s) var(--space-m);
+  transform: translateX(-50%);
+}
+
+.party {
+  position: absolute;
+  right: var(--edge);
+  bottom: var(--edge);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  width: 9.5em;
+  margin: 0;
+  padding: var(--space-s) var(--space-m);
+  list-style: none;
+  font-size: 0.85em;
+}
+
+.party-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+}
+
+.party-hero.is-down {
+  opacity: 0.55;
+}
+
+.party-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.party-respawn {
+  font-family: var(--font-numeric);
+}
+
+.hit-pips {
+  display: flex;
+  gap: 0.18em;
+}
+
+.pip {
+  width: 0.5em;
+  height: 0.8em;
+  background: #f43f5e;
+  border-radius: 0.15em;
+}
+
+.pip.is-empty {
+  background: rgb(255 255 255 / 0.15);
+}
+
+/* Hero joystick: bottom-left thumb area. Width matches BASE in Joystick.tsx (130 design px). */
+.joystick {
+  position: absolute;
+  left: var(--edge);
+  bottom: var(--edge);
+  display: grid;
+  place-items: center;
+  width: calc(130 * var(--ui-px));
+  height: calc(130 * var(--ui-px));
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 50%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.joystick-knob {
+  width: calc(56 * var(--ui-px));
+  height: calc(56 * var(--ui-px));
+  background: rgb(110 231 183 / 0.85);
+  border-radius: 50%;
+  box-shadow: 0 0.2em 0.6em rgb(0 0 0 / 0.4);
+}
+
+/* Master: points and view switch on top of the palette, bottom-left. */
+.master-panel {
+  position: absolute;
+  left: var(--edge);
+  bottom: var(--edge);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+  width: calc(100% - 9.5em * 0.85 - var(--edge) * 3);
+}
+
+.master-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-m);
+}
+
+.master-points {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.master-view {
+  flex: 1;
+  font-size: 0.8em;
+}
+
+.palette {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-xs);
+}
+
+.palette-tool {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  padding: 0.6em 0.7em;
+  font-size: 0.85em;
+}
+
+.palette-tool.is-selected {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.palette-cost {
+  color: var(--color-text-muted);
+  font-family: var(--font-numeric);
+}

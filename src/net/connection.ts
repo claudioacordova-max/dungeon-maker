@@ -1,0 +1,139 @@
+import { create } from 'zustand'
+import { CODE_LETTERS, type ClientMessage, type LobbyPlayer, type Phase, type ServerMessage, type Snapshot } from '../shared/protocol'
+
+// The deployed Worker hosts the room server. In `npm run dev` there is no local server, so the dev build talks to it too.
+const DEPLOYED_HOST = 'dungeon-maker.claudioa-cordova.workers.dev'
+
+function socketUrl(code: string, intent: 'create' | 'join', name: string): string {
+  const local = import.meta.env.DEV
+  const host = local ? DEPLOYED_HOST : location.host
+  const scheme = local || location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${scheme}://${host}/api/room/${code}?intent=${intent}&name=${encodeURIComponent(name)}`
+}
+
+export function randomCode(): string {
+  let code = ''
+  for (let i = 0; i < 4; i++) code += CODE_LETTERS[Math.floor(Math.random() * CODE_LETTERS.length)]
+  return code
+}
+
+const ERRORS: Record<string, string> = {
+  'no-room': 'No existe una sala con ese código.',
+  taken: 'Ese código ya está en uso. Prueba otra vez.',
+  full: 'La sala está llena.',
+  started: 'La partida ya empezó en esa sala.',
+  'bad-request': 'No se pudo conectar.',
+  closed: 'Se perdió la conexión con la sala.',
+}
+
+type Status = 'home' | 'connecting' | 'room'
+
+type NetState = {
+  status: Status
+  error: string
+  name: string
+  you: string
+  code: string
+  host: string
+  phase: Phase
+  players: LobbyPlayer[]
+  notice: string
+  snapshot: Snapshot | null
+  setName: (name: string) => void
+  createRoom: () => void
+  joinRoom: (code: string) => void
+  leave: () => void
+  send: (message: ClientMessage) => void
+}
+
+let socket: WebSocket | null = null
+
+const initialRoom = { you: '', code: '', host: '', phase: 'lobby' as Phase, players: [], notice: '', snapshot: null }
+
+export const useNet = create<NetState>()((set, get) => {
+  function connect(code: string, intent: 'create' | 'join', attempt = 0) {
+    socket?.close()
+    const name = get().name.trim() || 'Jugador'
+    set({ status: 'connecting', error: '', ...initialRoom })
+    const ws = new WebSocket(socketUrl(code, intent, name))
+    socket = ws
+    let failed = false
+
+    ws.onmessage = (event) => {
+      if (socket !== ws) return
+      const message = JSON.parse(String(event.data)) as ServerMessage
+      switch (message.type) {
+        case 'welcome':
+          set({ status: 'room', you: message.you, code: message.code })
+          break
+        case 'lobby':
+          set((s) => ({
+            host: message.host,
+            phase: message.phase,
+            players: message.players,
+            notice: message.reason ?? (message.phase === 'lobby' ? '' : s.notice),
+            snapshot: message.phase === 'lobby' ? null : s.snapshot,
+          }))
+          break
+        case 'state':
+          set({ snapshot: message.s })
+          break
+        case 'error':
+          failed = true
+          if (message.code === 'taken' && intent === 'create' && attempt < 3) {
+            connect(randomCode(), 'create', attempt + 1)
+          } else {
+            set({ status: 'home', error: ERRORS[message.code] ?? ERRORS['bad-request'] })
+          }
+          break
+      }
+    }
+    ws.onclose = () => {
+      if (socket !== ws || failed) return
+      socket = null
+      set({ status: 'home', error: ERRORS.closed, ...initialRoom })
+    }
+  }
+
+  return {
+    status: 'home',
+    error: '',
+    name: localStorageGet('dm-name'),
+    ...initialRoom,
+    setName: (name) => {
+      set({ name })
+      localStorageSet('dm-name', name)
+    },
+    createRoom: () => connect(randomCode(), 'create'),
+    joinRoom: (code) => connect(code.trim().toUpperCase(), 'join'),
+    leave: () => {
+      const ws = socket
+      socket = null
+      ws?.close()
+      set({ status: 'home', error: '', ...initialRoom })
+    },
+    send: (message) => {
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
+    },
+  }
+})
+
+function localStorageGet(key: string): string {
+  try {
+    return localStorage.getItem(key) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function localStorageSet(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // Private mode: the name is just not remembered.
+  }
+}
+
+export function me(state: NetState): LobbyPlayer | undefined {
+  return state.players.find((p) => p.id === state.you)
+}
