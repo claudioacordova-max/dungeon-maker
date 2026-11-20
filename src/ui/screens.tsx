@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { me, useNet } from '../net/connection'
 import type { HeroClass } from '../shared/protocol'
 import { MAX_HEROES } from '../shared/rules'
-import { CrownIcon, EnterIcon, HammerIcon, ScanIcon, ShareIcon, UserIcon } from './icons'
+import { CrownIcon, EnterIcon, ScanIcon, ShareIcon, UserIcon } from './icons'
 
 // Menu art generated for the game (public/ui/), styled after the designer's references.
 export const art = (file: string) => `/ui/${file}`
@@ -77,9 +77,7 @@ export function HomeScreen() {
           </span>
           <input className="field-input" value={name} maxLength={16} autoComplete="off" onChange={(e) => setName(e.target.value)} />
         </label>
-        <button type="button" className="ui-button ui-button-primary big with-icon" disabled={!hasName} onClick={createRoom}>
-          <HammerIcon />
-          <span className="divider" aria-hidden="true" />
+        <button type="button" className="ui-button ui-button-primary big" disabled={!hasName} onClick={createRoom}>
           Crear sala
         </button>
         <div className="join-row">
@@ -107,13 +105,27 @@ export function HomeScreen() {
   )
 }
 
-export function ConnectingScreen() {
+// Fetches the 3D game in the background (from the lobby), so starting a match does not wait for it.
+export const preloadGame = () => void import('../scene/GameView')
+
+// Centred logo, a label and a progress bar that eases towards the end while something loads.
+export function LoadingScreen({ label }: { label: string }) {
   return (
-    <MenuScreen label="Conectando">
-      <Logo />
-      <Tagline>Abriendo las puertas de la mazmorra…</Tagline>
-    </MenuScreen>
+    <section className="screen menu-screen loading-screen" aria-label={label} aria-busy="true">
+      <div className="loading-box">
+        <Logo />
+        <p className="loading-label">{label}</p>
+        <div className="loading-bar" role="progressbar" aria-label={label}>
+          <i />
+        </div>
+      </div>
+    </section>
   )
+}
+
+export function ConnectingScreen() {
+  useEffect(preloadGame, [])
+  return <LoadingScreen label="Abriendo la mazmorra…" />
 }
 
 type Pick = { id: 'master' | HeroClass; title: string; tag: string; image: string }
@@ -131,6 +143,7 @@ export function LobbyScreen() {
   const master = state.players.find((p) => p.role === 'master')
   const heroes = state.players.filter((p) => p.role === 'hero')
   const canStart = isHost && !!master && heroes.length >= 1 && heroes.length <= MAX_HEROES
+  useEffect(preloadGame, [])
   const selected: Pick['id'] | undefined = self ? (self.role === 'master' ? 'master' : self.cls) : undefined
 
   function choose(id: Pick['id']) {

@@ -1,27 +1,37 @@
-import { Canvas } from '@react-three/fiber'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { startInput } from './game/input'
 import { isMobileTarget } from './game/target'
-import World from './scene/World'
+import { useNet } from './net/connection'
 import GameUi from './ui/GameUi'
-import Showcase from './models/Showcase'
+import { LoadingScreen } from './ui/screens'
 
-// Game shell: canvas with the UI overlay on top. Mobile targets: a stage with a fixed short axis and a flexible
-// long axis (shell.css). The world is drawn with a tilted perspective camera (scene/World.tsx).
+// Game shell: the 3D game under the UI overlay. Mobile targets: a stage with a fixed short axis and a flexible
+// long axis (shell.css). The menus are plain HTML; the 3D part (Three.js, models) is a separate chunk that is
+// fetched in the background from the lobby (preloadGame) and only drawn during a match.
 // ?models shows every 3D model and its animations (art review), instead of the game.
 const SHOWCASE = new URLSearchParams(location.search).has('models')
 
+const GameView = lazy(() => import('./scene/GameView'))
+const Showcase = lazy(() => import('./models/Showcase'))
+
 export default function App() {
   useEffect(startInput, [])
-  if (SHOWCASE) return <Showcase />
+  const inMatch = useNet((s) => s.status === 'room' && s.phase !== 'lobby')
+  if (SHOWCASE) {
+    return (
+      <Suspense fallback={null}>
+        <Showcase />
+      </Suspense>
+    )
+  }
 
   const game = (
     <div className="game">
-      {/* dpr capped at 2: phones report 3, which triples the pixels drawn for no visible gain here. */}
-      <Canvas className="game-canvas" dpr={[1, 2]} gl={{ antialias: true, powerPreference: 'high-performance' }} camera={{ fov: 42, near: 0.5, far: 200, position: [5, 20, 10] }}>
-        <color attach="background" args={['#1b1033']} />
-        <World />
-      </Canvas>
+      {inMatch && (
+        <Suspense fallback={<LoadingScreen label="Preparando la mazmorra…" />}>
+          <GameView />
+        </Suspense>
+      )}
       <GameUi />
     </div>
   )

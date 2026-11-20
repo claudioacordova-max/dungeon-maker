@@ -99,9 +99,11 @@ Versión 2 desplegada (2026-11-20):
 - 2026-11-20: sonido generado en el navegador (sin archivos): ataques, golpes, golpes críticos, carga completa, daño, caída y reaparición de héroes, muertes de cada enemigo, lanzamiento de orbes, aviso y aterrizaje del jefe, puertas que se abren, cofres, construcción y colocación del máster, botones, fanfarria de victoria y de derrota, y una música suave de mazmorra. Botón de silencio arriba a la derecha (se recuerda en cada dispositivo).
 - 2026-11-20: música y efectos se pueden silenciar por separado (botón de sonido, arriba a la derecha). Para volver a editar una sala ya lista, el máster debe confirmarlo, y el botón «Sala lista» espera la respuesta del servidor (posible causa de que una sala dejara de estar lista; no se pudo reproducir).
 - 2026-11-20: menús rediseñados según las referencias del diseñador (piedra morada, dorado, antorchas): portada con logo y escena ilustrada, sala con código en placa, lista de jugadores y tarjetas de papel (Maestro de mazmorra, Espadachín, Arquera), botón Invitar que comparte el código, pantalla final con ilustración de victoria o derrota, favicon. Imágenes generadas por Codex (GPT-6.2-Astra) en `public/ui/` (~930 KB).
+- 2026-11-20: tipografía Lilita One (licencia OFL, servida desde `public/fonts/`), pantalla de carga centrada con barra («Abriendo la mazmorra…», «Preparando la mazmorra…»), tarjetas de héroes del mismo tamaño (la del máster algo mayor). Los menús cargan aparte del 3D: el paquete inicial bajó de 1,24 MB a 263 KB y el 3D se descarga en segundo plano desde la sala.
 - Ajuste del agente: 2 s de protección al reaparecer (antes un héroe podía morir varias veces seguidas junto a los slimes).
 
 Problemas conocidos:
+- Las etiquetas de nombre sobre los héroes provocan a veces un aviso de React en la consola al empezar la partida («synchronously unmount a root»); no afecta al juego.
 - Los slimes son muy letales contra un héroe que no se mueve: en la prueba automática el héroe perdió 2 vidas en la primera sala. Para balancear jugando.
 - Rendimiento en un teléfono real sin medir (Codex estimó ~1.500 triángulos y ≤8 llamadas de dibujo por personaje).
 - El paquete del juego pesa ~1,2 MB (343 KB comprimido).
