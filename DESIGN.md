@@ -31,6 +31,7 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 - **Sala del jefe por fases** (2026-11-20, solución temporal): primero aparecen los enemigos que el máster puso en la sala; al derrotarlos aparece el jefe.
 - **Ataques enemigos anunciados** (2026-11-20): antes de golpear, el enemigo se detiene y marca en el suelo una zona roja que se llena; al llenarse, golpea a quien esté dentro. Golpear a un enemigo lo deja aturdido un instante.
 - **Controles (v2):** sobre la pantalla de juego, como en los juegos móviles: joystick de movimiento abajo a la izquierda y ataque abajo a la derecha.
+- **Controles de la sacerdotisa y el mago** (2026-11-21): tienen un segundo botón, más pequeño, para su habilidad especial (oración, polimorfia); su botón de ataque solo hace el básico y no se carga. El espadachín y la arquera siguen cargando al mantener presionado.
 - **Daño y vidas:** cada héroe tiene su propia barra de golpes. Al vaciarse, el héroe cae, el equipo pierde una **vida grupal** y el héroe reaparece tras unos segundos con la barra llena. Las heridas se mantienen de habitación en habitación; los cofres curan.
 - **Cofres** (diseñador, 2026-11-20): se abren al golpearlos (corte o disparo) y dan su beneficio al héroe que los golpeó; pasar por encima no hace nada.
 - **Final (v2):** ganan los héroes al derrotar al jefe. Gana el máster si el equipo se queda sin vidas grupales.
@@ -68,7 +69,7 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 - Los enemigos solo actúan cuando hay un héroe en su habitación y no salen de ella.
 - Un héroe caído reaparece junto a un compañero vivo, o en la habitación inicial si no queda ninguno.
 - Cámara inclinada que sigue a cada héroe; el máster ve el mapa completo desde arriba y puede acercarse a una habitación para editarla.
-- Apuntar como en los juegos de acción móviles: tocar el botón de ataque apunta solo al enemigo más cercano; arrastrarlo apunta a mano.
+- Apuntar como en los juegos de acción móviles: tocar el botón de ataque apunta solo al enemigo más cercano (a 9 casillas o menos, aunque esté fuera del alcance del ataque); arrastrarlo apunta a mano. Mientras se mantiene un botón, el suelo muestra el área del ataque: cono (corte), línea (disparos y hechizos) o círculo (giro del espadachín, oración).
 
 ## Red
 

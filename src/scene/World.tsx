@@ -3,8 +3,8 @@
 // Sim (x, y) maps to three (x, 0, -y); a model's forward is -Z, so facing angle a becomes rotation.y = a - PI/2.
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { PerspectiveCamera, Vector3, type Group, type Mesh } from 'three'
-import { feedback, frame as heroFrame, local, resetHero, shots as ownShots, visibleStrikes } from '../game/hero'
+import { PerspectiveCamera, Vector3, type Group, type Mesh, type MeshBasicMaterial } from 'three'
+import { autoAim, feedback, frame as heroFrame, local, resetHero, shots as ownShots, visibleStrikes } from '../game/hero'
 import { useMaster } from '../game/master'
 import { me, SHOW_GHOSTS, useNet } from '../net/connection'
 import { latestEnemy, sampleEnemy, sampleHero, sampleOrb, sampleShot } from '../net/interp'
@@ -292,21 +292,8 @@ function useHealClock(hero: HeroView) {
 }
 
 function OwnHero({ hero, color }: { hero: HeroView; color: string }) {
-  const aim = useRef<Group>(null)
-  const aimMesh = useRef<Mesh>(null)
   const healAt = useHealClock(hero)
   const prayAt = () => (local.cls === 'priest' && feedback.attackKind === 'charged' ? feedback.attackAt : -1e9)
-  useFrame(() => {
-    const a = aim.current
-    if (!a) return
-    const showing = local.charge > 0.05 || local.aim !== null
-    a.visible = showing
-    if (!showing) return
-    a.position.set(local.x, 0.04, -local.y)
-    a.rotation.y = (local.aim ?? local.facing) - Math.PI / 2
-    if (aimMesh.current) aimMesh.current.scale.set(1, 1, 0.4 + 0.6 * local.charge)
-  })
-  const range = HERO[local.cls].basic.range
   return (
     <>
       <Actor
@@ -337,13 +324,64 @@ function OwnHero({ hero, color }: { hero: HeroView; color: string }) {
           </>
         )}
       </Actor>
-      <group ref={aim} visible={false}>
-        <mesh ref={aimMesh} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -range / 2]}>
-          <planeGeometry args={[local.cls === 'melee' ? 1.6 : 0.5, range]} />
-          <meshBasicMaterial color="#ffffff" transparent opacity={0.35} depthWrite={false} />
+      <AimIndicator />
+    </>
+  )
+}
+
+// What the attack being aimed will reach, on the floor: a cone (swordsman's slash), a line (shots, orbs, spells)
+// or a circle (swordsman's spin, priestess's prayer). Shown while a stick is held; without a manual aim it
+// points where the tap would auto-aim.
+type AimShape = { shape: 'cone' | 'line' | 'circle'; r: number; w?: number; color: string }
+function aimShape(cls: HeroView['cls'], kind: 'basic' | 'charged'): AimShape {
+  if (cls === 'melee') return kind === 'charged' ? { shape: 'circle', r: HERO.melee.charged.range, color: '#ffce2e' } : { shape: 'cone', r: HERO.melee.basic.range, color: '#ffffff' }
+  if (cls === 'ranged') return kind === 'charged' ? { shape: 'line', r: HERO.ranged.charged.range, w: 0.5, color: '#ffce2e' } : { shape: 'line', r: HERO.ranged.basic.range, w: 0.35, color: '#ffffff' }
+  if (cls === 'priest') return kind === 'charged' ? { shape: 'circle', r: HERO.priest.charged.range, color: '#4ade80' } : { shape: 'line', r: HERO.priest.basic.range, w: 0.4, color: '#fde68a' }
+  return kind === 'charged' ? { shape: 'line', r: HERO.mage.charged.range, w: 0.45, color: '#c084fc' } : { shape: 'line', r: HERO.mage.basic.range, w: 0.35, color: '#fb923c' }
+}
+
+function AimIndicator() {
+  const root = useRef<Group>(null)
+  const cone = useRef<Mesh>(null)
+  const line = useRef<Group>(null)
+  const lineMesh = useRef<Mesh>(null)
+  const circle = useRef<Mesh>(null)
+  useFrame(() => {
+    const g = root.current
+    if (!g || !cone.current || !line.current || !lineMesh.current || !circle.current) return
+    const showing = local.ready && (local.aiming || local.charge > 0.05) && local.fallAt < 0
+    g.visible = showing
+    if (!showing) return
+    const kind = local.charge >= 1 ? 'charged' : local.aimKind
+    const a = aimShape(local.cls, kind)
+    g.position.set(local.x, 0.04, -local.y)
+    g.rotation.y = (local.aim ?? autoAim() ?? local.facing) - Math.PI / 2
+    cone.current.visible = a.shape === 'cone'
+    line.current.visible = a.shape === 'line'
+    circle.current.visible = a.shape === 'circle'
+    for (const m of [cone.current, lineMesh.current, circle.current]) (m.material as MeshBasicMaterial).color.set(a.color)
+    cone.current.scale.setScalar(a.r)
+    circle.current.scale.setScalar(a.r)
+    line.current.scale.set(a.w ?? 0.4, 1, a.r)
+  })
+  const arc = HERO.melee.basic.arc
+  return (
+    <group ref={root} visible={false}>
+      <mesh ref={cone} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[1, 28, Math.PI / 2 - arc / 2, arc]} />
+        <meshBasicMaterial transparent opacity={0.35} depthWrite={false} />
+      </mesh>
+      <group ref={line}>
+        <mesh ref={lineMesh} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -0.5]}>
+          <planeGeometry args={[1, 1]} />
+          <meshBasicMaterial transparent opacity={0.35} depthWrite={false} />
         </mesh>
       </group>
-    </>
+      <mesh ref={circle} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[1, 40]} />
+        <meshBasicMaterial transparent opacity={0.28} depthWrite={false} />
+      </mesh>
+    </group>
   )
 }
 

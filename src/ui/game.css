@@ -575,6 +575,63 @@
   background: radial-gradient(circle at 35% 30%, #f5d0fe, #c026d3 60%, #6b21a8);
 }
 
+.special-stick {
+  position: absolute;
+  right: calc(var(--edge) + 138 * var(--ui-px));
+  bottom: calc(var(--edge) + 92 * var(--ui-px));
+  width: calc(84 * var(--ui-px));
+  height: calc(84 * var(--ui-px));
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(26 15 46 / 0.3);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.special-knob {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(60 * var(--ui-px));
+  height: calc(60 * var(--ui-px));
+  color: #fff;
+  border: 0.16em solid var(--ink);
+  border-radius: 50%;
+  box-shadow: 0 0.2em 0 var(--ink);
+}
+
+.special-stick.is-priest .special-knob {
+  background: radial-gradient(circle at 35% 30%, #dcfce7, #4ade80 55%, #15803d);
+}
+
+.special-stick.is-mage .special-knob {
+  background: radial-gradient(circle at 35% 30%, #fae8ff, #a855f7 60%, #581c87);
+}
+
+.special-knob svg {
+  width: 55%;
+  height: 55%;
+}
+
+.special-knob small {
+  position: absolute;
+  right: calc(-4 * var(--ui-px));
+  bottom: calc(-4 * var(--ui-px));
+  display: grid;
+  place-items: center;
+  width: calc(22 * var(--ui-px));
+  height: calc(22 * var(--ui-px));
+  border: calc(2 * var(--ui-px)) solid var(--ink);
+  border-radius: 50%;
+  background: #60a5fa;
+  font-size: calc(12 * var(--ui-px));
+}
+
+.special-stick.is-low .special-knob {
+  filter: grayscale(0.8) brightness(0.7);
+}
+
 .mana-bar {
   position: absolute;
   left: 50%;

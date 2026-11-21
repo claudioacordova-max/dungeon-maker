@@ -2,12 +2,12 @@
 // thumb touches (lower-left area), and an attack stick bottom-right: tap = attack with auto-aim, drag = aim by
 // hand, hold = charge the powered attack, released when the thumb lifts.
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { local, manaMax } from '../game/hero'
+import { local, manaCost, manaMax } from '../game/hero'
 import type { HeroClass } from '../shared/protocol'
-import { setAttackStick, setMoveStick } from '../game/input'
+import { setAttackStick, setMoveStick, setSpecialStick } from '../game/input'
 
 const MOVE_RADIUS = 52 // design px the knob can travel
-const AIM_DEAD = 16 // design px of drag before it counts as manual aim
+const AIM_DEAD = 24 // design px of drag before it counts as manual aim (a sloppy tap still auto-aims)
 
 function designPx(el: HTMLElement) {
   // The UI is sized in design px through --ui-px; read the real scale from an element of known design width.
@@ -108,7 +108,74 @@ function ManaBar({ cls }: { cls: HeroClass }) {
   )
 }
 
+// Special ability of the priestess (prayer) and the mage (polymorph): a smaller stick left of the attack stick.
+const SPECIAL_KNOB: Partial<Record<HeroClass, string>> = {
+  priest: 'M12 4v16M4 12h16M7 7l10 10M17 7 7 17',
+  mage: 'M8 6c-2 2-2 5 0 7l4 4 4-4c2-2 2-5 0-7-1.5-1.5-3-1-4 0-1-1-2.5-1.5-4 0z',
+}
+
+export function SpecialStick({ cls }: { cls: HeroClass }) {
+  const base = useRef<HTMLDivElement>(null)
+  const knob = useRef<HTMLDivElement>(null)
+  const pointer = useRef<number | null>(null)
+  const cost = cls === 'priest' || cls === 'mage' ? manaCost(cls, true) : 0
+  // Dimmed while there is not enough mana for it.
+  useEffect(() => {
+    let raf = 0
+    const tick = () => {
+      base.current?.classList.toggle('is-low', local.mana < cost)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [cost])
+
+  function update(e: PointerEvent) {
+    const el = base.current!
+    const rect = el.getBoundingClientRect()
+    const scale = designPx(el)
+    const dx = (e.clientX - (rect.left + rect.width / 2)) / scale
+    const dy = (e.clientY - (rect.top + rect.height / 2)) / scale
+    const len = Math.hypot(dx, dy)
+    const k = Math.min(1, 30 / Math.max(len, 1))
+    if (knob.current) knob.current.style.transform = `translate(calc(${dx * k} * var(--ui-px)), calc(${dy * k} * var(--ui-px)))`
+    setSpecialStick(true, len > AIM_DEAD * 0.8, Math.atan2(-dy, dx))
+  }
+
+  function release() {
+    pointer.current = null
+    if (knob.current) knob.current.style.transform = ''
+    setSpecialStick(false, local.aim !== null, local.aim ?? 0)
+  }
+
+  return (
+    <div
+      ref={base}
+      className={`special-stick is-${cls}`}
+      data-width="84"
+      role="button"
+      aria-label={cls === 'priest' ? 'Oración' : 'Polimorfia'}
+      onPointerDown={(e) => {
+        pointer.current = e.pointerId
+        e.currentTarget.setPointerCapture(e.pointerId)
+        update(e)
+      }}
+      onPointerMove={(e) => pointer.current === e.pointerId && update(e)}
+      onPointerUp={release}
+      onPointerCancel={release}
+    >
+      <div ref={knob} className="special-knob">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d={SPECIAL_KNOB[cls]} stroke="currentColor" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <small>{cost}</small>
+      </div>
+    </div>
+  )
+}
+
 export function AttackStick({ cls }: { cls: HeroClass }) {
+  const charges = cls === 'melee' || cls === 'ranged'
   const base = useRef<HTMLDivElement>(null)
   const ring = useRef<HTMLDivElement>(null)
   const knob = useRef<HTMLDivElement>(null)
@@ -153,7 +220,7 @@ export function AttackStick({ cls }: { cls: HeroClass }) {
       className={`attack-stick is-${cls}`}
       data-width="118"
       role="button"
-      aria-label="Atacar (mantener para cargar)"
+      aria-label={charges ? 'Atacar (mantener para cargar)' : 'Atacar'}
       onPointerDown={(e) => {
         pointer.current = e.pointerId
         e.currentTarget.setPointerCapture(e.pointerId)
@@ -163,7 +230,7 @@ export function AttackStick({ cls }: { cls: HeroClass }) {
       onPointerUp={release}
       onPointerCancel={release}
     >
-      <div ref={ring} className="charge-ring" />
+      {charges && <div ref={ring} className="charge-ring" />}
       <div ref={knob} className="attack-knob">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d={KNOB[cls]} stroke="currentColor" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />

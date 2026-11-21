@@ -1,11 +1,15 @@
 import { unlockAudio } from '../audio/sfx'
 
 // Hero input. Touch/mouse: a floating movement stick (left) and an attack stick (right): tap = attack with
-// auto-aim, drag = aim by hand, hold = charge the powered attack (released on lift). Keyboard: WASD/arrows to
-// move, Space held to charge (auto-aim). Directions use the game's axes: +x east, +y north (up the screen).
+// auto-aim, drag = aim by hand. Swordsman and archer: hold = charge the powered attack (released on lift).
+// Priestess and mage: a second, smaller special stick fires their powered ability (tap or drag the same way).
+// Keyboard: WASD/arrows to move, Space = attack (held to charge), E = special. Directions use the game's axes:
+// +x east, +y north (up the screen).
 
 const move = { x: 0, y: 0 }
 const attack = { held: false, aiming: false, dir: 0 }
+const special = { held: false, aiming: false, dir: 0 }
+let eHeld = false
 const keys = new Set<string>()
 let spaceHeld = false
 
@@ -41,6 +45,17 @@ export function attackInput(): { held: boolean; aiming: boolean; dir: number } {
   return attack
 }
 
+export function specialInput(): { held: boolean; aiming: boolean; dir: number } {
+  if (eHeld && !special.held) return { held: true, aiming: false, dir: 0 }
+  return special
+}
+
+export function setSpecialStick(held: boolean, aiming: boolean, dir: number) {
+  special.held = held
+  special.aiming = aiming
+  special.dir = dir
+}
+
 export function setMoveStick(x: number, y: number) {
   move.x = x
   move.y = y
@@ -66,14 +81,16 @@ export function startInput() {
     else if (e.code === 'Space') {
       e.preventDefault()
       spaceHeld = true
-    }
+    } else if (e.code === 'KeyE') eHeld = true
   })
   addEventListener('keyup', (e) => {
     keys.delete(e.code)
     if (e.code === 'Space') spaceHeld = false
+    if (e.code === 'KeyE') eHeld = false
   })
   addEventListener('blur', () => {
     keys.clear()
     spaceHeld = false
+    eHeld = false
   })
 }

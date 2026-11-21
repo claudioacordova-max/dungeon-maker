@@ -7,7 +7,7 @@ import { INTERP_DELAY, sampleEnemy, sampleHero, sampleOrb } from '../net/interp'
 import { angleDiff, moveHero, overGap } from '../shared/map'
 import type { EnemyKind, HeroClass, ShotKind, Snapshot, StrikeView } from '../shared/protocol'
 import { CHARGE_TIME, ENEMY, HERO, HERO_RADIUS, HIT_INVULNERABLE, MANA } from '../shared/rules'
-import { attackInput, moveInput } from './input'
+import { attackInput, moveInput, specialInput } from './input'
 
 export const local = {
   x: 0,
@@ -19,6 +19,8 @@ export const local = {
   moving: false,
   charge: 0, // 0..1 while holding attack
   aim: null as number | null, // direction shown while aiming
+  aimKind: 'basic' as 'basic' | 'charged', // which attack the aim indicator shows
+  aiming: false, // a stick is held (the indicator shows, auto-aimed when not dragged)
   mana: 0, // priestess and mage, predicted here like the server does
   noManaAt: -1e9, // performance.now() of the last attack refused for lack of mana
   fallAt: -1, // performance.now() when this hero walked off the edge (until the server brings it back)
@@ -55,6 +57,7 @@ let readyAt = 0
 let seq = 0
 let invulnerableUntil = 0
 let holdStart = -1
+let specialHeld = false
 
 function snapshotMe() {
   const net = useNet.getState()
@@ -119,8 +122,13 @@ function enemyRadius(kind: EnemyKind) {
   return ENEMY[kind].radius
 }
 
+// Auto-aim reach: the nearest enemy within this many cells, whatever the attack's range (a melee hero turns to it
+// and swings; a shot flies toward it).
+const AUTO_AIM = 9
+const usesSpecialStick = (cls: HeroClass) => cls === 'priest' || cls === 'mage'
+
 // Nearest enemy (as shown here) within `range`, for auto-aim.
-function autoAim(range: number): number | null {
+export function autoAim(range = AUTO_AIM): number | null {
   const s = useNet.getState().snapshot
   if (!s) return null
   let best = range
@@ -150,7 +158,7 @@ function fire(charged: boolean, manualDir: number | null) {
   }
   local.mana -= cost
   readyAt = now + spec.cooldown * 1000
-  const dir = manualDir ?? autoAim(spec.range * 1.4) ?? local.facing
+  const dir = manualDir ?? autoAim() ?? local.facing
   local.facing = dir
   seq += 1
   feedback.attackAt = now
@@ -252,7 +260,9 @@ export function frame(dt: number) {
   if (me.dead) {
     local.charge = 0
     local.aim = null
+    local.aiming = false
     holdStart = -1
+    specialHeld = false
     return
   }
 
@@ -271,20 +281,38 @@ export function frame(dt: number) {
   local.y = moved.y
   if (local.moving && now - feedback.attackAt > 250) local.facing = Math.atan2(v.y, v.x)
 
-  // Attack: tap = basic with auto-aim; drag = manual aim; hold for CHARGE_TIME = powered attack on release.
+  // Attack: tap = basic with auto-aim; drag = manual aim. Swordsman and archer: hold for CHARGE_TIME = powered
+  // attack on release. Priestess and mage: the attack stick never charges; their special stick fires the powered
+  // ability (tap = auto-aim, drag = aim, released on lift).
   const a = attackInput()
+  const sp = specialInput()
+  const casters = usesSpecialStick(local.cls)
   if (a.held) {
     if (holdStart < 0) holdStart = now
-    const before = local.charge
-    local.charge = Math.min(1, (now - holdStart) / 1000 / CHARGE_TIME)
-    if (before < 1 && local.charge >= 1) sfx.chargeFull()
+    if (!casters) {
+      const before = local.charge
+      local.charge = Math.min(1, (now - holdStart) / 1000 / CHARGE_TIME)
+      if (before < 1 && local.charge >= 1) sfx.chargeFull()
+    }
     local.aim = a.aiming ? a.dir : null
+    local.aimKind = local.charge >= 1 ? 'charged' : 'basic'
+    local.aiming = true
   } else if (holdStart >= 0) {
-    const charged = local.charge >= 1
-    fire(charged, a.aiming ? a.dir : null)
+    fire(!casters && local.charge >= 1, a.aiming ? a.dir : null)
     holdStart = -1
     local.charge = 0
     local.aim = null
+    local.aiming = false
+  } else if (casters && sp.held) {
+    specialHeld = true
+    local.aim = sp.aiming ? sp.dir : null
+    local.aimKind = 'charged'
+    local.aiming = true
+  } else if (specialHeld) {
+    specialHeld = false
+    fire(true, sp.aiming ? sp.dir : null)
+    local.aim = null
+    local.aiming = false
   }
 
   if (overGap(s.rooms, local.x, local.y, FALL_MARGIN)) {

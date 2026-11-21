@@ -5,7 +5,7 @@ import { layoutCost, SHAPE_NAME, SHAPES, type Layout } from '../shared/layouts'
 import { canAdd, difficulty } from '../shared/map'
 import type { Placeable, RoomView, Snapshot } from '../shared/protocol'
 import { DIFFICULTY, MAX_ROOMS } from '../shared/rules'
-import { AttackStick, MoveStick } from './Controls'
+import { AttackStick, MoveStick, SpecialStick } from './Controls'
 import MiniMap from './MiniMap'
 import SoundToggle from './SoundToggle'
 import { ExitIcon, HeartIcon } from './icons'
@@ -65,6 +65,7 @@ export default function Hud() {
           <>
             <MoveStick />
             <AttackStick cls={own.cls} />
+            {(own.cls === 'priest' || own.cls === 'mage') && <SpecialStick cls={own.cls} />}
           </>
         )
       )}
