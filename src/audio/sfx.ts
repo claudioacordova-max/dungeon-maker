@@ -137,6 +137,11 @@ export const sfx = {
       tone({ type: 'triangle', f0: 1760, f1: 2640, dur: 0.12, vol: 0.15, at: 0.02 }, s)
       noise({ dur: 0.12, vol: 0.35, filter: 'lowpass', f0: 4000 }, s)
     }),
+  fall: (v = 1) =>
+    play('fall', v, (s) => {
+      tone({ type: 'sine', f0: 900, f1: 120, dur: 0.9, vol: 0.28 }, s)
+      noise({ dur: 0.8, vol: 0.12, filter: 'bandpass', f0: 1200, f1: 300 }, s)
+    }),
   noMana: (v = 1) => play('no-mana', v, (s) => tone({ type: 'sine', f0: 260, f1: 180, dur: 0.12, vol: 0.18 }, s), 250),
   light: (v = 1) =>
     play('light', v, (s) => {

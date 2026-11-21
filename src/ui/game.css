@@ -647,8 +647,65 @@
 
 .palette {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.3em;
+}
+
+.palette.palette-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.shape-icon {
+  width: 1.9em;
+  height: 2.2em;
+}
+
+.master-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3em;
+}
+
+.master-tabs .tab {
+  padding: 0.45em 0;
+  border: 0.12em solid var(--ink);
+  border-radius: 0.5em;
+  background: rgb(26 15 46 / 0.55);
+  color: #d8c8ff;
+  font: inherit;
+  font-size: 0.8em;
+}
+
+.master-tabs .tab.is-active {
+  background: linear-gradient(180deg, #a78bfa, #7c3aed);
+  color: #fff;
+  box-shadow: 0 0.15em 0 var(--ink);
+}
+
+.layout-row {
+  align-items: center;
+}
+
+.ui-button.small.is-on {
+  background: linear-gradient(180deg, #fca5a5, #ef4444 60%, #b91c1c);
+}
+
+.ui-button small {
+  color: #ffce2e;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  margin-left: auto;
+  font-size: 0.8em;
+  color: #fff;
+}
+
+.stepper .ui-button.small {
+  min-width: 2.2em;
+  padding-inline: 0;
 }
 
 .ui-button.tool {

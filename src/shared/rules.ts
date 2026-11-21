@@ -4,7 +4,11 @@ export const HERO_HITS = 4
 export const MAX_ROOMS = 6 // master rooms before the boss room (the start room does not count)
 export const ROOM_DIFFICULTY_CAP = 10
 export const CAP_PER_EXTRA_HERO = 5
-export const DIFFICULTY = { slime: 2, thrower: 3, ogre: 5, trap: 1, chest: -5 } as const
+// Enemies (placed one by one) and the room layout (broken floor, spike pack, each chest) share the room's cap.
+export const DIFFICULTY = { slime: 2, thrower: 3, ogre: 5, brokenFloor: 4, spikes: 3, chest: -5 } as const
+export const MAX_CHESTS = 3
+// Spikes: each group cycles down -> warn -> up; group B runs half a cycle after group A.
+export const SPIKE_CYCLE = { down: 1.5, warn: 0.5, up: 1 } as const
 // Cap of every room for a match with `heroes` heroes.
 export const roomCap = (heroes: number) => ROOM_DIFFICULTY_CAP + CAP_PER_EXTRA_HERO * Math.max(0, heroes - 1)
 export const CHEST_HEAL = 2

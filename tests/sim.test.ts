@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { buildableSlots, difficulty, doorState, walkable } from '../src/shared/map.ts'
+import { CHEST_SLOTS, floorCell, SHAPES, SPIKES } from '../src/shared/layouts.ts'
 import * as R from '../src/shared/rules.ts'
 import {
   attack,
@@ -15,8 +16,10 @@ import {
   reportPosition,
   reportStruck,
   reportTouched,
+  setLayout,
   setReady,
   shotHit,
+  spikePhase,
   shotHeal,
   step,
   type Game,
@@ -58,18 +61,72 @@ test('the master builds north, east or west of existing rooms; 6 rooms, then the
   assert.ok(buildableSlots(g.rooms).length > 0)
 })
 
-test('difficulty per room: enemies and traps add, chests subtract, the total cannot pass the cap', () => {
+test('difficulty per room: enemies and the layout share the cap; chests subtract, at most 3', () => {
   const g = createGame([{ id: 'a', cls: 'melee' }])
   build(g, 0, 1, 'normal')
   const room = g.rooms[1]
   for (let i = 0; i < 5; i++) assert.ok(place(g, room.id, 'slime', 1 + i, 3))
-  assert.equal(difficulty(room.plan), 10)
-  assert.equal(place(g, room.id, 'trap', 1, 5), false, 'over the cap')
-  assert.ok(place(g, room.id, 'chest', 5, 6), 'a chest lowers the difficulty')
-  assert.ok(place(g, room.id, 'thrower', 6, 6))
-  assert.equal(removeItem(g, room.id, 5, 6), false, 'removing the chest would pass the cap')
-  assert.ok(removeItem(g, room.id, 6, 6))
-  assert.ok(removeItem(g, room.id, 5, 6))
+  assert.equal(difficulty(room.plan, room.layout), 10)
+  assert.equal(setLayout(g, room.id, 'full', true, 0), false, 'spikes would pass the cap')
+  assert.ok(setLayout(g, room.id, 'full', true, 1), 'a chest pays for the spikes')
+  assert.equal(difficulty(room.plan, room.layout), 8)
+  assert.equal(setLayout(g, room.id, 'full', true, 4), false, 'at most 3 chests')
+  assert.equal(setLayout(g, room.id, 'full', false, 0), true)
+  assert.equal(place(g, room.id, 'thrower', 6, 6), false, 'over the cap')
+  assert.equal(setLayout(g, room.id, 'nope', false, 0), false)
+})
+
+test('layouts: every spike and chest is on floor; enemies cannot stand over the abyss', () => {
+  for (const shape of SHAPES) {
+    for (const [cx, cy] of [...SPIKES[shape], ...CHEST_SLOTS[shape]]) assert.ok(floorCell(shape, cx, cy), `${shape} ${cx},${cy}`)
+    const chests = new Set(CHEST_SLOTS[shape].map(([x, y]) => `${x},${y}`))
+    for (const [cx, cy] of SPIKES[shape]) assert.ok(!chests.has(`${cx},${cy}`), `${shape}: chest on a spike`)
+  }
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  build(g, 0, 1, 'normal')
+  const room = g.rooms[1]
+  assert.ok(place(g, room.id, 'slime', 1, 1))
+  assert.ok(setLayout(g, room.id, 'banks', false, 0))
+  assert.equal(room.plan.length, 0, 'the slime over the gap is removed')
+  assert.equal(place(g, room.id, 'slime', 1, 1), false)
+  assert.ok(place(g, room.id, 'slime', 5, 1))
+})
+
+test('walking off the edge is a fall: the team loses a life; spikes hurt only while up', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  g.enemies = []
+  build(g, 0, 1, 'normal')
+  const room = g.rooms[1]
+  setLayout(g, room.id, 'banks', true, 0)
+  setReady(g, room.id, true)
+  const hero = g.heroes[0]
+  hero.invulnerable = 5
+  hero.x = 1
+  hero.y = R.ROOM_H + 2
+  step(g, 0.05)
+  assert.ok(hero.dead, 'fell even while protected')
+  assert.equal(g.lives, R.TEAM_LIVES - 1)
+  run(g, R.RESPAWN_SECONDS + 0.2)
+  assert.ok(!hero.dead)
+  const spike = g.items.find((i) => i.kind === 'trap')!
+  hero.invulnerable = 0
+  hero.x = spike.x
+  hero.y = spike.y
+  let hurt = false
+  let downTime = 0
+  for (let t = 0; t < 3; t += 0.05) {
+    const before = hero.hp
+    const phase = spikePhase(g.time + 0.05, spike.group)
+    step(g, 0.05)
+    if (hero.hp < before) {
+      hurt = true
+      assert.equal(phase, 'up')
+    }
+    if (phase !== 'up') downTime += 0.05
+    hero.invulnerable = 0
+    hero.hp = R.HERO_HITS
+  }
+  assert.ok(hurt && downTime > 1.5)
 })
 
 test('a door to a room still being built is locked; ready rooms open once one side has no enemies', () => {
@@ -233,7 +290,7 @@ test('a chest opens when a hero hits it, heals that hero, and stays shut when wa
   g.enemies = []
   build(g, 0, 1, 'normal')
   const room = g.rooms[1]
-  place(g, room.id, 'chest', 5, 3)
+  setLayout(g, room.id, 'full', false, 1)
   setReady(g, room.id, true)
   const chest = g.items.find((i) => i.kind === 'chest')!
   const hero = g.heroes[0]
@@ -260,8 +317,8 @@ test('cap per room grows 5 per extra hero; the ogre costs 5', () => {
   build(g, 0, 1, 'normal')
   const room = g.rooms[1]
   for (let i = 0; i < 5; i++) assert.ok(place(g, room.id, 'ogre', 1 + i, 3))
-  assert.equal(difficulty(room.plan), 25)
-  assert.equal(place(g, room.id, 'trap', 1, 5), false, 'over the 4-hero cap')
+  assert.equal(difficulty(room.plan, room.layout), 25)
+  assert.equal(place(g, room.id, 'slime', 1, 5), false, 'over the 4-hero cap')
 })
 
 test('mana: priestess and mage spend it and it recovers; no mana, no attack', () => {

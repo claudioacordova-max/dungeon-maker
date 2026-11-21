@@ -14,6 +14,7 @@ import {
   reportPosition,
   reportStruck,
   reportTouched,
+  setLayout,
   setReady,
   shotHit,
   shotHeal,
@@ -206,6 +207,9 @@ export class Room {
           return
         case 'remove':
           removeItem(game, Number(message.room), Number(message.cx), Number(message.cy))
+          return
+        case 'layout':
+          setLayout(game, Number(message.room), message.shape, message.spikes, message.chests)
           return
         case 'ready':
           setReady(game, Number(message.room), message.ready === true)

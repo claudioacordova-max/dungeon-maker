@@ -24,6 +24,10 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 - **Enemigos (v2):** un **slime** que hace daño al tocar a los héroes, y un enemigo **a distancia** que lanza proyectiles. Jefe: **slime gigante**.
 - **Ogro** (2026-11-20): enemigo grande y poderoso, más caro en dificultad.
 - **Tope por héroe** (2026-11-20): el tope de dificultad de cada sala sube por cada héroe extra en la partida.
+- **Máster en dos partes** (2026-11-21): al editar una sala, una pestaña **Sala** (terreno) y otra **Enemigos**, que comparten el mismo tope de dificultad.
+  - **Suelo roto:** la sala puede tener tramos de suelo que ya no están (no hoyos sueltos), elegidos de una lista de formas: Entera, Orillas, Cruz y Puente. Un héroe que camina más allá del borde se cae y cuenta como derrotado (el equipo pierde una vida). Es más caro que los pinchos.
+  - **Pinchos:** ya no se colocan uno por uno; se compra un paquete que pone varias trampas en lugares fijos pensados para la forma del suelo.
+  - **Cofres:** se elige cuántos (máximo 3) y aparecen en lugares fijos de esa forma, siempre sobre suelo y alcanzables.
 - **Sala del jefe por fases** (2026-11-20, solución temporal): primero aparecen los enemigos que el máster puso en la sala; al derrotarlos aparece el jefe.
 - **Ataques enemigos anunciados** (2026-11-20): antes de golpear, el enemigo se detiene y marca en el suelo una zona roja que se llena; al llenarse, golpea a quien esté dentro. Golpear a un enemigo lo deja aturdido un instante.
 - **Controles (v2):** sobre la pantalla de juego, como en los juegos móviles: joystick de movimiento abajo a la izquierda y ataque abajo a la derecha.
@@ -39,7 +43,8 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 - Golpes que aguanta un héroe: 4.
 - Habitaciones del máster: hasta 6, más la del jefe (diseñador, v2).
 - Tope de dificultad por habitación: 10 (diseñador dijo «10 o 6»; se empieza con 10), +5 por cada héroe después del primero (diseñador): 10, 15, 20, 25.
-- Dificultad: enemigo +2 (diseñador), enemigo a distancia +3 (propuesta), ogro +5 (propuesta), trampa +1 (propuesta), cofre −5 (diseñador).
+- Dificultad: enemigo +2 (diseñador), enemigo a distancia +3 (propuesta), ogro +5 (propuesta), suelo roto +4 (propuesta), paquete de pinchos +3 (propuesta), cofre −5 (diseñador), hasta 3 cofres por sala (diseñador).
+- Pinchos (propuesta): 8 por sala, en dos grupos que se alternan: abajo 1,5 s, aviso 0,5 s, arriba 1 s.
 - Ogro (propuesta): 10 de vida, lento, no daña al tocar; golpe de garrote anunciado con zona roja frente a él que quita 2 golpes; queda expuesto un momento tras golpear.
 - Sacerdotisa (aprobado): maná 4, recupera 1 cada 1,5 s. Orbe de luz: 1 de maná, quita 1 a un enemigo o cura 1 golpe a un aliado. Oración: 3 de maná, cura 1 golpe a los aliados en 3,5 m.
 - Mago (aprobado): maná 5, recupera 1 cada 1,2 s. Chispa: 1 de maná, quita 1 y quema 0,5 por segundo durante 2 s (la quemadura se reinicia, no se acumula, y no aturde). Polimorfia: 3 de maná, gallina durante 4 s; el jefe 1,5 s y después no puede volver a transformarse durante 8 s. La gallina no ataca, no daña al tocar, cancela el ataque que estaba anunciando y huye de los héroes.
@@ -53,7 +58,6 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 
 <!-- Del diseñador. -->
 - Balance del tope de dificultad según la fuerza de los héroes (el diseñador lo ajustará).
-- Si conviene limitar cuántos cofres caben en una habitación (hoy un cofre libera 5 de dificultad).
 - Progresión de los héroes: recompensas, equipamiento y niveles.
 
 ## Decisiones del agente (v2, por confirmar jugando)
@@ -93,7 +97,13 @@ Anterior, prueba de concepto multijugador, sin dependencias nuevas (el servidor 
 3. [x] Máster: colocar enemigos, trampas y cofres en la siguiente sala con sus puntos; puertas.
 4. [x] Combate: enemigos que persiguen, ataque automático, golpes, vidas grupales, cofres y final para cada bando.
 
-## Plan actual (2026-11-20, cuatro clases)
+## Plan actual (2026-11-21, máster en dos partes)
+
+1. [ ] Formas de suelo, caídas, paquete de pinchos y cofres por cantidad (servidor y pruebas).
+2. [ ] Panel del máster con pestañas Sala y Enemigos.
+3. [ ] Arte de Codex (GPT-6.2-Astra): suelo roto con abismo y pinchos que suben y bajan.
+
+## Plan anterior (2026-11-20, cuatro clases)
 
 1. [x] Maná, sacerdotisa y mago (mecánica, HUD y sala de espera).
 2. [x] Ogro, tope por héroe extra y sala del jefe por fases.

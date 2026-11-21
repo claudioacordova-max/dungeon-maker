@@ -9,8 +9,9 @@ import { feedback, frame as heroFrame, local, resetHero, shots as ownShots, visi
 import { useMaster } from '../game/master'
 import { me, SHOW_GHOSTS, useNet } from '../net/connection'
 import { latestEnemy, sampleEnemy, sampleHero, sampleOrb, sampleShot } from '../net/interp'
-import { buildableSlots, DIRS, doorState, isPlaceableCell, roomAtPoint, roomCenter } from '../shared/map'
-import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, ShotKind, Snapshot } from '../shared/protocol'
+import { CHEST_SLOTS, floorCell, SPIKES } from '../shared/layouts'
+import { buildableSlots, DIRS, doorState, isPlaceableCell, overGap, roomAtPoint, roomCenter } from '../shared/map'
+import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, ShotKind, Snapshot, SpikePhase } from '../shared/protocol'
 import { ENEMY, ENEMY_TELEGRAPH, HERO, MAX_ROOMS, ROOM_H, ROOM_W } from '../shared/rules'
 import { PLAYER_COLORS } from '../ui/screens'
 import {
@@ -120,7 +121,7 @@ function doorsOf(rooms: RoomView[], room: RoomView, forMaster: boolean) {
 const RoomTile = memo(function RoomTile({ room, doors, draft }: { room: RoomView; doors: Record<'n' | 'e' | 's' | 'w', DoorState>; draft: boolean }) {
   return (
     <group position={[room.gx * ROOM_W, 0, -room.gy * ROOM_H]}>
-      <RoomShell w={ROOM_W} h={ROOM_H} doors={doors} />
+      <RoomShell w={ROOM_W} h={ROOM_H} doors={doors} shape={room.shape} />
       {draft && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[ROOM_W / 2, 0.03, -ROOM_H / 2]}>
           <planeGeometry args={[ROOM_W, ROOM_H]} />
@@ -238,6 +239,8 @@ function FxProgress({ get, children }: { get: () => number; children: (p: number
 }
 
 const ownPos = () => (local.ready ? local : null)
+// Falling into the abyss: accelerating drop (cells below the floor) after `t` seconds.
+const fallDepth = (t: number) => -Math.min(12, 9 * t * t)
 const ownFacing = () => local.facing
 
 function useHealClock(hero: HeroView) {
@@ -270,6 +273,7 @@ function OwnHero({ hero, color }: { hero: HeroView; color: string }) {
       <Actor
         at={ownPos}
         facing={ownFacing}
+        lift={() => (local.fallAt >= 0 ? fallDepth((performance.now() - local.fallAt) / 1000) : 0)}
         update={(pose) => {
           const now = performance.now()
           pose.charge = local.charge
@@ -309,10 +313,19 @@ function OtherHero({ hero, color }: { hero: HeroView; color: string }) {
   const last = useRef({ x: 0, y: 0, seq: hero.act?.seq ?? 0, at: -1e9, kind: 'basic' as 'basic' | 'charged', hp: hero.hp, hurtAt: -1e9 })
   const view = useRef(hero)
   view.current = hero
+  const fall = useRef(-1)
   return (
     <Actor
       at={() => sampleHero(hero.id)}
       facing={() => view.current.facing}
+      lift={() => {
+        const p = sampleHero(hero.id)
+        const s = useNet.getState().snapshot
+        const over = !!p && !!s && overGap(s.rooms, p.x, p.y, 0.15)
+        if (!over) fall.current = -1
+        else if (fall.current < 0) fall.current = performance.now()
+        return fall.current >= 0 ? fallDepth((performance.now() - fall.current) / 1000) : 0
+      }}
       update={(pose, dt) => {
         const h = view.current
         const p = sampleHero(h.id)
@@ -613,12 +626,17 @@ function AimLine({ enemy, dir, fan }: { enemy: number; dir: number; fan: boolean
   )
 }
 
-function TrapItem() {
+function TrapItem({ phase }: { phase?: SpikePhase }) {
   const pose = useMemo(() => makePose(), [])
+  const last = useRef(phase)
+  if (last.current !== phase) {
+    last.current = phase
+    pose.t = 0
+  }
   useFrame((_, dt) => {
     pose.t += dt
   })
-  return <SpikeTrap pose={pose} />
+  return <SpikeTrap pose={pose} phase={phase} />
 }
 
 // ---------- Master building ----------
@@ -665,22 +683,45 @@ function PlanGhost({ item }: { item: PlanItem }) {
   useFrame((_, dt) => {
     pose.t += dt
   })
-  const node =
-    item.kind === 'chest' ? <Chest opened={false} /> : item.kind === 'trap' ? <SpikeTrap pose={pose} /> : <EnemyModel kind={item.kind} pose={pose} />
-  return <group position={[item.cx + 0.5, 0, -(item.cy + 0.5)]}>{node}</group>
+  return (
+    <group position={[item.cx + 0.5, 0, -(item.cy + 0.5)]}>
+      <EnemyModel kind={item.kind} pose={pose} />
+    </group>
+  )
+}
+
+// What the room's layout will add, while the master is still editing it.
+function LayoutGhosts({ room }: { room: RoomView }) {
+  const pose = useMemo(() => makePose(), [])
+  return (
+    <>
+      {room.spikes &&
+        SPIKES[room.shape].map(([cx, cy]) => (
+          <group key={`s${cx},${cy}`} position={[cx + 0.5, 0, -(cy + 0.5)]}>
+            <SpikeTrap pose={pose} phase="up" />
+          </group>
+        ))}
+      {CHEST_SLOTS[room.shape].slice(0, room.chests).map(([cx, cy]) => (
+        <group key={`c${cx},${cy}`} position={[cx + 0.5, 0, -(cy + 0.5)]}>
+          <Chest opened={false} />
+        </group>
+      ))}
+    </>
+  )
 }
 
 function RoomEditor({ room }: { room: RoomView }) {
   const send = useNet((st) => st.send)
   const tool = useMaster((m) => m.tool)
+  const tab = useMaster((m) => m.tab)
   const plan = room.plan ?? []
   const editable = !room.entered && room.kind !== 'start'
   function onTap(e: ThreeEvent<PointerEvent>) {
     e.stopPropagation()
-    if (!editable) return
+    if (!editable || tab !== 'enemies') return
     const cx = Math.floor(e.point.x - room.gx * ROOM_W)
     const cy = Math.floor(-e.point.z - room.gy * ROOM_H)
-    if (!isPlaceableCell(cx, cy)) return
+    if (!isPlaceableCell(cx, cy) || !floorCell(room.shape, cx, cy)) return
     const occupied = plan.some((p) => p.cx === cx && p.cy === cy)
     if (tool === 'erase' || occupied) send({ type: 'remove', room: room.id, cx, cy })
     else send({ type: 'place', room: room.id, kind: tool, cx, cy })
@@ -691,13 +732,14 @@ function RoomEditor({ room }: { room: RoomView }) {
         <planeGeometry args={[ROOM_W, ROOM_H]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {editable && (
+      {editable && tab === 'enemies' && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[ROOM_W / 2, 0.035, -ROOM_H / 2]}>
           <planeGeometry args={[ROOM_W - 2, ROOM_H - 2]} />
           <meshBasicMaterial color="#6ee7b7" transparent opacity={0.1} depthWrite={false} />
         </mesh>
       )}
       {!room.ready && plan.map((item) => <PlanGhost key={`${item.cx},${item.cy}`} item={item} />)}
+      {!room.ready && <LayoutGhosts room={room} />}
     </group>
   )
 }
@@ -764,7 +806,7 @@ export default function World() {
         .filter((i) => roomIds.has(i.room))
         .map((i) => (
           <group key={i.id} position={[i.x, 0, -i.y]}>
-            {i.kind === 'chest' ? <Chest opened={i.opened} /> : <TrapItem />}
+            {i.kind === 'chest' ? <Chest opened={i.opened} /> : <TrapItem phase={i.phase} />}
           </group>
         ))}
       {s.enemies

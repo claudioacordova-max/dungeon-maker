@@ -4,7 +4,7 @@
 import { sfx } from '../audio/sfx'
 import { useNet } from '../net/connection'
 import { INTERP_DELAY, sampleEnemy, sampleHero, sampleOrb } from '../net/interp'
-import { angleDiff, moveHero } from '../shared/map'
+import { angleDiff, moveHero, overGap } from '../shared/map'
 import type { EnemyKind, HeroClass, ShotKind, Snapshot, StrikeView } from '../shared/protocol'
 import { CHARGE_TIME, ENEMY, HERO, HERO_RADIUS, HIT_INVULNERABLE, MANA } from '../shared/rules'
 import { attackInput, moveInput } from './input'
@@ -21,7 +21,10 @@ export const local = {
   aim: null as number | null, // direction shown while aiming
   mana: 0, // priestess and mage, predicted here like the server does
   noManaAt: -1e9, // performance.now() of the last attack refused for lack of mana
+  fallAt: -1, // performance.now() when this hero walked off the edge (until the server brings it back)
 }
+
+const FALL_MARGIN = 0.15 // same grace as the server (sim.ts)
 
 export const manaMax = (cls: HeroClass) => (cls === 'priest' || cls === 'mage' ? MANA[cls].max : 0)
 export function manaCost(cls: HeroClass, charged: boolean) {
@@ -67,6 +70,7 @@ export function onSnapshot(s: Snapshot, you: string) {
     local.epoch = me.epoch
     local.cls = me.cls
     local.mana = me.mana
+    local.fallAt = -1
     local.ready = true
   }
   // Mana is predicted here; adopt the server's value when they drift apart (e.g. a refused attack).
@@ -87,6 +91,7 @@ export function resetHero() {
   local.epoch = -1
   local.charge = 0
   local.aim = null
+  local.fallAt = -1
   strikes.clear()
   shots.length = 0
   feedback.enemyFlash.clear()
@@ -251,6 +256,13 @@ export function frame(dt: number) {
     return
   }
 
+  // Off the edge: no control while falling; the server counts the fall from the reported position.
+  if (local.fallAt >= 0) {
+    local.moving = false
+    local.charge = 0
+    holdStart = -1
+    return
+  }
   // Movement on this device, inside the map's walls and open doors.
   const v = moveInput()
   local.moving = v.x !== 0 || v.y !== 0
@@ -273,6 +285,13 @@ export function frame(dt: number) {
     holdStart = -1
     local.charge = 0
     local.aim = null
+  }
+
+  if (overGap(s.rooms, local.x, local.y, FALL_MARGIN)) {
+    local.fallAt = now
+    sfx.fall()
+    net.send({ type: 'pos', x: Math.round(local.x * 100) / 100, y: Math.round(local.y * 100) / 100, facing: local.facing, epoch: local.epoch })
+    return
   }
 
   // Position report, ~20 per second.

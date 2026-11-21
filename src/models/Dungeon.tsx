@@ -1,9 +1,13 @@
 import { useLayoutEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
-  BufferGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial,
-  Shape, TorusGeometry,
+  BufferGeometry, CircleGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial,
+  RingGeometry, Shape, TorusGeometry,
 } from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { GAPS, touchesGap, type Gap, type RoomShape } from '../shared/layouts'
+import type { SpikePhase } from '../shared/protocol'
+import { chasm, cutForLip, noise, remainingFloor } from './chasm'
 import { bake, barrel, Batch, box, cone, gem, toon, type Part, type V3 } from './kit'
 import type { Pose } from './types'
 
@@ -42,12 +46,6 @@ function capstone() {
 }
 const bevelBlock = capstone()
 
-// Coordinate noise keeps the same chips, stones and vines when a gate changes.
-function noise(x: number, y: number) {
-  const n = Math.imul(x + 73, 2246822519) ^ Math.imul(y + 37, 3266489917)
-  return (Math.imul(n ^ (n >>> 16), 1597334677) >>> 0) / 4294967296
-}
-
 function part(g: BufferGeometry, c: string, p: V3, s: V3, r?: V3): Part {
   return { g, c, p, s, r }
 }
@@ -70,17 +68,25 @@ pennant.setAttribute('position', new Float32BufferAttribute([
 pennant.setIndex([0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4, 4, 5, 7, 4, 7, 6])
 pennant.computeVertexNormals()
 
-function addFloor(parts: Part[], w: number, h: number) {
-  parts.push(part(box, '#938278', [w / 2, -.11, -h / 2], [w, .18, h]))
+function addFloor(parts: Part[], w: number, h: number, shape: RoomShape) {
+  const gaps: Gap[] = GAPS[shape]
+    .map(([l, b, r, t]): Gap => [l, b, Math.min(w, r), Math.min(h, t)])
+    .filter(([l, b, r, t]) => l < r && b < t)
+  const cuts = gaps.map(gap => cutForLip(gap, w, h))
+  for (const [l,b,r,t] of remainingFloor([0, 0, w, h], cuts)) {
+    parts.push(part(box, '#938278', [(l + r) / 2, -.11, -(b + t) / 2], [r - l, .18, t - b]))
+  }
+  gaps.forEach((gap, i) => parts.push({ g: chasm(gap, cuts[i], w, h), c: '#ffffff' }))
   for (let j = 0; j < Math.ceil(h); j++) {
     for (let i = 0; i < Math.ceil(w); i++) {
-      const dx = Math.min(1, w - i), dz = Math.min(1, h - j)
       const pick = noise(i, j)
-      const x = i + dx / 2, z = -(j + dz / 2)
-      parts.push(part(tile, flagstones[Math.floor(pick * flagstones.length)], [x, 0, z], [dx * .985, 1, dz * .985]))
-      if (pick < .08 && dx > .8 && dz > .8) {
-        parts.push(part(box, '#a99a89', [x + .32, .0006, z - .24], [.21, .001, .014], [0, -.55, 0]))
-        parts.push(part(box, '#a99a89', [x + .22, .0006, z - .27], [.09, .001, .014], [0, .38, 0]))
+      for (const [l,b,r,t] of remainingFloor([i, j, Math.min(i + 1, w), Math.min(j + 1, h)], cuts)) {
+        const dx = r - l, dz = t - b, x = (l + r) / 2, z = -(b + t) / 2
+        parts.push(part(tile, flagstones[Math.floor(pick * flagstones.length)], [x, 0, z], [dx * .985, 1, dz * .985]))
+        if (pick < .08 && dx > .8 && dz > .8) {
+          parts.push(part(box, '#a99a89', [x + .32, .0006, z - .24], [.21, .001, .014], [0, -.55, 0]))
+          parts.push(part(box, '#a99a89', [x + .22, .0006, z - .27], [.09, .001, .014], [0, .38, 0]))
+        }
       }
     }
   }
@@ -89,6 +95,7 @@ function addFloor(parts: Part[], w: number, h: number) {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const x = sx === 1 ? .31 : w - .31
     const z = sz === 1 ? -h + .31 : -.31
+    if (touchesGap(shape, x, -z, .85)) continue
     parts.push(part(box, '#a79178', [x + sx * .41, .0014, z], [.79, .001, .055]))
     parts.push(part(box, '#a79178', [x, .0014, z + sz * .41], [.055, .001, .79]))
     parts.push(part(box, '#99846f', [x, .0018, z], [.19, .001, .19], [0, Math.PI / 4, 0]))
@@ -220,12 +227,12 @@ function placeWall(parts: Part[], side: number, w: number, h: number) {
   }
 }
 
-function makeRoom(w: number, h: number, openings: number) {
-  const solids: Part[] = [], flames: Part[] = []
-  addFloor(solids, w, h)
+function makeFloor(w: number, h: number, shape: RoomShape) {
+  const solids: Part[] = []
+  addFloor(solids, w, h, shape)
   if (w >= 5 && h >= 5) {
     const bx = noise(w, h) > .5 ? .36 : w - .36, bz = -h + .34
-    solids.push(
+    if (!touchesGap(shape, bx, -bz, .29)) solids.push(
       part(barrel, '#9e643f', [bx, .25, bz], [.52, .50, .52]),
       part(barrel, '#c4834b', [bx, .24, bz], [.552, .27, .552]),
       part(barrel, '#564653', [bx, .12, bz], [.56, .055, .56]),
@@ -234,11 +241,30 @@ function makeRoom(w: number, h: number, openings: number) {
       part(box, '#ac744c', [bx, .515, bz], [.34, .009, .021], [0, .46, 0]),
     )
     const x = w - .33, z = -.60
-    solids.push(part(box, '#decda8', [x, .048, z], [.085, .066, .31], [0, .58, 0]))
-    for (const side of [-1, 1]) for (const end of [-1, 1]) {
-      solids.push(part(gem, '#f3e0b8', [x + .047 * side + .089 * end, .063, z + .131 * end], [.12,.10,.12]))
+    if (!touchesGap(shape, x, -z, .25)) {
+      solids.push(part(box, '#decda8', [x, .048, z], [.085, .066, .31], [0, .58, 0]))
+      for (const side of [-1, 1]) for (const end of [-1, 1]) {
+        solids.push(part(gem, '#f3e0b8', [x + .047 * side + .089 * end, .063, z + .131 * end], [.12,.10,.12]))
+      }
     }
   }
+  return bake(solids, 0).color
+}
+
+// These CPU-side floor bakes can be reused across door masks and shape edits.
+// Bound the cache since the showcase accepts room sizes other than the game's.
+const floors = new Map<string, BufferGeometry>()
+function cachedFloor(w: number, h: number, shape: RoomShape) {
+  const key = [w, h, shape].join('/')
+  const floor = floors.get(key) ?? makeFloor(w, h, shape)
+  floors.delete(key)
+  floors.set(key, floor)
+  if (floors.size > 8) floors.delete(floors.keys().next().value!)
+  return floor
+}
+
+function makeRoom(w: number, h: number, openings: number, shape: RoomShape) {
+  const solids: Part[] = [], flames: Part[] = []
   for (let side = 0; side < 4; side++) {
     const walls: Part[] = [], fire: Part[] = []
     addWall(side % 2 === 0 ? w : h, side, !!(openings & (1 << side)), walls, fire)
@@ -247,7 +273,8 @@ function makeRoom(w: number, h: number, openings: number) {
     solids.push(...walls)
     flames.push(...fire)
   }
-  return { shell: bake(solids, 0).color, flames: flames.length ? bake(flames, 0).color : null }
+  const shell = mergeGeometries([cachedFloor(w, h, shape), bake(solids, 0).color])
+  return { shell, flames: flames.length ? bake(flames, 0).color : null }
 }
 
 function gatePieces() {
@@ -287,16 +314,16 @@ const lockLight = bake([
 const emptyRoom = new BufferGeometry()
 const rooms = new Map<string, { shape: ReturnType<typeof makeRoom>; users: number }>()
 
-export function RoomShell({ w, h, doors }: { w: number; h: number; doors: Doors }) {
+export function RoomShell({ w, h, doors, shape = 'full' }: { w: number; h: number; doors: Doors; shape?: RoomShape }) {
   const shell = useRef<Mesh>(null), fire = useRef<Mesh>(null)
   const mask = compass.reduce((bits, key, i) => bits | (doors[key] === 'none' ? 0 : 1 << i), 0)
   // Rooms with identical masonry share their GPU buffers. A change from locked
   // to open only swaps a gate. The final owner releases both merged geometries.
   useLayoutEffect(() => {
-    const key = [w, h, mask].join('/')
+    const key = [w, h, shape, mask].join('/')
     let entry = rooms.get(key)
     if (!entry) {
-      entry = { shape: makeRoom(w, h, mask), users: 0 }
+      entry = { shape: makeRoom(w, h, mask, shape), users: 0 }
       rooms.set(key, entry)
     }
     entry.users++
@@ -309,7 +336,7 @@ export function RoomShell({ w, h, doors }: { w: number; h: number; doors: Doors 
       entry.shape.shell.dispose()
       entry.shape.flames?.dispose()
     }
-  }, [w, h, mask])
+  }, [w, h, mask, shape])
   return <group dispose={null}>
     <mesh ref={shell} geometry={emptyRoom} material={toon} />
     <mesh ref={fire} geometry={emptyRoom} material={amber} />
@@ -385,23 +412,64 @@ const spikes = bake(trapSockets.map(([x, z], i) =>
     [i === 0 ? .205 : .159, i === 0 ? .63 : .48, i === 0 ? .205 : .159]),
 ), 0)
 
-export function SpikeTrap({ pose }: { pose: Pose }) {
+// All five timed blades travel on one carriage. Their tips clear the sockets
+// together during the warning; their bases stay concealed inside the plate.
+const travel = .58, socketY = .156
+const risingSpikes = bake(trapSockets.map(([x,z], i) => {
+  const height = i === 0 ? travel : .54, width = i === 0 ? .205 : .159
+  return part(cone, i === 0 ? '#fff1cb' : '#d1e0da', [x, height / 2, z], [width, height, width])
+}), 0)
+const warningPlate = bake([
+  part(new RingGeometry(.38, .439, 8, 1, Math.PI / 8), '#ffac48', [0, .127, 0], [1,1,1], [-Math.PI / 2,0,0]),
+  part(new CircleGeometry(.386, 8, Math.PI / 8), '#ff4424', [0, .148, 0], [1,1,1], [-Math.PI / 2,0,0]),
+], 0).color
+
+export function SpikeTrap({ pose, phase }: { pose: Pose; phase?: SpikePhase }) {
   const head = useRef<Group>(null)
+  const warning = useRef<Mesh<BufferGeometry, MeshBasicMaterial>>(null)
+  const motion = useRef({ phase, lift: 0, fromLift: 0, heat: 0, fromHeat: 0 })
   useFrame(() => {
     if (!head.current) return
     const t = pose.t
+    if (phase) {
+      const m = motion.current
+      if (phase !== m.phase) {
+        m.phase = phase
+        m.fromLift = m.lift
+        m.fromHeat = m.heat
+      }
+      const u = Math.min(1, Math.max(0, t / (phase === 'down' ? .15 : .085)))
+      const ease = u * u * (3 - 2 * u)
+      const lift = phase === 'up' ? 1 : phase === 'warn' ? .21 : 0
+      const heat = phase === 'warn' ? .87 + .13 * Math.cos(t * Math.PI * 4) : 0
+      m.lift = m.fromLift + (lift - m.fromLift) * ease
+      m.heat = m.fromHeat + (heat - m.fromHeat) * ease
+      head.current.position.y = socketY - travel * (1 - m.lift)
+      head.current.scale.y = 1
+      head.current.visible = m.lift > .001
+      if (warning.current) {
+        warning.current.visible = m.heat > .001
+        warning.current.material.opacity = m.heat
+      }
+      return
+    }
     let stroke = 0
     if (pose.anim === 'trigger' && t >= 0 && t < .31) {
       if (t < .065) stroke = 1 - (1 - t / .065) ** 2
       else if (t < .125) stroke = 1
       else stroke = (1 - (t - .125) / .185) ** 2
     }
+    head.current.position.y = socketY
+    head.current.visible = true
     head.current.scale.y = .13 + .87 * stroke
   })
-  return <group dispose={null}>
+  return <group>
     <Batch shape={trapBase} />
-    <group ref={head} position-y={.156} scale-y={.13}>
-      <Batch shape={spikes} />
+    {phase && <mesh ref={warning} geometry={warningPlate} visible={false}>
+      <meshBasicMaterial vertexColors transparent depthWrite={false} toneMapped={false} />
+    </mesh>}
+    <group ref={head} position-y={socketY} scale-y={.13}>
+      <Batch shape={phase ? risingSpikes : spikes} />
     </group>
   </group>
 }

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useMaster } from '../game/master'
 import { me, useNet } from '../net/connection'
+import { layoutCost, SHAPE_NAME, SHAPES, type Layout } from '../shared/layouts'
 import { canAdd, difficulty } from '../shared/map'
-import type { Placeable, Snapshot } from '../shared/protocol'
-import { DIFFICULTY, MAX_ROOMS, TEAM_LIVES } from '../shared/rules'
+import type { Placeable, RoomView, Snapshot } from '../shared/protocol'
+import { DIFFICULTY, MAX_CHESTS, MAX_ROOMS, TEAM_LIVES } from '../shared/rules'
 import { AttackStick, MoveStick } from './Controls'
 import MiniMap from './MiniMap'
 import SoundToggle from './SoundToggle'
@@ -76,9 +77,94 @@ const TOOLS: { kind: Placeable; label: string }[] = [
   { kind: 'slime', label: 'Slime' },
   { kind: 'thrower', label: 'Lanzador' },
   { kind: 'ogre', label: 'Ogro' },
-  { kind: 'trap', label: 'Trampa' },
-  { kind: 'chest', label: 'Cofre' },
 ]
+
+const cost = (n: number) => (n > 0 ? `+${n}` : String(n))
+const layoutOf = (room: RoomView): Layout => ({ shape: room.shape, spikes: room.spikes, chests: room.chests })
+
+// "Sala" tab: floor shape, spike pack and chests; the whole layout is sent at once and checked by the server.
+function LayoutTab({ room, cap }: { room: RoomView; cap: number }) {
+  const send = useNet((st) => st.send)
+  const plan = room.plan ?? []
+  const layout = layoutOf(room)
+  const enemies = difficulty(plan, { shape: 'full', spikes: false, chests: 0 })
+  // A change is offered when it fits: enemies over a gap the new shape opens are dropped by the server.
+  const fits = (next: Layout) => enemies + layoutCost(next) <= cap || layoutCost(next) <= layoutCost(layout)
+  const set = (next: Layout) => send({ type: 'layout', room: room.id, ...next })
+  return (
+    <>
+      <div className="palette palette-4" role="group" aria-label="Forma del suelo">
+        {SHAPES.map((shape) => {
+          const next = { ...layout, shape }
+          return (
+            <button
+              key={shape}
+              type="button"
+              className={layout.shape === shape ? 'ui-button tool is-selected' : 'ui-button tool'}
+              aria-pressed={layout.shape === shape}
+              disabled={layout.shape !== shape && !fits(next)}
+              onClick={() => set(next)}
+            >
+              <ShapeIcon shape={shape} />
+              <span>{SHAPE_NAME[shape]}</span>
+              <small>{shape === 'full' ? '0' : cost(DIFFICULTY.brokenFloor)}</small>
+            </button>
+          )
+        })}
+      </div>
+      <div className="master-row layout-row">
+        <button
+          type="button"
+          className={layout.spikes ? 'ui-button small is-on' : 'ui-button small'}
+          aria-pressed={layout.spikes}
+          disabled={!layout.spikes && !fits({ ...layout, spikes: true })}
+          onClick={() => set({ ...layout, spikes: !layout.spikes })}
+        >
+          Pinchos {layout.spikes ? 'sí' : 'no'} <small>{cost(DIFFICULTY.spikes)}</small>
+        </button>
+        <div className="stepper" role="group" aria-label={`Cofres: ${layout.chests}`}>
+          <button
+            type="button"
+            className="ui-button small"
+            aria-label="Un cofre menos"
+            disabled={layout.chests === 0 || !fits({ ...layout, chests: layout.chests - 1 })}
+            onClick={() => set({ ...layout, chests: layout.chests - 1 })}
+          >
+            −
+          </button>
+          <span>
+            Cofres <b>{layout.chests}</b> <small>{cost(DIFFICULTY.chest)} c/u</small>
+          </span>
+          <button
+            type="button"
+            className="ui-button small"
+            aria-label="Un cofre más"
+            disabled={layout.chests >= MAX_CHESTS}
+            onClick={() => set({ ...layout, chests: layout.chests + 1 })}
+          >
+            +
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// Small top view of a floor shape for its button.
+function ShapeIcon({ shape }: { shape: Layout['shape'] }) {
+  const gaps: Record<Layout['shape'], string> = {
+    full: '',
+    banks: 'M0 0h5v10H0zM0 14h5v10H0zM15 0h5v10h-5zM15 14h5v10h-5z',
+    cross: 'M0 0h6v6H0zM14 0h6v6h-6zM0 18h6v6H0zM14 18h6v6h-6z',
+    bridge: 'M3.5 6h4v12h-4zM12.5 6h4v12h-4z',
+  }
+  return (
+    <svg className="shape-icon" viewBox="0 0 20 24" aria-hidden="true">
+      <rect width="20" height="24" rx="2" fill="#d8c3a5" />
+      {gaps[shape] && <path d={gaps[shape]} fill="#1a0f2e" />}
+    </svg>
+  )
+}
 
 function MasterPanel({ s }: { s: Snapshot }) {
   const send = useNet((st) => st.send)
@@ -89,6 +175,8 @@ function MasterPanel({ s }: { s: Snapshot }) {
   const setTool = useMaster((m) => m.setTool)
   const setSlot = useMaster((m) => m.setSlot)
   const toMap = useMaster((m) => m.toMap)
+  const tab = useMaster((m) => m.tab)
+  const setTab = useMaster((m) => m.setTab)
   // The ready button waits for the server's answer (a double tap must not undo it), and going back to editing
   // a ready room asks first.
   const [awaiting, setAwaiting] = useState<{ room: number; ready: boolean } | null>(null)
@@ -118,8 +206,8 @@ function MasterPanel({ s }: { s: Snapshot }) {
 
   if (mode === 'room' && room) {
     const plan = room.plan ?? []
-    const value = difficulty(plan)
     const cap = s.cap
+    const value = difficulty(plan, layoutOf(room))
     const locked = room.entered || room.kind === 'start'
     return (
       <div className="master-panel panel">
@@ -141,21 +229,33 @@ function MasterPanel({ s }: { s: Snapshot }) {
           <p className="master-note">Los héroes ya entraron: esta sala no se puede cambiar.</p>
         ) : (
           <>
-            <div className="palette" role="group" aria-label="Elementos">
+            <div className="master-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected={tab === 'room'} className={tab === 'room' ? 'tab is-active' : 'tab'} onClick={() => setTab('room')}>
+                Sala
+              </button>
+              <button type="button" role="tab" aria-selected={tab === 'enemies'} className={tab === 'enemies' ? 'tab is-active' : 'tab'} onClick={() => setTab('enemies')}>
+                Enemigos
+              </button>
+            </div>
+            {tab === 'room' ? (
+              <LayoutTab room={room} cap={cap} />
+            ) : (
+            <div className="palette" role="group" aria-label="Enemigos">
               {TOOLS.map((t) => (
                 <button
                   key={t.kind}
                   type="button"
                   className={tool === t.kind ? 'ui-button tool is-selected' : 'ui-button tool'}
                   aria-pressed={tool === t.kind}
-                  disabled={!canAdd(plan, t.kind, cap)}
+                  disabled={!canAdd(plan, layoutOf(room), t.kind, cap)}
                   onClick={() => setTool(t.kind)}
                 >
                   <span>{t.label}</span>
-                  <small>{DIFFICULTY[t.kind] > 0 ? `+${DIFFICULTY[t.kind]}` : DIFFICULTY[t.kind]}</small>
+                  <small>{cost(DIFFICULTY[t.kind])}</small>
                 </button>
               ))}
             </div>
+            )}
             <div className="master-row">
               {room.ready && confirmEdit ? (
                 <>
@@ -205,7 +305,9 @@ function MasterPanel({ s }: { s: Snapshot }) {
               )}
             </div>
             {room.kind === 'boss' && <p className="master-note">El jefe aparece cuando caen los enemigos de esta sala.</p>}
-            <p className="master-note">Toca una casilla para poner {TOOLS.find((t) => t.kind === tool)?.label.toLowerCase()}; tócala de nuevo para quitarlo.</p>
+            {tab === 'enemies' && (
+              <p className="master-note">Toca el suelo para poner {TOOLS.find((t) => t.kind === tool)?.label.toLowerCase()}; tócalo de nuevo para quitarlo.</p>
+            )}
           </>
         )}
       </div>

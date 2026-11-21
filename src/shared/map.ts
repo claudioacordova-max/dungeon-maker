@@ -1,4 +1,5 @@
 // Map geometry shared by the server and the devices: rooms on a grid, doors, walls and movement.
+import { inGap, layoutCost, type Layout, type RoomShape } from './layouts.ts'
 import type { Dir, DoorState, PlanItem, Placeable } from './protocol.ts'
 import * as R from './rules.ts'
 
@@ -58,12 +59,13 @@ export function isPlaceableCell(cx: number, cy: number): boolean {
   return Number.isInteger(cx) && Number.isInteger(cy) && cx >= 1 && cx <= R.ROOM_W - 2 && cy >= 1 && cy <= R.ROOM_H - 2
 }
 
-export function difficulty(plan: readonly PlanItem[]): number {
-  return plan.reduce((sum, p) => sum + R.DIFFICULTY[p.kind], 0)
+// Enemies plus the room's layout (broken floor, spikes, chests): all share the room's cap.
+export function difficulty(plan: readonly PlanItem[], layout: Layout): number {
+  return plan.reduce((sum, p) => sum + R.DIFFICULTY[p.kind], 0) + layoutCost(layout)
 }
 
-export function canAdd(plan: readonly PlanItem[], kind: Placeable, cap: number): boolean {
-  return difficulty(plan) + R.DIFFICULTY[kind] <= cap
+export function canAdd(plan: readonly PlanItem[], layout: Layout, kind: Placeable, cap: number): boolean {
+  return difficulty(plan, layout) + R.DIFFICULTY[kind] <= cap
 }
 
 // True when a circle of radius r at (x, y) is on walkable floor: inside a room's floor, or crossing a wall
@@ -115,4 +117,12 @@ export function angleDiff(a: number, b: number): number {
   while (d > Math.PI) d -= Math.PI * 2
   while (d < -Math.PI) d += Math.PI * 2
   return Math.abs(d)
+}
+
+// True when (x, y) is over a missing stretch of floor of its room, at least `margin` past the edge.
+export function overGap(rooms: readonly (MapRoom & { shape?: RoomShape })[], x: number, y: number, margin: number): boolean {
+  const room = roomAtPoint(rooms, x, y)
+  if (!room?.shape) return false
+  const o = roomOrigin(room)
+  return inGap(room.shape, x - o.x, y - o.y, margin)
 }

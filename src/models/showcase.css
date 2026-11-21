@@ -150,5 +150,11 @@
 .dm-playback { flex-direction: column; }
 .dm-playback-row { display: flex; gap: 8px; }
 .dm-rooms button { padding-inline: clamp(8px, 3vw, 18px); }
-.dm-rooms button[aria-pressed="true"] { background: #ffca79; color: #3e293c; }
+.dm-rooms button[aria-pressed="true"],
+.dm-shapes button[aria-pressed="true"],
+.dm-phases button[aria-pressed="true"] { background: #ffca79; color: #3e293c; }
+.dm-shapes button, .dm-phases button { min-width: 44px; text-transform: capitalize; }
+.dm-phases,
+.dm-gallery[data-focused="true"] .dm-shapes { display: none; }
+.dm-gallery[data-focused="true"] .dm-phases { display: flex; }
 .dm-gallery[data-focused="true"] .dm-rooms { display: none; }

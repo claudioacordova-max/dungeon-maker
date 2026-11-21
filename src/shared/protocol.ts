@@ -10,7 +10,9 @@
 export type Role = 'hero' | 'master'
 export type HeroClass = 'melee' | 'ranged' | 'priest' | 'mage'
 export const HERO_CLASSES: readonly HeroClass[] = ['melee', 'ranged', 'priest', 'mage']
-export type Placeable = 'slime' | 'thrower' | 'ogre' | 'trap' | 'chest'
+import type { RoomShape } from './layouts.ts'
+
+export type Placeable = 'slime' | 'thrower' | 'ogre' // enemies the master places one by one
 export type EnemyKind = 'slime' | 'thrower' | 'ogre' | 'king'
 export type RoomKind = 'start' | 'normal' | 'boss'
 export type Dir = 'n' | 'e' | 's' | 'w'
@@ -29,6 +31,9 @@ export type RoomView = {
   ready: boolean
   entered: boolean
   enemies: number // alive
+  shape: RoomShape // floor shape (missing stretches: walking off the edge is a fall)
+  spikes: boolean
+  chests: number
   plan?: PlanItem[] // master only, while the room can still be edited
 }
 
@@ -67,7 +72,8 @@ export type OrbView = { id: number; x: number; y: number }
 // kind: arrow (archer), light (priestess orb), spark (mage), poly (polymorph)
 export type ShotKind = 'arrow' | 'light' | 'spark' | 'poly'
 export type ShotView = { id: number; owner: string; x: number; y: number; dir: number; crit: boolean; kind: ShotKind }
-export type ItemView = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number; opened: boolean }
+export type SpikePhase = 'down' | 'warn' | 'up'
+export type ItemView = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number; opened: boolean; phase?: SpikePhase }
 
 export type Snapshot = {
   lives: number
@@ -115,6 +121,7 @@ export type ClientMessage =
   | { type: 'demolish'; room: number }
   | { type: 'place'; room: number; kind: Placeable; cx: number; cy: number }
   | { type: 'remove'; room: number; cx: number; cy: number }
+  | { type: 'layout'; room: number; shape: RoomShape; spikes: boolean; chests: number }
   | { type: 'ready'; room: number; ready: boolean }
   | { type: 'lobby' }
   | { type: 'leave' } // leaving on purpose (no grace period)

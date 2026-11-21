@@ -5,6 +5,7 @@ import {
   angleDiff,
   buildableSlots,
   canAdd,
+  difficulty,
   clampToRoom,
   isPlaceableCell,
   moveHero,
@@ -15,7 +16,8 @@ import {
   walkable,
   type MapRoom,
 } from './map.ts'
-import type { EnemyKind, HeroAct, HeroClass, PlanItem, Placeable, RoomKind, ShotKind, Snapshot } from './protocol.ts'
+import { CHEST_SLOTS, EMPTY_LAYOUT, floorCell, inGap, SHAPES, SPIKES, touchesGap, type Layout } from './layouts.ts'
+import type { EnemyKind, HeroAct, HeroClass, PlanItem, Placeable, RoomKind, ShotKind, Snapshot, SpikePhase } from './protocol.ts'
 import * as R from './rules.ts'
 
 export { moveHero }
@@ -66,11 +68,11 @@ type Enemy = {
   polyImmuneUntil: number // boss: game time before which it cannot be polymorphed again
 }
 
-type Room = MapRoom & { kind: RoomKind; entered: boolean; plan: PlanItem[]; bossSpawned: boolean }
+type Room = MapRoom & { kind: RoomKind; entered: boolean; plan: PlanItem[]; layout: Layout; bossSpawned: boolean }
 type Strike = { id: number; owner: number; x: number; y: number; r: number; hits: number; landsAt: number; claimed: Set<string> }
 type Orb = { id: number; room: number; x: number; y: number; vx: number; vy: number; left: number; hitBy: Set<string> }
 type Shot = { id: number; owner: string; seq: number; x: number; y: number; dir: number; speed: number; left: number; crit: boolean; kind: ShotKind }
-type Item = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number; openedAt: number | null }
+type Item = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number; openedAt: number | null; group: number }
 type EnemyFrame = { time: number; pos: Map<number, { x: number; y: number }> }
 
 export type Game = {
@@ -123,7 +125,7 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
     nextId: 1,
     cap: R.roomCap(heroes.length),
   }
-  const start: Room = { id: game.nextId++, gx: 0, gy: 0, kind: 'start', ready: true, entered: true, enemies: 0, plan: [], bossSpawned: false }
+  const start: Room = { id: game.nextId++, gx: 0, gy: 0, kind: 'start', ready: true, entered: true, enemies: 0, plan: [], layout: EMPTY_LAYOUT, bossSpawned: false }
   start.plan = [
     { kind: 'slime' as const, cx: 3, cy: 9 },
     { kind: 'slime' as const, cx: 7, cy: 10 },
@@ -186,11 +188,15 @@ function spawnRoom(game: Game, room: Room) {
   game.enemies = game.enemies.filter((e) => e.room !== room.id)
   game.items = game.items.filter((i) => i.room !== room.id)
   const o = roomOrigin(room)
-  for (const p of room.plan) {
-    const x = o.x + p.cx + 0.5
-    const y = o.y + p.cy + 0.5
-    if (p.kind === 'trap' || p.kind === 'chest') game.items.push({ id: game.nextId++, room: room.id, kind: p.kind, x, y, openedAt: null })
-    else spawnEnemy(game, room, p.kind, x, y)
+  for (const p of room.plan) spawnEnemy(game, room, p.kind, o.x + p.cx + 0.5, o.y + p.cy + 0.5)
+  const { shape, spikes, chests } = room.layout
+  if (spikes) {
+    SPIKES[shape].forEach(([cx, cy], i) =>
+      game.items.push({ id: game.nextId++, room: room.id, kind: 'trap', x: o.x + cx + 0.5, y: o.y + cy + 0.5, openedAt: null, group: i % 2 }),
+    )
+  }
+  for (const [cx, cy] of CHEST_SLOTS[shape].slice(0, chests)) {
+    game.items.push({ id: game.nextId++, room: room.id, kind: 'chest', x: o.x + cx + 0.5, y: o.y + cy + 0.5, openedAt: null, group: 0 })
   }
   room.bossSpawned = false
   // Boss room in phases: the boss appears once the enemies the master placed there are defeated.
@@ -224,7 +230,7 @@ export function build(game: Game, gx: number, gy: number, kind: 'normal' | 'boss
   if (game.rooms.some((r) => r.kind === 'boss')) return false // the boss room is always the last one
   if (kind === 'normal' && normalRooms(game) >= R.MAX_ROOMS) return false
   if (kind === 'boss' && normalRooms(game) < R.MAX_ROOMS) return false
-  game.rooms.push({ id: game.nextId++, gx, gy, kind, ready: false, entered: false, enemies: 0, plan: [], bossSpawned: false })
+  game.rooms.push({ id: game.nextId++, gx, gy, kind, ready: false, entered: false, enemies: 0, plan: [], layout: EMPTY_LAYOUT, bossSpawned: false })
   return true
 }
 
@@ -259,10 +265,11 @@ function editable(game: Game, roomId: number): Room | null {
 
 export function place(game: Game, roomId: number, kind: Placeable, cx: number, cy: number): boolean {
   const room = editable(game, roomId)
-  if (!room || !(kind in R.DIFFICULTY) || !isPlaceableCell(cx, cy)) return false
+  if (!room || !(['slime', 'thrower', 'ogre'] as string[]).includes(kind) || !isPlaceableCell(cx, cy)) return false
+  if (!floorCell(room.layout.shape, cx, cy)) return false
   if (room.plan.some((p) => p.cx === cx && p.cy === cy)) return false
   if (room.kind === 'boss' && Math.abs(cx + 0.5 - R.ROOM_W / 2) < 2 && Math.abs(cy + 0.5 - (R.ROOM_H / 2 + 2)) < 2) return false
-  if (!canAdd(room.plan, kind, game.cap)) return false
+  if (!canAdd(room.plan, room.layout, kind, game.cap)) return false
   room.plan.push({ kind, cx, cy })
   if (room.ready) spawnRoom(game, room)
   return true
@@ -274,11 +281,50 @@ export function removeItem(game: Game, roomId: number, cx: number, cy: number): 
   const index = room.plan.findIndex((p) => p.cx === cx && p.cy === cy)
   if (index < 0) return false
   const next = room.plan.filter((_, i) => i !== index)
-  // Removing a chest may push the room over the cap: not allowed.
-  if (next.reduce((s, p) => s + R.DIFFICULTY[p.kind], 0) > game.cap) return false
   room.plan = next
   if (room.ready) spawnRoom(game, room)
   return true
+}
+
+// The "Sala" tab: floor shape, spike pack and number of chests. Enemies left over a missing stretch are removed;
+// the total (enemies + layout) must stay within the cap.
+export function setLayout(game: Game, roomId: number, shape: unknown, spikes: unknown, chests: unknown): boolean {
+  const room = editable(game, roomId)
+  if (!room || !SHAPES.includes(shape as Layout['shape']) || typeof spikes !== 'boolean') return false
+  if (!Number.isInteger(chests) || (chests as number) < 0 || (chests as number) > R.MAX_CHESTS) return false
+  const layout: Layout = { shape: shape as Layout['shape'], spikes, chests: chests as number }
+  const plan = room.plan.filter((p) => floorCell(layout.shape, p.cx, p.cy))
+  if (difficulty(plan, layout) > game.cap) return false
+  room.layout = layout
+  room.plan = plan
+  if (room.ready) spawnRoom(game, room)
+  return true
+}
+
+export function spikePhase(time: number, group: number): SpikePhase {
+  const c = R.SPIKE_CYCLE
+  const period = c.down + c.warn + c.up
+  const t = (((time + group * (period / 2)) % period) + period) % period
+  return t < c.down ? 'down' : t < c.down + c.warn ? 'warn' : 'up'
+}
+
+function roomOf(game: Game, id: number) {
+  return game.rooms.find((r) => r.id === id)
+}
+
+// Moves an enemy inside its room, never over a missing stretch of floor (sliding along the edge).
+function moveEnemy(game: Game, enemy: Enemy, x: number, y: number) {
+  const room = roomOf(game, enemy.room)
+  if (!room) return
+  const r = enemyRadius(enemy.kind)
+  const o = roomOrigin(room)
+  const ok = (px: number, py: number) => !touchesGap(room.layout.shape, px - o.x, py - o.y, r * 0.8)
+  const c = clampToRoom(room, x, y, r)
+  if (ok(c.x, c.y)) {
+    enemy.x = c.x
+    enemy.y = c.y
+  } else if (ok(c.x, enemy.y)) enemy.x = c.x
+  else if (ok(enemy.x, c.y)) enemy.y = c.y
 }
 
 export function setReady(game: Game, roomId: number, ready: boolean): boolean {
@@ -333,11 +379,7 @@ function hurtEnemy(game: Game, hero: Hero, enemy: Enemy, damage: number) {
   enemy.stun = R.ENEMY_HIT_STUN
   if (enemy.kind !== 'king' && enemy.kind !== 'ogre') {
     const d = dist(enemy.x, enemy.y, hero.x, hero.y) || 1
-    const room = game.rooms.find((r) => r.id === enemy.room)
-    const pushed = { x: enemy.x + ((enemy.x - hero.x) / d) * R.ENEMY_KNOCKBACK, y: enemy.y + ((enemy.y - hero.y) / d) * R.ENEMY_KNOCKBACK }
-    const c = room ? clampToRoom(room, pushed.x, pushed.y, enemyRadius(enemy.kind)) : pushed
-    enemy.x = c.x
-    enemy.y = c.y
+    moveEnemy(game, enemy, enemy.x + ((enemy.x - hero.x) / d) * R.ENEMY_KNOCKBACK, enemy.y + ((enemy.y - hero.y) / d) * R.ENEMY_KNOCKBACK)
   }
 }
 
@@ -479,18 +521,24 @@ function damageHero(game: Game, hero: Hero, hits = 1) {
   if (hero.dead || hero.invulnerable > 0 || game.result !== 'playing') return false
   hero.hp -= hits
   hero.invulnerable = R.HIT_INVULNERABLE
-  if (hero.hp <= 0) {
-    hero.hp = 0
-    hero.dead = true
-    hero.respawnAt = game.time + R.RESPAWN_SECONDS
-    game.lives -= 1
-    if (game.lives <= 0) {
-      game.lives = 0
-      game.result = 'master-won'
-    }
-  }
+  if (hero.hp <= 0) downHero(game, hero)
   return true
 }
+
+// The hero falls (hit bar empty, or off the edge of the floor): the team loses a life; back after a moment.
+function downHero(game: Game, hero: Hero) {
+  hero.hp = 0
+  hero.dead = true
+  hero.respawnAt = game.time + R.RESPAWN_SECONDS
+  game.lives -= 1
+  if (game.lives <= 0) {
+    game.lives = 0
+    game.result = 'master-won'
+  }
+}
+
+// How far past the edge a hero's center must be to fall (a little grace when brushing it).
+export const FALL_MARGIN = 0.15
 
 export function reportStruck(game: Game, heroId: string, strikeId: number): boolean {
   const hero = heroOf(game, heroId)
@@ -604,9 +652,7 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
     enemy.facing = away
     enemy.state = 'move'
     const flee = R.POLYMORPH.fleeSpeed * dt
-    const p = clampToRoom(room, enemy.x + Math.cos(away) * flee, enemy.y + Math.sin(away) * flee, enemyRadius(enemy.kind))
-    enemy.x = p.x
-    enemy.y = p.y
+    moveEnemy(game, enemy, enemy.x + Math.cos(away) * flee, enemy.y + Math.sin(away) * flee)
     return
   }
 
@@ -659,9 +705,7 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
       return
     }
     enemy.state = 'move'
-    const p = clampToRoom(room, enemy.x + Math.cos(toward) * move * spec.speed * dt, enemy.y + Math.sin(toward) * move * spec.speed * dt, spec.radius)
-    enemy.x = p.x
-    enemy.y = p.y
+    moveEnemy(game, enemy, enemy.x + Math.cos(toward) * move * spec.speed * dt, enemy.y + Math.sin(toward) * move * spec.speed * dt)
     return
   }
 
@@ -693,6 +737,12 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
     if (enemy.cooldown <= 0) {
       // Jump onto the target: a red zone where it will land.
       const to = clampToRoom(room, target.x, target.y, spec.radius)
+      const o = roomOrigin(room)
+      if (touchesGap(room.layout.shape, to.x - o.x, to.y - o.y, spec.radius * 0.8)) {
+        // Never lands over the abyss: tries again a moment later.
+        enemy.cooldown = 0.6
+        return
+      }
       const id = game.nextId++
       game.strikes.push({ id, owner: enemy.id, x: to.x, y: to.y, r: spec.jumpRadius, hits: 1, landsAt: game.time + R.ENEMY_TELEGRAPH, claimed: new Set() })
       enemy.state = 'jump'
@@ -719,9 +769,7 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
     return
   }
   enemy.state = 'move'
-  const p = clampToRoom(room, enemy.x + Math.cos(toward) * spec.speed * dt, enemy.y + Math.sin(toward) * spec.speed * dt, spec.radius)
-  enemy.x = p.x
-  enemy.y = p.y
+  moveEnemy(game, enemy, enemy.x + Math.cos(toward) * spec.speed * dt, enemy.y + Math.sin(toward) * spec.speed * dt)
 }
 
 export function step(game: Game, dt: number) {
@@ -773,11 +821,19 @@ export function step(game: Game, dt: number) {
   game.history.push({ time: game.time, pos: new Map(game.enemies.map((e) => [e.id, { x: e.x, y: e.y }])) })
   while (game.history.length > 0 && game.history[0].time < game.time - R.MAX_VIEW_DELAY - 0.2) game.history.shift()
 
-  // Traps, on the positions the devices reported. Chests open when a hero hits them (openChest).
+  // Falls and spikes, on the positions the devices reported. Chests open when a hero hits them (openChest).
   for (const hero of alive) {
+    const room = roomAtPoint(game.rooms, hero.x, hero.y)
+    if (room) {
+      const o = roomOrigin(room)
+      if (inGap(room.layout.shape, hero.x - o.x, hero.y - o.y, FALL_MARGIN)) {
+        downHero(game, hero)
+        continue
+      }
+    }
     for (const item of game.items) {
-      if (dist(item.x, item.y, hero.x, hero.y) > 0.6) continue
-      if (item.kind === 'trap') damageHero(game, hero)
+      if (item.kind !== 'trap' || dist(item.x, item.y, hero.x, hero.y) > 0.6) continue
+      if (spikePhase(game.time, item.group) === 'up') damageHero(game, hero)
     }
   }
   // Opened chests stay a moment (open lid) and then vanish.
@@ -799,6 +855,9 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       ready: room.ready,
       entered: room.entered,
       enemies: room.enemies,
+      shape: room.layout.shape,
+      spikes: room.layout.spikes,
+      chests: room.layout.chests,
       plan: forMaster && room.kind !== 'start' ? room.plan.map((p) => ({ ...p })) : undefined,
     })),
     heroes: game.heroes.map((h) => ({
@@ -837,7 +896,15 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       .map((e) => ({ enemy: e.id, dir: r2(e.aim), remaining: r2(e.stateTime) })),
     orbs: game.orbs.map((o) => ({ id: o.id, x: r2(o.x), y: r2(o.y) })),
     shots: game.shots.map((s) => ({ id: s.id, owner: s.owner, x: r2(s.x), y: r2(s.y), dir: r2(s.dir), crit: s.crit, kind: s.kind })),
-    items: game.items.map((i) => ({ id: i.id, room: i.room, kind: i.kind, x: i.x, y: i.y, opened: i.openedAt !== null })),
+    items: game.items.map((i) => ({
+      id: i.id,
+      room: i.room,
+      kind: i.kind,
+      x: i.x,
+      y: i.y,
+      opened: i.openedAt !== null,
+      phase: i.kind === 'trap' ? spikePhase(game.time, i.group) : undefined,
+    })),
   }
 }
 

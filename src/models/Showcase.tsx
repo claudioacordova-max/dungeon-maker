@@ -1,6 +1,9 @@
 import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Group, MathUtils, PerspectiveCamera, Vector3 } from 'three'
+import { SHAPES, type RoomShape } from '../shared/layouts'
+import type { SpikePhase } from '../shared/protocol'
+import { ROOM_H, ROOM_W } from '../shared/rules'
 import { MeleeHero, RangedHero } from './Heroes'
 import { PriestHero, MageHero } from './Spellcasters'
 import { Ogre, Chicken } from './Creatures'
@@ -17,7 +20,7 @@ type Name = 'Warrior' | 'Ranger' | 'Priestess' | 'Mage' | 'Ogre' | 'Chicken' | '
 type Exhibit = { name: Name; x: number; z: number; labelOffset: number; anims?: Anim[]; width?: number; height?: number }
 const heroClips: Anim[] = ['idle', 'run', 'attack', 'charge', 'special', 'hurt', 'die']
 const smallClips: Anim[] = ['idle','run','hurt','die']
-const pages = ['Heroes','Dungeon','Combat','Magic'] as const
+const pages = ['Heroes','Dungeon','Floors','Combat','Magic'] as const
 type Page = typeof pages[number]
 const rooms: Record<Page, Exhibit[]> = {
   Heroes: [
@@ -35,6 +38,7 @@ const rooms: Record<Page, Exhibit[]> = {
     { name: 'Chest', x: .27, z: .18, labelOffset: .53 },
     { name: 'Spikes', x: .73, z: .18, labelOffset: .50, anims: ['idle','trigger'] },
   ],
+  Floors: [{ name: 'Spikes', x: .5, z: .5, labelOffset: .65, width: 2.1, height: .30 }],
   Combat: [
     { name: 'Bolts', x: .27, z: .74, labelOffset: .48 }, { name: 'Orb', x: .73, z: .74, labelOffset: .48 },
     { name: 'Slash', x: .27, z: .30, labelOffset: .55 }, { name: 'Spin', x: .73, z: .30, labelOffset: .55 },
@@ -108,22 +112,25 @@ function FrameScene({ play, labels, w, h, exhibits }: { play: Playback; labels: 
   return null
 }
 
-function Display({ entry, i, play, w, h, labels }: { entry: Exhibit; i: number; play: Playback; w: number; h: number; labels: LabelRefs }) {
+function Display({ entry, i, play, w, h, labels, phase }: {
+  entry: Exhibit; i: number; play: Playback; w: number; h: number; labels: LabelRefs; phase?: SpikePhase
+}) {
   const { name, x, z, anims } = entry
   const pose = useMemo(makePose, [])
   const exhibit = useRef<Group>(null)
   const motion = useRef<Group>(null)
   const shut = useRef<Group>(null), open = useRef<Group>(null)
   const lastLabel = useRef('')
-  useFrame(() => {
+  useLayoutEffect(() => { pose.t = 0 }, [pose, phase])
+  useFrame((_, dt) => {
     exhibit.current!.visible = play.focus < 0 || play.focus === i
     const step = Math.floor(play.t / interval), t = play.t % interval
     const anim = anims?.[step % anims.length] ?? 'idle'
     pose.anim = anim
-    pose.t = t
+    pose.t = phase ? pose.t + Math.min(dt, .1) : t
     pose.charge = Math.min(1, t / .85)
     pose.flash = anim === 'hurt' ? Math.max(0, 1 - t * 4.6) : 0
-    let label: string = anims ? anim : ''
+    let label: string = phase ?? (anims ? anim : '')
     if (name === 'Chest') {
       const opened = step % 2 === 1
       shut.current!.visible = !opened
@@ -143,13 +150,13 @@ function Display({ entry, i, play, w, h, labels }: { entry: Exhibit; i: number; 
   return <group ref={exhibit} name={name} position={[x * w, 0, -z * h]}
     onClick={e => { e.stopPropagation(); labels.current[i]?.click() }}>
     <group ref={motion}>
-      <Model name={name} pose={pose} play={play} shut={shut} open={open} />
+      <Model name={name} pose={pose} play={play} shut={shut} open={open} phase={phase} />
     </group>
   </group>
 }
 
-function Model({ name, pose, play, shut, open }: {
-  name: Name; pose: Pose; play: Playback; shut: RefObject<Group | null>; open: RefObject<Group | null>
+function Model({ name, pose, play, shut, open, phase }: {
+  name: Name; pose: Pose; play: Playback; shut: RefObject<Group | null>; open: RefObject<Group | null>; phase?: SpikePhase
 }) {
   switch (name) {
     case 'Warrior': return <group rotation-y={2.72}><MeleeHero pose={pose} tint="#ff6b59" /></group>
@@ -170,32 +177,40 @@ function Model({ name, pose, play, shut, open }: {
       <group position-x={.14}><HeroBolt crit /></group>
     </group>
     case 'Orb': return <EnemyOrb />
-    case 'Spikes': return <SpikeTrap pose={pose} />
+    case 'Spikes': return <SpikeTrap pose={pose} phase={phase} />
     case 'Slash': case 'Spin': return <PreviewStroke time={play} spin={name === 'Spin'} />
     default: return <PreviewMagic name={name} clock={play} />
   }
 }
 
-function Diorama({ play, labels, page }: { play: Playback; labels: LabelRefs; page: Page }) {
+function Diorama({ play, labels, page, shape, phase }: {
+  play: Playback; labels: LabelRefs; page: Page; shape: RoomShape; phase: SpikePhase
+}) {
   const size = useThree(s => s.size)
   const wide = size.width > size.height
-  const w = page === 'Dungeon' ? 6 : 4, h = wide ? 5 : page === 'Dungeon' ? 8 : 6
+  const floors = page === 'Floors'
+  const w = floors ? ROOM_W : page === 'Dungeon' ? 6 : 4
+  const h = floors ? ROOM_H : wide ? 5 : page === 'Dungeon' ? 8 : 6
   const exhibits = rooms[page]
   return <>
     <FrameScene play={play} labels={labels} w={w} h={h} exhibits={exhibits} />
     <ambientLight color="#e8e2ff" intensity={1.08} />
     <directionalLight position={[-5, 8, 4]} color="#fff0d2" intensity={2.55} />
-    <group position={[w / 2 + .13, -.59, -h / 2 + .19]} scale={[w * .82, 1, h * .92]}>
-      <BlobShadow radius={1} />
-    </group>
-    <mesh geometry={plinth} material={toon} position={[w / 2, -.028, -h / 2]} scale={[w + .85, 1, h + .85]} dispose={null} />
-    <RoomShell w={w} h={h} doors={doors} />
-    {exhibits.map((e, i) => <Display key={e.name} entry={e} i={i} w={w} h={h} play={play} labels={labels} />)}
+    {!floors && <>
+      <group position={[w / 2 + .13, -.59, -h / 2 + .19]} scale={[w * .82, 1, h * .92]}>
+        <BlobShadow radius={1} />
+      </group>
+      <mesh geometry={plinth} material={toon} position={[w / 2, -.028, -h / 2]} scale={[w + .85, 1, h + .85]} dispose={null} />
+    </>}
+    <RoomShell w={w} h={h} doors={doors} shape={floors ? shape : 'full'} />
+    {exhibits.map((e, i) => <Display key={e.name} entry={e} i={i} w={w} h={h} play={play} labels={labels} phase={floors ? phase : undefined} />)}
   </>
 }
 
 export default function Showcase() {
   const [page, setPage] = useState<Page>('Heroes')
+  const [shape, setShape] = useState<RoomShape>('banks')
+  const [phase, setPhase] = useState<SpikePhase>('down')
   const exhibits = rooms[page]
   const play = useMemo<Playback>(() => ({ t: 0, paused: false, focus: -1 }), [])
   const labels = useRef<(HTMLButtonElement | null)[]>([])
@@ -208,7 +223,7 @@ export default function Showcase() {
   }
   return <main ref={gallery} className="dm-gallery" aria-label="Dungeon Maker model showcase">
     <Canvas dpr={[1, 2]} camera={{ fov: 30, near: .1, far: 100 }} gl={{ antialias: true, alpha: true }}>
-      <Diorama play={play} labels={labels} page={page} />
+      <Diorama play={play} labels={labels} page={page} shape={shape} phase={phase} />
     </Canvas>
     <header className="dm-gallery-title">
       <div className="dm-crest" aria-hidden="true"><i /></div>
@@ -231,8 +246,19 @@ export default function Showcase() {
         }}>{room}</button>)}
       </div>
       <div className="dm-playback-row">
-        <button type="button" className="dm-back" hidden ref={overview} onClick={() => focus(-1)}>All models</button>
-        <div className="dm-transport">
+        <button type="button" className="dm-back" hidden ref={overview} onClick={() => focus(-1)}>
+          {page === 'Floors' ? 'Room view' : 'All models'}
+        </button>
+        {page === 'Floors' && <>
+          <div className="dm-transport dm-shapes" role="group" aria-label="Floor shape">
+            {SHAPES.map(s => <button type="button" key={s} aria-pressed={shape === s} onClick={() => setShape(s)}>{s}</button>)}
+          </div>
+          <div className="dm-transport dm-phases" role="group" aria-label="Spike phase">
+            {(['down', 'warn', 'up'] as const).map(p =>
+              <button type="button" key={p} aria-pressed={phase === p} onClick={() => setPhase(p)}>{p}</button>)}
+          </div>
+        </>}
+        <div className="dm-transport" hidden={page === 'Floors'}>
           <button type="button" aria-pressed="false" onClick={e => {
             play.paused = !play.paused
             e.currentTarget.setAttribute('aria-pressed', String(play.paused))
