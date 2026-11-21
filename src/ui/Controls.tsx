@@ -111,7 +111,7 @@ function ManaBar({ cls }: { cls: HeroClass }) {
 // Special ability of the priestess (prayer) and the mage (polymorph): a smaller stick left of the attack stick.
 const SPECIAL_KNOB: Partial<Record<HeroClass, string>> = {
   priest: 'M12 4v16M4 12h16M7 7l10 10M17 7 7 17',
-  mage: 'M8 6c-2 2-2 5 0 7l4 4 4-4c2-2 2-5 0-7-1.5-1.5-3-1-4 0-1-1-2.5-1.5-4 0z',
+  mage: 'M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z',
 }
 
 export function SpecialStick({ cls }: { cls: HeroClass }) {
