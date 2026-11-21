@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { me, useNet } from '../net/connection'
 import type { HeroClass } from '../shared/protocol'
 import { MAX_HEROES } from '../shared/rules'
-import { CrownIcon, EnterIcon, ScanIcon, ShareIcon, UserIcon } from './icons'
+import { EnterIcon, ScanIcon, ShareIcon, UserIcon } from './icons'
 
 // Menu art generated for the game (public/ui/), styled after the designer's references.
 export const art = (file: string) => `/ui/${file}`
@@ -203,13 +203,7 @@ export function LobbyScreen() {
               {p.away && <span className="away-tag">Reconectando…</span>}
               {p.id === state.host && <span className="host-tag">Anfitrión</span>}
               <span className="lobby-role">
-                {p.role === 'master' ? (
-                  <>
-                    <CrownIcon /> Máster
-                  </>
-                ) : (
-                  CLASS_NAME[p.cls]
-                )}
+                {p.role === 'master' ? 'Maestro' : CLASS_NAME[p.cls]}
               </span>
             </li>
           ))}
@@ -227,7 +221,6 @@ export function LobbyScreen() {
                 disabled={taken}
                 onClick={() => choose(pick.id)}
               >
-                {isSel && <CrownIcon />}
                 <span className="pick-art" style={{ backgroundImage: `url(${art(pick.image)})` }} />
                 <span className="pick-text">
                   <b>{pick.title}</b>
@@ -250,7 +243,7 @@ export function LobbyScreen() {
             <span className="screen-hint">El anfitrión empieza.</span>
           )}
         </div>
-        {isHost && !canStart && <Tagline>Hace falta un máster y al menos un héroe.</Tagline>}
+        {isHost && !canStart && <Tagline>Hace falta un maestro y al menos un héroe.</Tagline>}
         <button type="button" className="ui-button ui-button-light" onClick={state.leave}>
           Salir
         </button>
@@ -268,7 +261,7 @@ export function EndScreen() {
     <section className="screen end-screen" aria-label="Fin de la partida">
       <StonePanel torches={false}>
         <img className="end-art" src={art(heroesWon ? 'end-victory.webp' : 'end-defeat.webp')} alt="" />
-        <h2 className={heroesWon ? 'result is-win' : 'result is-loss'}>{heroesWon ? '¡Victoria de los héroes!' : '¡Gana el máster!'}</h2>
+        <h2 className={heroesWon ? 'result is-win' : 'result is-loss'}>{heroesWon ? '¡Victoria de los héroes!' : '¡Gana el maestro de la mazmorra!'}</h2>
         <button type="button" className="ui-button ui-button-primary big" onClick={() => send({ type: 'lobby' })}>
           Volver a la sala
         </button>

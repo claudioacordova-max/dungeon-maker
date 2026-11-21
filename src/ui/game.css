@@ -244,12 +244,14 @@
 
 .lobby-name {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .lobby-role {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 0.3em;
@@ -487,7 +489,8 @@
   position: absolute;
   left: 0;
   bottom: 0;
-  width: calc(200 * var(--ui-px));
+  /* Left thumb only: never reaches the attack cluster on narrow phones. */
+  width: min(calc(200 * var(--ui-px)), 46%);
   height: 42%;
   pointer-events: auto;
   touch-action: none;
@@ -577,8 +580,10 @@
 
 .special-stick {
   position: absolute;
-  right: calc(var(--edge) + 138 * var(--ui-px));
-  bottom: calc(var(--edge) + 92 * var(--ui-px));
+  /* Up and to the left of the attack stick (its center 70 left, 112 up of the attack's center): both under the
+     right thumb on every phone. */
+  right: calc(var(--edge) + 93 * var(--ui-px));
+  bottom: calc(var(--edge) + 139 * var(--ui-px));
   width: calc(84 * var(--ui-px));
   height: calc(84 * var(--ui-px));
   display: grid;
@@ -634,18 +639,17 @@
 
 .mana-bar {
   position: absolute;
-  left: 50%;
+  left: calc(50% - 6 * var(--ui-px));
   bottom: calc(100% + 8 * var(--ui-px));
-  transform: translateX(-50%);
   display: flex;
-  gap: calc(4 * var(--ui-px));
+  gap: calc(3 * var(--ui-px));
   pointer-events: none;
 }
 
 .mana-bar i {
   --fill: 1;
-  width: calc(16 * var(--ui-px));
-  height: calc(16 * var(--ui-px));
+  width: calc(13 * var(--ui-px));
+  height: calc(13 * var(--ui-px));
   border-radius: 50%;
   border: calc(2 * var(--ui-px)) solid #1e1b4b;
   background: conic-gradient(#60a5fa calc(var(--fill) * 360deg), rgb(30 27 75 / 0.55) 0);

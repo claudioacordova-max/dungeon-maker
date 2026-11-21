@@ -15,7 +15,7 @@ import { bake, box, toon } from './kit'
 import { makePose, type Anim, type Pose } from './types'
 import './showcase.css'
 
-type Name = 'Warrior' | 'Ranger' | 'Priestess' | 'Mage' | 'Ogre' | 'Chicken' | 'Thrower' | 'Slime' |
+type Name = 'Swordsman' | 'Ranger' | 'Priestess' | 'Mage' | 'Ogre' | 'Chicken' | 'Thrower' | 'Slime' |
   'Slime King' | 'Chest' | 'Spikes' | 'Bolts' | 'Orb' | 'Slash' | 'Spin' | MagicExhibit
 type Exhibit = { name: Name; x: number; z: number; labelOffset: number; anims?: Anim[]; width?: number; height?: number }
 const heroClips: Anim[] = ['idle', 'run', 'attack', 'charge', 'special', 'hurt', 'die']
@@ -24,7 +24,7 @@ const pages = ['Heroes','Dungeon','Floors','Combat','Magic'] as const
 type Page = typeof pages[number]
 const rooms: Record<Page, Exhibit[]> = {
   Heroes: [
-    { name: 'Warrior', x: .27, z: .74, labelOffset: .40, anims: heroClips },
+    { name: 'Swordsman', x: .27, z: .74, labelOffset: .40, anims: heroClips },
     { name: 'Ranger', x: .73, z: .74, labelOffset: .40, anims: heroClips },
     { name: 'Priestess', x: .27, z: .30, labelOffset: .42, anims: heroClips },
     { name: 'Mage', x: .73, z: .30, labelOffset: .42, anims: heroClips },
@@ -159,7 +159,7 @@ function Model({ name, pose, play, shut, open, phase }: {
   name: Name; pose: Pose; play: Playback; shut: RefObject<Group | null>; open: RefObject<Group | null>; phase?: SpikePhase
 }) {
   switch (name) {
-    case 'Warrior': return <group rotation-y={2.72}><MeleeHero pose={pose} tint="#ff6b59" /></group>
+    case 'Swordsman': return <group rotation-y={2.72}><MeleeHero pose={pose} tint="#ff6b59" /></group>
     case 'Ranger': return <group rotation-y={3.59}><RangedHero pose={pose} tint="#56e7bf" /></group>
     case 'Priestess': return <group rotation-y={3.48}><PriestHero pose={pose} tint="#45d2bc" /></group>
     case 'Mage': return <group rotation-y={3.43}><MageHero pose={pose} tint="#db68af" /></group>

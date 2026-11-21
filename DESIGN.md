@@ -134,6 +134,8 @@ Versión 2 desplegada (2026-11-20):
 
 - 2026-11-21: barrita de vida y nombre sobre cada héroe hechos de nuevo (capa propia sobre el lienzo), para que se vean siempre; la cámara del máster encuadra la sala o el mapa en el espacio libre entre la barra de arriba y el panel, y el panel de la sala es más compacto (pestañas en la primera fila).
 
+- 2026-11-21: botón especial de la sacerdotisa y el mago junto al de ataque (probado en pantallas de 360 a 412 px de ancho); «Maestro» en vez de «Máster»; sin coronas en los menús (banderín liso); textos de las tarjetas siempre dentro de la tarjeta. Espadachín rediseñado por Codex (GPT-6.2-Astra): sin casco, túnica y capa azules, armadura media y espada de acero, igual en el modelo y en la tarjeta; colores de la Arquera iguales a su tarjeta.
+
 Problemas conocidos:
 - Los slimes son muy letales contra un héroe que no se mueve: en la prueba automática el héroe perdió 2 vidas en la primera sala. Para balancear jugando.
 - Rendimiento en un teléfono real sin medir (Codex estimó ~1.500 triángulos y ≤8 llamadas de dibujo por personaje).

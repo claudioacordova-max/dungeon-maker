@@ -713,3 +713,42 @@
   color: #fca5a5;
   font-size: 0.6em;
 }
+
+/* ---------- Card texts always fit their card (sized from the card's own width) ---------- */
+.pick-card {
+  container-type: inline-size;
+  overflow: hidden;
+}
+
+.pick-card:not(.is-master) b {
+  font-size: min(0.66em, 14.5cqi);
+  letter-spacing: -0.02em;
+  max-width: 100%;
+}
+
+.pick-card:not(.is-master) small {
+  max-width: 100%;
+  white-space: normal;
+  font-size: min(0.52em, 12cqi);
+  line-height: 1.1;
+  text-align: center;
+}
+
+.pick-text {
+  width: 100%;
+}
+
+.host-tag,
+.away-tag {
+  flex: none;
+}
+
+/* Same height for the four hero cards, whatever wraps inside them. */
+.pick-cards {
+  align-items: stretch;
+}
+
+.pick-card:not(.is-master) .pick-text {
+  flex: 1;
+  justify-content: space-between;
+}

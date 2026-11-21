@@ -12,13 +12,6 @@ export function HeartIcon({ empty = false }: { empty?: boolean }) {
   )
 }
 
-export function CrownIcon() {
-  return (
-    <svg className="icon" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2 12h12l1-7-4 3-3-5-3 5-4-3z" fill="#facc15" />
-    </svg>
-  )
-}
 
 export function SwordIcon() {
   return (
