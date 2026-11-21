@@ -1,18 +1,17 @@
 // The 3D world: a tilted camera following the own hero (or the master's map view), the rooms of the map, every
 // character with its model and animation, projectiles, effects and the enemies' announced attacks.
 // Sim (x, y) maps to three (x, 0, -y); a model's forward is -Z, so facing angle a becomes rotation.y = a - PI/2.
-import { Html } from '@react-three/drei'
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Vector3, type Group, type Mesh, type PerspectiveCamera } from 'three'
+import { PerspectiveCamera, Vector3, type Group, type Mesh } from 'three'
 import { feedback, frame as heroFrame, local, resetHero, shots as ownShots, visibleStrikes } from '../game/hero'
 import { useMaster } from '../game/master'
 import { me, SHOW_GHOSTS, useNet } from '../net/connection'
 import { latestEnemy, sampleEnemy, sampleHero, sampleOrb, sampleShot } from '../net/interp'
 import { CHEST_SLOTS, floorCell, SPIKES } from '../shared/layouts'
-import { buildableSlots, DIRS, doorState, isPlaceableCell, overGap, roomAtPoint, roomCenter } from '../shared/map'
+import { buildableSlots, DIRS, doorState, isPlaceableCell, overGap, roomAtPoint } from '../shared/map'
 import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, ShotKind, Snapshot, SpikePhase } from '../shared/protocol'
-import { ENEMY, ENEMY_TELEGRAPH, HERO, MAX_ROOMS, ROOM_H, ROOM_W } from '../shared/rules'
+import { ENEMY, ENEMY_TELEGRAPH, HERO, HERO_HITS, MAX_ROOMS, ROOM_H, ROOM_W } from '../shared/rules'
 import { PLAYER_COLORS } from '../ui/screens'
 import {
   BurnFx,
@@ -55,9 +54,53 @@ function setAnim(pose: Pose, anim: Anim) {
 
 const target = new Vector3()
 const wanted = new Vector3()
+const corner = new Vector3()
+const probe = new PerspectiveCamera()
+
+type Bounds = { minX: number; maxX: number; minY: number; maxY: number }
+
+// Screen band (px, relative to the canvas) not covered by the HUD's top bar and the master's panel.
+function freeBand(canvas: HTMLCanvasElement, height: number) {
+  const c = canvas.getBoundingClientRect()
+  const top = document.querySelector('.hud-top')?.getBoundingClientRect().bottom ?? c.top
+  const bottom = document.querySelector('.master-panel')?.getBoundingClientRect().top ?? c.bottom
+  return { top: Math.max(0, top - c.top + 6), bottom: Math.min(height, bottom - c.top - 6) }
+}
+
+// Master camera: distance and center so that `b` (walls included) fits the free band, solved on a probe camera.
+function fitMaster(b: Bounds, tilt: number, fov: number, w: number, h: number, band: { top: number; bottom: number }) {
+  probe.fov = fov
+  probe.aspect = w / h
+  probe.updateProjectionMatrix()
+  let cx = (b.minX + b.maxX) / 2
+  let cy = (b.minY + b.maxY) / 2
+  let dist = Math.max(b.maxX - b.minX, b.maxY - b.minY) * 1.6
+  const freeH = Math.max(80, band.bottom - band.top)
+  for (let i = 0; i < 5; i++) {
+    probe.position.set(cx, Math.sin(tilt) * dist, -cy + Math.cos(tilt) * dist)
+    probe.lookAt(cx, 0, -cy)
+    probe.updateMatrixWorld()
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    for (const x of [b.minX, b.maxX])
+      for (const y of [b.minY, b.maxY])
+        for (const z of [0, 1.3]) {
+          corner.set(x, z, -y).project(probe)
+          const px = ((corner.x + 1) / 2) * w
+          const py = ((1 - corner.y) / 2) * h
+          x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py)
+        }
+    const k = Math.max((x1 - x0) / (w * 0.96), (y1 - y0) / (freeH * 0.94))
+    const pxPerUnit = h / (2 * dist * Math.tan((fov * Math.PI) / 360))
+    // Content below the band's middle: look further south so it rises on the screen (and vice versa).
+    cy -= ((y0 + y1) / 2 - (band.top + band.bottom) / 2) / pxPerUnit / Math.sin(tilt)
+    cx += ((x0 + x1) / 2 - w / 2) / pxPerUnit
+    dist *= k
+  }
+  return { cx, cy, dist }
+}
 
 function CameraRig() {
-  const { camera, size } = useThree()
+  const { camera, size, gl } = useThree()
   const mode = useMaster((m) => m.mode)
   const editRoom = useMaster((m) => m.room)
   useFrame((_, dt) => {
@@ -69,34 +112,30 @@ function CameraRig() {
     const half = Math.tan((cam.fov * Math.PI) / 360)
     let cx = ROOM_W / 2
     let cy = ROOM_H / 2
-    let width = 11.5
     let tilt = 0.96 // radians above the horizon
+    let dist = 11.5 / 2 / (half * aspect)
     if (!isMaster && local.ready) {
       cx = local.x
       cy = local.y + 1.6 // look a bit ahead (north): the hero sits lower on the screen
     } else if (isMaster && s) {
       tilt = 1.15
-      if (mode === 'room' && editRoom !== null) {
-        const room = s.rooms.find((r) => r.id === editRoom)
-        if (room) {
-          const c = roomCenter(room)
-          cx = c.x
-          cy = c.y - 0.6
-          width = ROOM_W + 1.5
-        }
-      } else {
+      const room = mode === 'room' && editRoom !== null ? s.rooms.find((r) => r.id === editRoom) : undefined
+      let b: Bounds
+      if (room) b = { minX: room.gx * ROOM_W, maxX: (room.gx + 1) * ROOM_W, minY: room.gy * ROOM_H, maxY: (room.gy + 1) * ROOM_H }
+      else {
         const cells = [...s.rooms, ...buildableSlots(s.rooms)]
-        const minX = Math.min(...cells.map((r) => r.gx)) * ROOM_W
-        const maxX = (Math.max(...cells.map((r) => r.gx)) + 1) * ROOM_W
-        const minY = Math.min(...cells.map((r) => r.gy)) * ROOM_H
-        const maxY = (Math.max(...cells.map((r) => r.gy)) + 1) * ROOM_H
-        cx = (minX + maxX) / 2
-        cy = (minY + maxY) / 2
-        width = Math.max(maxX - minX + 2, ((maxY - minY + 2) * aspect) / 0.75)
+        b = {
+          minX: Math.min(...cells.map((r) => r.gx)) * ROOM_W,
+          maxX: (Math.max(...cells.map((r) => r.gx)) + 1) * ROOM_W,
+          minY: Math.min(...cells.map((r) => r.gy)) * ROOM_H,
+          maxY: (Math.max(...cells.map((r) => r.gy)) + 1) * ROOM_H,
+        }
       }
+      const fit = fitMaster(b, tilt, cam.fov, size.width, size.height, freeBand(gl.domElement, size.height))
+      cx = fit.cx
+      cy = fit.cy
+      dist = fit.dist
     }
-    // Distance so that `width` cells fit across the screen.
-    const dist = width / 2 / (half * aspect)
     target.set(cx, 0, -cy)
     wanted.set(cx, Math.sin(tilt) * dist, -cy + Math.cos(tilt) * dist)
     const k = 1 - Math.exp(-dt * (isMaster ? 6 : 10))
@@ -362,28 +401,81 @@ function OtherHero({ hero, color }: { hero: HeroView; color: string }) {
   )
 }
 
-function HeroLabel({ hero, name, color, own }: { hero: HeroView; name: string; color: string; own: boolean }) {
-  const ref = useRef<Group>(null)
+// Name and hit bar over every hero, for everyone (the healer reads her allies' bars here). Plain DOM elements over
+// the canvas, positioned every frame: no React roots of their own, so heroes falling, dying and coming back can
+// never leave a hero without its bar.
+function HeroLabels() {
+  const gl = useThree((st) => st.gl)
+  const camera = useThree((st) => st.camera)
+  const size = useThree((st) => st.size)
+  const layer = useMemo(() => {
+    const el = document.createElement('div')
+    el.className = 'world-labels'
+    return el
+  }, [])
+  const labels = useRef(new Map<string, { root: HTMLDivElement; name: HTMLSpanElement; pips: HTMLElement[]; text: string; hp: number }>())
+  useEffect(() => {
+    const parent = gl.domElement.parentElement
+    parent?.appendChild(layer)
+    return () => {
+      layer.remove()
+      labels.current.clear()
+    }
+  }, [gl, layer])
+  const v = useMemo(() => new Vector3(), [])
   useFrame(() => {
-    const p = own ? ownPos() : sampleHero(hero.id)
-    if (p && ref.current) ref.current.position.set(p.x, 1.55, -p.y)
+    const net = useNet.getState()
+    const s = net.snapshot
+    const seen = new Set<string>()
+    for (const h of s?.heroes ?? []) {
+      seen.add(h.id)
+      let l = labels.current.get(h.id)
+      if (!l) {
+        const root = document.createElement('div')
+        const name = document.createElement('span')
+        name.className = 'world-name'
+        const bar = document.createElement('span')
+        bar.className = 'world-hp'
+        const pips = Array.from({ length: HERO_HITS }, () => bar.appendChild(document.createElement('i')))
+        root.append(name, bar)
+        layer.appendChild(root)
+        l = { root, name, pips, text: '', hp: -1 }
+        labels.current.set(h.id, l)
+      }
+      const own = h.id === net.you
+      const player = net.players.find((p) => p.id === h.id)
+      const text = player?.name ?? '?'
+      if (l.text !== text) {
+        l.text = text
+        l.name.textContent = text
+        l.name.style.color = PLAYER_COLORS[player?.color ?? 0]
+        l.root.className = own ? 'world-label is-own' : 'world-label'
+      }
+      if (l.hp !== h.hp) {
+        l.hp = h.hp
+        l.pips.forEach((pip, i) => pip.classList.toggle('on', i < h.hp))
+      }
+      const p = own ? ownPos() : sampleHero(h.id)
+      const falling = own ? local.fallAt >= 0 : !!p && !!s && overGap(s.rooms, p.x, p.y, 0.15)
+      if (!p || h.dead || falling) {
+        l.root.style.display = 'none'
+        continue
+      }
+      v.set(p.x, 1.55, -p.y).project(camera)
+      if (v.z > 1) {
+        l.root.style.display = 'none'
+        continue
+      }
+      l.root.style.display = ''
+      l.root.style.transform = `translate(${((v.x + 1) / 2) * size.width}px, ${((1 - v.y) / 2) * size.height}px) translate(-50%, -50%)`
+    }
+    for (const [id, l] of labels.current) {
+      if (seen.has(id)) continue
+      l.root.remove()
+      labels.current.delete(id)
+    }
   })
-  return (
-    <group ref={ref}>
-      <Html center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
-        <div className={own ? 'world-label is-own' : 'world-label'} style={hero.dead ? { visibility: 'hidden' } : undefined}>
-          <span className="world-name" style={{ color }}>
-            {name}
-          </span>
-          <span className="world-hp">
-            {Array.from({ length: 4 }, (_, i) => (
-              <i key={i} className={i < hero.hp ? 'on' : ''} />
-            ))}
-          </span>
-        </div>
-      </Html>
-    </group>
-  )
+  return null
 }
 
 function EnemyActor({ enemy }: { enemy: EnemyView }) {
@@ -821,14 +913,10 @@ export default function World() {
         const player = state.players.find((p) => p.id === h.id)
         const color = PLAYER_COLORS[player?.color ?? 0]
         const own = h.id === state.you
-        // The label stays mounted while the hero is down (unmounting drei's Html mid-render breaks React).
-        return (
-          <group key={h.id}>
-            {!h.dead && (own ? <OwnHero hero={h} color={color} /> : <OtherHero hero={h} color={color} />)}
-            <HeroLabel hero={h} name={player?.name ?? '?'} color={color} own={own} />
-          </group>
-        )
+        if (h.dead) return null
+        return <group key={h.id}>{own ? <OwnHero hero={h} color={color} /> : <OtherHero hero={h} color={color} />}</group>
       })}
+      <HeroLabels />
       <OwnShots />
       {s.shots
         .filter((sh) => sh.owner !== state.you)

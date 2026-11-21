@@ -1,12 +1,15 @@
 // Balance numbers. The designer owns those listed in DESIGN.md "Números"; change them only on request.
 export const TEAM_LIVES = 3
+// One more team life with 4 heroes (designer, 2026-11-21).
+export const teamLives = (heroes: number) => TEAM_LIVES + (heroes >= 4 ? 1 : 0)
 export const HERO_HITS = 4
 export const MAX_ROOMS = 6 // master rooms before the boss room (the start room does not count)
 export const ROOM_DIFFICULTY_CAP = 10
 export const CAP_PER_EXTRA_HERO = 5
 // Enemies (placed one by one) and the room layout (broken floor, spike pack, each chest) share the room's cap.
 export const DIFFICULTY = { slime: 2, thrower: 3, ogre: 5, brokenFloor: 4, spikes: 3, chest: -5 } as const
-export const MAX_CHESTS = 3
+// Chests per room by number of heroes: 1, 2, 2, 3.
+export const maxChests = (heroes: number) => [1, 1, 2, 2, 3][Math.max(0, Math.min(4, heroes))]
 // Spikes: each group cycles down -> warn -> up; group B runs half a cycle after group A.
 export const SPIKE_CYCLE = { down: 1.5, warn: 0.5, up: 1 } as const
 // Cap of every room for a match with `heroes` heroes.
@@ -49,7 +52,8 @@ export const HERO = {
 // Mana (priestess and mage): max and seconds to recover one point.
 export const MANA = { priest: { max: 4, regen: 1.5 }, mage: { max: 5, regen: 1.2 } } as const
 export const BURN = { perSecond: 0.5, seconds: 2 } as const
-export const POLYMORPH = { seconds: 4, bossSeconds: 1.5, bossImmune: 8, fleeSpeed: 1.6 } as const
+// Untouched chickens last 50% longer; the first damage cuts it back to the short duration (from when it began).
+export const POLYMORPH = { seconds: 4, bossSeconds: 1.5, untouchedBonus: 1.5, bossImmune: 8, fleeSpeed: 1.6 } as const
 
 export const ENEMY = {
   slime: { hp: 3, radius: 0.4, speed: 2.1, touchCooldown: 0.8 },

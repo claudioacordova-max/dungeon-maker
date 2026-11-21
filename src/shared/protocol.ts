@@ -78,6 +78,8 @@ export type ItemView = { id: number; room: number; kind: 'trap' | 'chest'; x: nu
 export type Snapshot = {
   lives: number
   cap: number // difficulty cap of each room in this match
+  maxLives: number
+  maxChests: number // per room in this match
   rooms: RoomView[]
   normalRooms: number
   heroes: HeroView[]

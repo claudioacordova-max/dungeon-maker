@@ -4,7 +4,7 @@ import { me, useNet } from '../net/connection'
 import { layoutCost, SHAPE_NAME, SHAPES, type Layout } from '../shared/layouts'
 import { canAdd, difficulty } from '../shared/map'
 import type { Placeable, RoomView, Snapshot } from '../shared/protocol'
-import { DIFFICULTY, MAX_CHESTS, MAX_ROOMS, TEAM_LIVES } from '../shared/rules'
+import { DIFFICULTY, MAX_ROOMS } from '../shared/rules'
 import { AttackStick, MoveStick } from './Controls'
 import MiniMap from './MiniMap'
 import SoundToggle from './SoundToggle'
@@ -24,7 +24,7 @@ export default function Hud() {
     <div className="hud">
       <div className="hud-top">
         <div className="chip lives" role="group" aria-label={`Vidas del equipo: ${s.lives}`}>
-          {Array.from({ length: TEAM_LIVES }, (_, i) => (
+          {Array.from({ length: s.maxLives }, (_, i) => (
             <HeartIcon key={i} empty={i >= s.lives} />
           ))}
         </div>
@@ -83,7 +83,7 @@ const cost = (n: number) => (n > 0 ? `+${n}` : String(n))
 const layoutOf = (room: RoomView): Layout => ({ shape: room.shape, spikes: room.spikes, chests: room.chests })
 
 // "Sala" tab: floor shape, spike pack and chests; the whole layout is sent at once and checked by the server.
-function LayoutTab({ room, cap }: { room: RoomView; cap: number }) {
+function LayoutTab({ room, cap, maxChests }: { room: RoomView; cap: number; maxChests: number }) {
   const send = useNet((st) => st.send)
   const plan = room.plan ?? []
   const layout = layoutOf(room)
@@ -106,8 +106,10 @@ function LayoutTab({ room, cap }: { room: RoomView; cap: number }) {
               onClick={() => set(next)}
             >
               <ShapeIcon shape={shape} />
-              <span>{SHAPE_NAME[shape]}</span>
-              <small>{shape === 'full' ? '0' : cost(DIFFICULTY.brokenFloor)}</small>
+              <span>
+                {SHAPE_NAME[shape]}
+                <small>{shape === 'full' ? '0' : cost(DIFFICULTY.brokenFloor)}</small>
+              </span>
             </button>
           )
         })}
@@ -139,7 +141,7 @@ function LayoutTab({ room, cap }: { room: RoomView; cap: number }) {
             type="button"
             className="ui-button small"
             aria-label="Un cofre más"
-            disabled={layout.chests >= MAX_CHESTS}
+            disabled={layout.chests >= maxChests}
             onClick={() => set({ ...layout, chests: layout.chests + 1 })}
           >
             +
@@ -211,24 +213,13 @@ function MasterPanel({ s }: { s: Snapshot }) {
     const locked = room.entered || room.kind === 'start'
     return (
       <div className="master-panel panel">
-        <div className="master-row">
+        <div className="master-row master-head">
           <button type="button" className="ui-button small" onClick={toMap}>
             Mapa
           </button>
-          <div className="meter" aria-label={`Dificultad ${value} de ${cap}`}>
-            <span className="meter-label">{room.kind === 'boss' ? 'Sala del jefe' : 'Dificultad'}</span>
-            <span className="meter-bar">
-              <i style={{ width: `${Math.max(0, Math.min(1, value / cap)) * 100}%` }} />
-            </span>
-            <b>
-              {value}/{cap}
-            </b>
-          </div>
-        </div>
-        {locked ? (
-          <p className="master-note">Los héroes ya entraron: esta sala no se puede cambiar.</p>
-        ) : (
-          <>
+          {locked ? (
+            <span className="master-head-title">{room.kind === 'boss' ? 'Sala del jefe' : 'Sala'}</span>
+          ) : (
             <div className="master-tabs" role="tablist">
               <button type="button" role="tab" aria-selected={tab === 'room'} className={tab === 'room' ? 'tab is-active' : 'tab'} onClick={() => setTab('room')}>
                 Sala
@@ -237,8 +228,20 @@ function MasterPanel({ s }: { s: Snapshot }) {
                 Enemigos
               </button>
             </div>
+          )}
+          <b className="meter-value" aria-label={`Dificultad ${value} de ${cap}`}>
+            {value}/{cap}
+          </b>
+        </div>
+        <span className="meter-bar meter-thin" aria-hidden="true">
+          <i style={{ width: `${Math.max(0, Math.min(1, value / cap)) * 100}%` }} />
+        </span>
+        {locked ? (
+          <p className="master-note">Los héroes ya entraron: esta sala no se puede cambiar.</p>
+        ) : (
+          <>
             {tab === 'room' ? (
-              <LayoutTab room={room} cap={cap} />
+              <LayoutTab room={room} cap={cap} maxChests={s.maxChests} />
             ) : (
             <div className="palette" role="group" aria-label="Enemigos">
               {TOOLS.map((t) => (
@@ -250,8 +253,10 @@ function MasterPanel({ s }: { s: Snapshot }) {
                   disabled={!canAdd(plan, layoutOf(room), t.kind, cap)}
                   onClick={() => setTool(t.kind)}
                 >
-                  <span>{t.label}</span>
-                  <small>{cost(DIFFICULTY[t.kind])}</small>
+                  <span>
+                    {t.label}
+                    <small>{cost(DIFFICULTY[t.kind])}</small>
+                  </span>
                 </button>
               ))}
             </div>

@@ -70,7 +70,7 @@ test('difficulty per room: enemies and the layout share the cap; chests subtract
   assert.equal(setLayout(g, room.id, 'full', true, 0), false, 'spikes would pass the cap')
   assert.ok(setLayout(g, room.id, 'full', true, 1), 'a chest pays for the spikes')
   assert.equal(difficulty(room.plan, room.layout), 8)
-  assert.equal(setLayout(g, room.id, 'full', true, 4), false, 'at most 3 chests')
+  assert.equal(setLayout(g, room.id, 'full', true, 2), false, 'one hero: at most 1 chest')
   assert.equal(setLayout(g, room.id, 'full', false, 0), true)
   assert.equal(place(g, room.id, 'thrower', 6, 6), false, 'over the cap')
   assert.equal(setLayout(g, room.id, 'nope', false, 0), false)
@@ -314,6 +314,7 @@ test('cap per room grows 5 per extra hero; the ogre costs 5', () => {
   assert.equal(createGame(ids.slice(0, 2)).cap, 15)
   const g = createGame(ids)
   assert.equal(g.cap, 25)
+  assert.deepEqual([1, 2, 3, 4].map((n) => [createGame(ids.slice(0, n)).maxChests, createGame(ids.slice(0, n)).lives]), [[1, 3], [2, 3], [2, 3], [3, 4]])
   build(g, 0, 1, 'normal')
   const room = g.rooms[1]
   for (let i = 0; i < 5; i++) assert.ok(place(g, room.id, 'ogre', 1 + i, 3))
@@ -385,7 +386,22 @@ test('mage: the spark burns; polymorph makes a harmless chicken, short and with 
   assert.ok(s2.poly > 0)
   assert.equal(reportTouched(g, 'a', s2.id), false, 'a chicken does not hurt')
   run(g, R.POLYMORPH.seconds + 0.1)
+  assert.ok(s2.poly > 0, 'untouched: lasts longer')
+  run(g, R.POLYMORPH.seconds * (R.POLYMORPH.untouchedBonus - 1))
   assert.equal(s2.poly, 0)
+  // Damage cuts it back to the short duration, counted from when it began.
+  const p3 = attack(g, 'a', 3, 'charged', 0, [], 0)
+  g.heroes[0].mana = R.MANA.mage.max
+  const s3 = g.enemies.find((e) => e.hp > 0)!
+  s3.x = hero.x + 1
+  s3.y = hero.y
+  if (p3) shotHit(g, 'a', p3, s3.id, 0)
+  run(g, 1)
+  const before = s3.hp
+  const strike = attack(g, 'a', 4, 'basic', 0, [], 0)!
+  assert.ok(shotHit(g, 'a', strike, s3.id, 0))
+  assert.ok(s3.hp < before)
+  assert.ok(Math.abs(s3.poly - (R.POLYMORPH.seconds - 1)) < 0.1, `cut back: ${s3.poly}`)
 
   // Boss
   const b = createGame([{ id: 'a', cls: 'mage' }])
@@ -401,9 +417,9 @@ test('mage: the spark burns; polymorph makes a harmless chicken, short and with 
   assert.equal(b.strikes.length, 1, 'jump announced')
   const p1 = attack(b, 'a', 1, 'charged', Math.PI / 2, [], 0)!
   assert.ok(shotHit(b, 'a', p1, king.id, 0))
-  assert.equal(king.poly, R.POLYMORPH.bossSeconds)
+  assert.equal(king.poly, R.POLYMORPH.bossSeconds * R.POLYMORPH.untouchedBonus)
   assert.equal(b.strikes.length, 0, 'the announced jump is cancelled')
-  run(b, R.POLYMORPH.bossSeconds + 1)
+  run(b, R.POLYMORPH.bossSeconds * R.POLYMORPH.untouchedBonus + 1)
   mage.mana = R.MANA.mage.max
   const p2 = attack(b, 'a', 2, 'charged', Math.PI / 2, [], 0)!
   shotHit(b, 'a', p2, king.id, 0)

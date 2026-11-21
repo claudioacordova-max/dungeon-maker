@@ -65,6 +65,8 @@ type Enemy = {
   burn: number // seconds of burning left
   burnTick: number // seconds to the next burn damage
   poly: number // seconds left as a chicken
+  polyAt: number // game time it became a chicken
+  polyShort: number // duration if it takes damage (seconds from polyAt); 0 once it took damage
   polyImmuneUntil: number // boss: game time before which it cannot be polymorphed again
 }
 
@@ -90,6 +92,8 @@ export type Game = {
   result: 'playing' | 'heroes-won' | 'master-won'
   nextId: number
   cap: number // difficulty cap of each room (grows with the number of heroes)
+  maxLives: number
+  maxChests: number
 }
 
 const usesMana = (cls: HeroClass): cls is 'priest' | 'mage' => cls === 'priest' || cls === 'mage'
@@ -111,7 +115,9 @@ function teleport(game: Game, hero: Hero, x: number, y: number) {
 export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
   const game: Game = {
     time: 0,
-    lives: R.TEAM_LIVES,
+    lives: R.teamLives(heroes.length),
+    maxLives: R.teamLives(heroes.length),
+    maxChests: R.maxChests(heroes.length),
     rooms: [],
     heroes: [],
     enemies: [],
@@ -179,6 +185,8 @@ function spawnEnemy(game: Game, room: Room, kind: EnemyKind, x: number, y: numbe
     burn: 0,
     burnTick: 0,
     poly: 0,
+    polyAt: 0,
+    polyShort: 0,
     polyImmuneUntil: 0,
   })
 }
@@ -291,7 +299,7 @@ export function removeItem(game: Game, roomId: number, cx: number, cy: number): 
 export function setLayout(game: Game, roomId: number, shape: unknown, spikes: unknown, chests: unknown): boolean {
   const room = editable(game, roomId)
   if (!room || !SHAPES.includes(shape as Layout['shape']) || typeof spikes !== 'boolean') return false
-  if (!Number.isInteger(chests) || (chests as number) < 0 || (chests as number) > R.MAX_CHESTS) return false
+  if (!Number.isInteger(chests) || (chests as number) < 0 || (chests as number) > game.maxChests) return false
   const layout: Layout = { shape: shape as Layout['shape'], spikes, chests: chests as number }
   const plan = room.plan.filter((p) => floorCell(layout.shape, p.cx, p.cy))
   if (difficulty(plan, layout) > game.cap) return false
@@ -374,8 +382,16 @@ function enemyPositionAt(game: Game, enemyId: number, time: number) {
   return (best ?? game.history[0])?.pos.get(enemyId) ?? null
 }
 
+// Damage on a chicken that was untouched cuts it back to the short duration.
+function damageChicken(game: Game, enemy: Enemy) {
+  if (enemy.poly <= 0 || enemy.polyShort <= 0) return
+  enemy.poly = Math.max(0, enemy.polyShort - (game.time - enemy.polyAt))
+  enemy.polyShort = 0
+}
+
 function hurtEnemy(game: Game, hero: Hero, enemy: Enemy, damage: number) {
   enemy.hp -= damage
+  damageChicken(game, enemy)
   enemy.stun = R.ENEMY_HIT_STUN
   if (enemy.kind !== 'king' && enemy.kind !== 'ogre') {
     const d = dist(enemy.x, enemy.y, hero.x, hero.y) || 1
@@ -465,11 +481,14 @@ function heal(hero: Hero, amount: number) {
 
 // The mage's polymorph: a defenseless chicken for a few seconds; it drops whatever attack it was announcing.
 function polymorph(game: Game, enemy: Enemy) {
+  const short = enemy.kind === 'king' ? R.POLYMORPH.bossSeconds : R.POLYMORPH.seconds
   if (enemy.kind === 'king') {
     if (game.time < enemy.polyImmuneUntil) return
-    enemy.poly = R.POLYMORPH.bossSeconds
-    enemy.polyImmuneUntil = game.time + R.POLYMORPH.bossSeconds + R.POLYMORPH.bossImmune
-  } else enemy.poly = R.POLYMORPH.seconds
+    enemy.polyImmuneUntil = game.time + short * R.POLYMORPH.untouchedBonus + R.POLYMORPH.bossImmune
+  }
+  enemy.poly = short * R.POLYMORPH.untouchedBonus
+  enemy.polyAt = game.time
+  enemy.polyShort = short
   if (enemy.state === 'jump') {
     // Lands where it was going, harmlessly.
     enemy.x = enemy.jumpTo.x
@@ -626,6 +645,7 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
     enemy.burnTick -= dt
     if (enemy.burnTick <= 0) {
       enemy.hp -= R.BURN.perSecond // no stun: burning never locks an enemy in place
+      damageChicken(game, enemy)
       enemy.burnTick += 1
     }
     if (enemy.burn <= 0) enemy.burn = 0
@@ -845,6 +865,8 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
   const r2 = (v: number) => Math.round(v * 100) / 100
   return {
     lives: game.lives,
+    maxLives: game.maxLives,
+    maxChests: game.maxChests,
     cap: game.cap,
     normalRooms: normalRooms(game),
     rooms: game.rooms.map((room) => ({

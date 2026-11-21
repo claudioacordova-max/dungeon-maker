@@ -427,6 +427,21 @@
 }
 
 /* Names and hit pips above the heroes (positioned in 3D by the scene). */
+.world-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.world-labels .world-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
 .world-label {
   display: flex;
   flex-direction: column;
@@ -924,4 +939,69 @@
 
 .latency {
   white-space: nowrap;
+}
+
+/* ---------- Compact room editor (the camera fits the room above it) ---------- */
+.master-panel {
+  gap: 0.4em;
+  padding: 0.55em 0.6em;
+}
+
+.master-head {
+  gap: 0.4em;
+}
+
+.master-head .master-tabs {
+  flex: 1;
+}
+
+.master-head-title {
+  flex: 1;
+  color: #fff;
+  font-size: 0.85em;
+  text-align: center;
+}
+
+.meter-value {
+  min-width: 2.8em;
+  color: #fff;
+  font-size: 0.95em;
+  text-align: right;
+}
+
+.meter-bar.meter-thin {
+  display: block;
+  height: 0.35em;
+  background: rgb(26 15 46 / 0.6);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.master-panel .ui-button.tool {
+  flex-direction: row;
+  justify-content: center;
+  gap: 0.35em;
+  padding: 0.35em 0.2em;
+}
+
+.master-panel .ui-button.tool > span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.05;
+}
+
+.master-panel .shape-icon {
+  width: 1.1em;
+  height: 1.3em;
+  flex: none;
+}
+
+.master-panel .ui-button.small {
+  padding-block: 0.4em;
+}
+
+.master-panel .master-note {
+  margin: 0;
+  font-size: 0.75em;
 }

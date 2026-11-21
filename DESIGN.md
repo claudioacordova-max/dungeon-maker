@@ -39,15 +39,15 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 ## Números
 
 <!-- Del diseñador. Los marcados como propuesta los eligió el agente y se ajustan jugando. -->
-- Vidas grupales del equipo: 3.
+- Vidas grupales del equipo: 3; 4 con cuatro héroes (diseñador, 2026-11-21).
 - Golpes que aguanta un héroe: 4.
 - Habitaciones del máster: hasta 6, más la del jefe (diseñador, v2).
 - Tope de dificultad por habitación: 10 (diseñador dijo «10 o 6»; se empieza con 10), +5 por cada héroe después del primero (diseñador): 10, 15, 20, 25.
-- Dificultad: enemigo +2 (diseñador), enemigo a distancia +3 (propuesta), ogro +5 (propuesta), suelo roto +4 (propuesta), paquete de pinchos +3 (propuesta), cofre −5 (diseñador), hasta 3 cofres por sala (diseñador).
+- Dificultad: enemigo +2 (diseñador), enemigo a distancia +3 (propuesta), ogro +5 (propuesta), suelo roto +4 (propuesta), paquete de pinchos +3 (propuesta), cofre −5 (diseñador). Cofres por sala según los héroes: 1, 2, 2 y 3 (diseñador, 2026-11-21).
 - Pinchos (propuesta): 8 por sala, en dos grupos que se alternan: abajo 1,5 s, aviso 0,5 s, arriba 1 s.
 - Ogro (propuesta): 10 de vida, lento, no daña al tocar; golpe de garrote anunciado con zona roja frente a él que quita 2 golpes; queda expuesto un momento tras golpear.
 - Sacerdotisa (aprobado): maná 4, recupera 1 cada 1,5 s. Orbe de luz: 1 de maná, quita 1 a un enemigo o cura 1 golpe a un aliado. Oración: 3 de maná, cura 1 golpe a los aliados en 3,5 m.
-- Mago (aprobado): maná 5, recupera 1 cada 1,2 s. Chispa: 1 de maná, quita 1 y quema 0,5 por segundo durante 2 s (la quemadura se reinicia, no se acumula, y no aturde). Polimorfia: 3 de maná, gallina durante 4 s; el jefe 1,5 s y después no puede volver a transformarse durante 8 s. La gallina no ataca, no daña al tocar, cancela el ataque que estaba anunciando y huye de los héroes.
+- Mago (aprobado): maná 5, recupera 1 cada 1,2 s. Chispa: 1 de maná, quita 1 y quema 0,5 por segundo durante 2 s (la quemadura se reinicia, no se acumula, y no aturde). Polimorfia: 3 de maná, gallina durante 4 s; el jefe 1,5 s y después no puede volver a transformarse durante 8 s. Si la gallina no recibe daño dura un 50 % más (6 s; jefe 2,25 s); el primer daño, quemadura incluida, la deja en la duración corta contada desde que empezó (diseñador, 2026-11-21). La gallina no ataca, no daña al tocar, cancela el ataque que estaba anunciando y huye de los héroes.
 - Cofre: cura 2 golpes al héroe que lo toca (propuesta).
 - Reaparición tras caer: 1 s (diseñador).
 - Aviso de ataque enemigo: 0,5 s (diseñador). Aturdimiento del enemigo golpeado: 0,25 s (propuesta).
@@ -131,8 +131,9 @@ Versión 2 desplegada (2026-11-20):
 
 - 2026-11-21: el máster edita cada sala en dos pestañas que comparten el tope. **Sala:** forma del suelo (Entera, Orillas, Cruz, Puente; +4), paquete de 8 pinchos que se alternan (+3) y de 0 a 3 cofres en lugares fijos (−5 c/u). **Enemigos:** slime, lanzador y ogro tocando el suelo. Caer al vacío cuenta como héroe derrotado. Arte del suelo roto y de los pinchos por Codex (GPT-6.2-Astra, xhigh).
 
+- 2026-11-21: barrita de vida y nombre sobre cada héroe hechos de nuevo (capa propia sobre el lienzo), para que se vean siempre; la cámara del máster encuadra la sala o el mapa en el espacio libre entre la barra de arriba y el panel, y el panel de la sala es más compacto (pestañas en la primera fila).
+
 Problemas conocidos:
-- Las etiquetas de nombre sobre los héroes provocan a veces un aviso de React en la consola al empezar la partida («synchronously unmount a root»); no afecta al juego.
 - Los slimes son muy letales contra un héroe que no se mueve: en la prueba automática el héroe perdió 2 vidas en la primera sala. Para balancear jugando.
 - Rendimiento en un teléfono real sin medir (Codex estimó ~1.500 triángulos y ≤8 llamadas de dibujo por personaje).
 - El paquete del juego pesa ~1,2 MB (343 KB comprimido).
