@@ -223,6 +223,17 @@ kbd {
   --stage-max-h: 390;
 }
 
+/* Desktop (mouse, a window wider than tall): the portrait game is still the design, but the stage fills the whole
+   window. The UI scale comes from the height (720 design px tall); the menus stay a centered column (menus.css)
+   and the 3D view simply shows more of the dungeon sideways. Phones and tablets keep the portrait stage. */
+@media (hover: hover) and (pointer: fine) and (min-aspect-ratio: 1/1) {
+  [data-target='mobile-portrait'] {
+    --stage-min-h: 720;
+    --stage-max-h: 720;
+    --stage-max-w: 4000;
+  }
+}
+
 /* Touch first: no browser panning, zoom, callout or selection on the game. */
 html[data-target^='mobile'],
 html[data-target^='mobile'] body {

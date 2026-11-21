@@ -136,6 +136,8 @@ Versión 2 desplegada (2026-11-20):
 
 - 2026-11-21: botón especial de la sacerdotisa y el mago junto al de ataque (probado en pantallas de 360 a 412 px de ancho); «Maestro» en vez de «Máster»; sin coronas en los menús (banderín liso); textos de las tarjetas siempre dentro de la tarjeta. Espadachín rediseñado por Codex (GPT-6.2-Astra): sin casco, túnica y capa azules, armadura media y espada de acero, igual en el modelo y en la tarjeta; colores de la Arquera iguales a su tarjeta.
 
+- 2026-11-21: jugable en escritorio (el foco sigue siendo el móvil). Con ratón y ventana apaisada el juego ocupa toda la ventana: menús en una columna centrada, panel del maestro centrado abajo y cámara del héroe que muestra más hacia los lados. Héroe: WASD o flechas para moverse, clic izquierdo ataca hacia el cursor (mantener carga), clic derecho es la habilidad especial; Espacio y E también sirven. Los botones táctiles siguen visibles y funcionan con el ratón.
+
 Problemas conocidos:
 - Los slimes son muy letales contra un héroe que no se mueve: en la prueba automática el héroe perdió 2 vidas en la primera sala. Para balancear jugando.
 - Rendimiento en un teléfono real sin medir (Codex estimó ~1.500 triángulos y ≤8 llamadas de dibujo por personaje).

@@ -3,8 +3,9 @@
 // Sim (x, y) maps to three (x, 0, -y); a model's forward is -Z, so facing angle a becomes rotation.y = a - PI/2.
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { PerspectiveCamera, Vector3, type Group, type Mesh, type MeshBasicMaterial } from 'three'
+import { PerspectiveCamera, Plane, Raycaster, Vector2, Vector3, type Group, type Mesh, type MeshBasicMaterial } from 'three'
 import { autoAim, feedback, frame as heroFrame, local, resetHero, shots as ownShots, visibleStrikes } from '../game/hero'
+import { setAttackStick, setSpecialStick } from '../game/input'
 import { useMaster } from '../game/master'
 import { me, SHOW_GHOSTS, useNet } from '../net/connection'
 import { latestEnemy, sampleEnemy, sampleHero, sampleOrb, sampleShot } from '../net/interp'
@@ -113,7 +114,8 @@ function CameraRig() {
     let cx = ROOM_W / 2
     let cy = ROOM_H / 2
     let tilt = 0.96 // radians above the horizon
-    let dist = 11.5 / 2 / (half * aspect)
+    // 11.5 cells across a phone; on a wide (desktop) window, keep about the phone's depth and show more sideways.
+    let dist = Math.max(11.5 / 2 / (half * aspect), 10 / half)
     if (!isMaster && local.ready) {
       cx = local.x
       cy = local.y + 1.6 // look a bit ahead (north): the hero sits lower on the screen
@@ -901,6 +903,53 @@ function MasterPicker({ s }: { s: Snapshot }) {
 
 // ---------- Scene ----------
 
+// Mouse (desktop): left button = attack toward the cursor (held: charge), right button = special (priestess and
+// mage). The cursor is projected on the floor; the direction goes through the same stick inputs as touch.
+function MouseAim() {
+  const gl = useThree((st) => st.gl)
+  const camera = useThree((st) => st.camera)
+  useEffect(() => {
+    const el = gl.domElement
+    const ray = new Raycaster()
+    const floor = new Plane(new Vector3(0, 1, 0), 0)
+    const hit = new Vector3()
+    const ndc = new Vector2()
+    let button = -1
+    const dirAt = (e: PointerEvent) => {
+      const r = el.getBoundingClientRect()
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
+      ray.setFromCamera(ndc, camera)
+      if (!ray.ray.intersectPlane(floor, hit)) return local.facing
+      return Math.atan2(-hit.z - local.y, hit.x - local.x)
+    }
+    const set = (held: boolean, e: PointerEvent) => (button === 2 ? setSpecialStick : setAttackStick)(held, true, dirAt(e))
+    const down = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse' || button >= 0 || (e.button !== 0 && e.button !== 2)) return
+      button = e.button
+      el.setPointerCapture(e.pointerId)
+      set(true, e)
+    }
+    const move = (e: PointerEvent) => button >= 0 && e.pointerType === 'mouse' && set(true, e)
+    const up = (e: PointerEvent) => {
+      if (button < 0 || e.pointerType !== 'mouse') return
+      set(false, e)
+      button = -1
+    }
+    const menu = (e: Event) => e.preventDefault()
+    el.addEventListener('pointerdown', down)
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('contextmenu', menu)
+    return () => {
+      el.removeEventListener('pointerdown', down)
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('contextmenu', menu)
+    }
+  }, [gl, camera])
+  return null
+}
+
 function LocalHeroLoop() {
   useEffect(() => resetHero, [])
   useFrame((_, dt) => heroFrame(dt))
@@ -926,6 +975,7 @@ export default function World() {
       <ambientLight intensity={1.15} />
       <directionalLight position={[6, 14, 4]} intensity={1.8} />
       {self?.role === 'hero' && <LocalHeroLoop />}
+      {self?.role === 'hero' && <MouseAim />}
       {rooms.map((r) => (
         <RoomTile key={r.id} room={r} doors={doorsOf(s.rooms, r, isMaster)} draft={isMaster && !r.ready} />
       ))}

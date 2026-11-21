@@ -752,3 +752,11 @@
   flex: 1;
   justify-content: space-between;
 }
+
+/* Desktop: the menus keep their phone column, centered over the wide background (shell.css). */
+@media (hover: hover) and (pointer: fine) and (min-aspect-ratio: 1/1) {
+  .menu-content {
+    max-width: calc(430 * var(--ui-px));
+    margin-inline: auto;
+  }
+}

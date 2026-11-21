@@ -66,6 +66,10 @@ export default function Hud() {
             <MoveStick />
             <AttackStick cls={own.cls} />
             {(own.cls === 'priest' || own.cls === 'mage') && <SpecialStick cls={own.cls} />}
+            <p className="desktop-hint">
+              WASD mover · Clic atacar
+              {own.cls === 'priest' || own.cls === 'mage' ? ' · Clic derecho especial' : ' · Mantén para cargar'}
+            </p>
           </>
         )
       )}
