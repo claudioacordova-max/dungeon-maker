@@ -371,7 +371,7 @@ function HeroLabel({ hero, name, color, own }: { hero: HeroView; name: string; c
   return (
     <group ref={ref}>
       <Html center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
-        <div className={own ? 'world-label is-own' : 'world-label'}>
+        <div className={own ? 'world-label is-own' : 'world-label'} style={hero.dead ? { visibility: 'hidden' } : undefined}>
           <span className="world-name" style={{ color }}>
             {name}
           </span>
@@ -818,13 +818,13 @@ export default function World() {
         <DyingActor key={`d${d.id}`} d={d} />
       ))}
       {s.heroes.map((h) => {
-        if (h.dead) return null
         const player = state.players.find((p) => p.id === h.id)
         const color = PLAYER_COLORS[player?.color ?? 0]
         const own = h.id === state.you
+        // The label stays mounted while the hero is down (unmounting drei's Html mid-render breaks React).
         return (
           <group key={h.id}>
-            {own ? <OwnHero hero={h} color={color} /> : <OtherHero hero={h} color={color} />}
+            {!h.dead && (own ? <OwnHero hero={h} color={color} /> : <OtherHero hero={h} color={color} />)}
             <HeroLabel hero={h} name={player?.name ?? '?'} color={color} own={own} />
           </group>
         )

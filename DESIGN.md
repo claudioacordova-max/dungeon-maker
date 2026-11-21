@@ -99,9 +99,9 @@ Anterior, prueba de concepto multijugador, sin dependencias nuevas (el servidor 
 
 ## Plan actual (2026-11-21, máster en dos partes)
 
-1. [ ] Formas de suelo, caídas, paquete de pinchos y cofres por cantidad (servidor y pruebas).
-2. [ ] Panel del máster con pestañas Sala y Enemigos.
-3. [ ] Arte de Codex (GPT-6.2-Astra): suelo roto con abismo y pinchos que suben y bajan.
+1. [x] Formas de suelo, caídas, paquete de pinchos y cofres por cantidad (servidor y pruebas).
+2. [x] Panel del máster con pestañas Sala y Enemigos.
+3. [x] Arte de Codex (GPT-6.2-Astra): suelo roto con abismo y pinchos que suben y bajan.
 
 ## Plan anterior (2026-11-20, cuatro clases)
 
@@ -128,6 +128,8 @@ Versión 2 desplegada (2026-11-20):
 - Ajuste del agente: 2 s de protección al reaparecer (antes un héroe podía morir varias veces seguidas junto a los slimes).
 
 - 2026-11-21: cuatro clases. **Sacerdotisa elfa** (orbe de luz que daña o cura y atraviesa aliados; oración que cura a los cercanos) y **Mago anciano** (chispa que quema; polimorfia que convierte en gallina), ambos con maná visible sobre el botón de ataque. **Ogro** en la paleta del máster (+5). Tope de dificultad según los héroes de la partida (10/15/20/25). En la sala del jefe, el jefe aparece cuando caen los enemigos que puso el máster. Modelos, efectos y tarjetas nuevos por Codex (GPT-6.2-Astra, xhigh); vitrina en `?models`.
+
+- 2026-11-21: el máster edita cada sala en dos pestañas que comparten el tope. **Sala:** forma del suelo (Entera, Orillas, Cruz, Puente; +4), paquete de 8 pinchos que se alternan (+3) y de 0 a 3 cofres en lugares fijos (−5 c/u). **Enemigos:** slime, lanzador y ogro tocando el suelo. Caer al vacío cuenta como héroe derrotado. Arte del suelo roto y de los pinchos por Codex (GPT-6.2-Astra, xhigh).
 
 Problemas conocidos:
 - Las etiquetas de nombre sobre los héroes provocan a veces un aviso de React en la consola al empezar la partida («synchronously unmount a root»); no afecta al juego.
