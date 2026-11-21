@@ -1,5 +1,5 @@
 // One Durable Object per room code: keeps the lobby and runs the authoritative game loop in memory.
-import type { ClientMessage, HeroClass, LobbyPlayer, Phase, Role, ServerMessage } from '../src/shared/protocol.ts'
+import { HERO_CLASSES, type ClientMessage, type HeroClass, type LobbyPlayer, type Phase, type Role, type ServerMessage } from '../src/shared/protocol.ts'
 import { MAX_HEROES, TICK_HZ } from '../src/shared/rules.ts'
 import {
   attack,
@@ -16,6 +16,7 @@ import {
   reportTouched,
   setReady,
   shotHit,
+  shotHeal,
   snapshot,
   step,
   type Game,
@@ -154,7 +155,7 @@ export class Room {
       case 'start':
         return this.start(player)
       case 'class':
-        if (this.phase === 'lobby' && (message.cls === 'melee' || message.cls === 'ranged')) {
+        if (this.phase === 'lobby' && HERO_CLASSES.includes(message.cls as HeroClass)) {
           player.cls = message.cls as HeroClass
           this.broadcastLobby()
         }
@@ -175,6 +176,9 @@ export class Room {
           return
         case 'shotHit':
           shotHit(game, player.id, Number(message.seq), Number(message.target), Number(message.viewDelay))
+          return
+        case 'shotHeal':
+          shotHeal(game, player.id, Number(message.seq), String(message.ally))
           return
         case 'struck':
           reportStruck(game, player.id, Number(message.strike))

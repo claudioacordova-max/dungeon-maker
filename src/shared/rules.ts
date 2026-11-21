@@ -3,7 +3,10 @@ export const TEAM_LIVES = 3
 export const HERO_HITS = 4
 export const MAX_ROOMS = 6 // master rooms before the boss room (the start room does not count)
 export const ROOM_DIFFICULTY_CAP = 10
-export const DIFFICULTY = { slime: 2, thrower: 3, trap: 1, chest: -5 } as const
+export const CAP_PER_EXTRA_HERO = 5
+export const DIFFICULTY = { slime: 2, thrower: 3, ogre: 5, trap: 1, chest: -5 } as const
+// Cap of every room for a match with `heroes` heroes.
+export const roomCap = (heroes: number) => ROOM_DIFFICULTY_CAP + CAP_PER_EXTRA_HERO * Math.max(0, heroes - 1)
 export const CHEST_HEAL = 2
 export const RESPAWN_SECONDS = 1
 export const ENEMY_TELEGRAPH = 0.5 // seconds a red zone / aim line shows before an enemy strikes
@@ -29,11 +32,25 @@ export const HERO = {
     basic: { range: 6, speed: 13, damage: 1, cooldown: 0.42 },
     charged: { range: 9, speed: 22, damage: 3, cooldown: 0.5 },
   },
+  priest: {
+    basic: { range: 6, speed: 10, damage: 1, heal: 1, cooldown: 0.42, mana: 1 },
+    charged: { range: 3.5, heal: 1, cooldown: 0.5, mana: 3 },
+  },
+  mage: {
+    basic: { range: 5, speed: 12, damage: 1, cooldown: 0.42, mana: 1 },
+    charged: { range: 7, speed: 16, cooldown: 0.5, mana: 3 },
+  },
 } as const
+
+// Mana (priestess and mage): max and seconds to recover one point.
+export const MANA = { priest: { max: 4, regen: 1.5 }, mage: { max: 5, regen: 1.2 } } as const
+export const BURN = { perSecond: 0.5, seconds: 2 } as const
+export const POLYMORPH = { seconds: 4, bossSeconds: 1.5, bossImmune: 8, fleeSpeed: 1.6 } as const
 
 export const ENEMY = {
   slime: { hp: 3, radius: 0.4, speed: 2.1, touchCooldown: 0.8 },
   thrower: { hp: 2, radius: 0.4, speed: 1.8, keepMin: 3.2, keepMax: 6, cooldown: 2.2, orbSpeed: 6, orbRange: 9 },
+  ogre: { hp: 10, radius: 0.75, speed: 1.5, reach: 2.4, slamAhead: 1.3, slamRadius: 1.5, slamHits: 2, cooldown: 2.8, recover: 0.8 },
   king: { hp: BOSS_HP, radius: 1.15, speed: 1.3, touchCooldown: 1, jumpEvery: 4.5, jumpRadius: 1.8, fanEvery: 6, fanOrbs: 5 },
 } as const
 

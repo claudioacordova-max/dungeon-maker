@@ -10,15 +10,25 @@ import { useMaster } from '../game/master'
 import { me, SHOW_GHOSTS, useNet } from '../net/connection'
 import { latestEnemy, sampleEnemy, sampleHero, sampleOrb, sampleShot } from '../net/interp'
 import { buildableSlots, DIRS, doorState, isPlaceableCell, roomAtPoint, roomCenter } from '../shared/map'
-import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, Snapshot } from '../shared/protocol'
+import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, ShotKind, Snapshot } from '../shared/protocol'
 import { ENEMY, ENEMY_TELEGRAPH, HERO, MAX_ROOMS, ROOM_H, ROOM_W } from '../shared/rules'
 import { PLAYER_COLORS } from '../ui/screens'
 import {
+  BurnFx,
   Chest,
+  Chicken,
   EnemyOrb,
+  FireSpark,
+  HealFx,
   HeroBolt,
+  LightOrb,
+  MageHero,
   makePose,
   MeleeHero,
+  Ogre,
+  PolyBolt,
+  PoofFx,
+  PriestHero,
   RangedHero,
   RoomShell,
   SlashFx,
@@ -165,11 +175,29 @@ function Actor({
 }
 
 function HeroModel({ cls, pose, tint }: { cls: HeroView['cls']; pose: Pose; tint: string }) {
-  return (
-    <>
-      {cls === 'melee' ? <MeleeHero pose={pose} tint={tint} /> : <RangedHero pose={pose} tint={tint} />}
-    </>
-  )
+  if (cls === 'melee') return <MeleeHero pose={pose} tint={tint} />
+  if (cls === 'ranged') return <RangedHero pose={pose} tint={tint} />
+  if (cls === 'priest') return <PriestHero pose={pose} tint={tint} />
+  return <MageHero pose={pose} tint={tint} />
+}
+
+function ShotModel({ kind, crit }: { kind: ShotKind; crit: boolean }) {
+  if (kind === 'light') return <LightOrb />
+  if (kind === 'spark') return <FireSpark />
+  if (kind === 'poly') return <PolyBolt />
+  return <HeroBolt crit={crit} />
+}
+
+function EnemyModel({ kind, pose }: { kind: EnemyView['kind']; pose: Pose }) {
+  if (kind === 'slime') return <Slime pose={pose} />
+  if (kind === 'thrower') return <Thrower pose={pose} />
+  if (kind === 'ogre') return <Ogre pose={pose} />
+  return <SlimeKing pose={pose} />
+}
+
+// Heal burst on a hero (radius ~0.6) or around the praying priestess (her prayer's reach).
+function HealBurst({ at, radius }: { at: () => number; radius: number }) {
+  return <FxProgress get={() => Math.min(1, (performance.now() - at()) / 650)}>{(p) => <HealFx progress={p} radius={radius} />}</FxProgress>
 }
 
 // Slash / spin effect after an attack, driven by a clock function (ms of the last attack or -1).
@@ -212,9 +240,20 @@ function FxProgress({ get, children }: { get: () => number; children: (p: number
 const ownPos = () => (local.ready ? local : null)
 const ownFacing = () => local.facing
 
+function useHealClock(hero: HeroView) {
+  const seen = useRef({ heals: hero.heals, at: -1e9 })
+  if (hero.heals !== seen.current.heals) {
+    seen.current.heals = hero.heals
+    seen.current.at = performance.now()
+  }
+  return () => seen.current.at
+}
+
 function OwnHero({ hero, color }: { hero: HeroView; color: string }) {
   const aim = useRef<Group>(null)
   const aimMesh = useRef<Mesh>(null)
+  const healAt = useHealClock(hero)
+  const prayAt = () => (local.cls === 'priest' && feedback.attackKind === 'charged' ? feedback.attackAt : -1e9)
   useFrame(() => {
     const a = aim.current
     if (!a) return
@@ -225,7 +264,7 @@ function OwnHero({ hero, color }: { hero: HeroView; color: string }) {
     a.rotation.y = (local.aim ?? local.facing) - Math.PI / 2
     if (aimMesh.current) aimMesh.current.scale.set(1, 1, 0.4 + 0.6 * local.charge)
   })
-  const range = local.cls === 'melee' ? HERO.melee.basic.range : HERO.ranged.basic.range
+  const range = HERO[local.cls].basic.range
   return (
     <>
       <Actor
@@ -250,6 +289,8 @@ function OwnHero({ hero, color }: { hero: HeroView; color: string }) {
               <meshBasicMaterial color="#38bdf8" />
             </mesh>
             <AttackFx cls={hero.cls} at={() => feedback.attackAt} kind={() => feedback.attackKind} dir={() => feedback.attackDir - local.facing + Math.PI / 2} />
+            <HealBurst at={healAt} radius={0.6} />
+            <HealBurst at={prayAt} radius={HERO.priest.charged.range} />
           </>
         )}
       </Actor>
@@ -264,6 +305,7 @@ function OwnHero({ hero, color }: { hero: HeroView; color: string }) {
 }
 
 function OtherHero({ hero, color }: { hero: HeroView; color: string }) {
+  const healAt = useHealClock(hero)
   const last = useRef({ x: 0, y: 0, seq: hero.act?.seq ?? 0, at: -1e9, kind: 'basic' as 'basic' | 'charged', hp: hero.hp, hurtAt: -1e9 })
   const view = useRef(hero)
   view.current = hero
@@ -299,6 +341,8 @@ function OtherHero({ hero, color }: { hero: HeroView; color: string }) {
         <>
           <HeroModel cls={hero.cls} pose={pose} tint={color} />
           <AttackFx cls={hero.cls} at={() => last.current.at} kind={() => last.current.kind} dir={() => Math.PI / 2} />
+          <HealBurst at={healAt} radius={0.6} />
+          {hero.cls === 'priest' && <HealBurst at={() => (last.current.kind === 'charged' ? last.current.at : -1e9)} radius={HERO.priest.charged.range} />}
         </>
       )}
     </Actor>
@@ -332,7 +376,11 @@ function HeroLabel({ hero, name, color, own }: { hero: HeroView; name: string; c
 function EnemyActor({ enemy }: { enemy: EnemyView }) {
   const view = useRef(enemy)
   view.current = enemy
-  const track = useRef({ state: enemy.state, since: performance.now(), x: enemy.x, y: enemy.y })
+  const track = useRef({ state: enemy.state, since: performance.now(), x: enemy.x, y: enemy.y, chicken: enemy.chicken, poofAt: -1e9 })
+  if (enemy.chicken !== track.current.chicken) {
+    track.current.chicken = enemy.chicken
+    track.current.poofAt = performance.now()
+  }
   return (
     <Actor
       at={() => sampleEnemy(enemy.id)}
@@ -351,7 +399,7 @@ function EnemyActor({ enemy }: { enemy: EnemyView }) {
           const was = tr.state
           tr.state = e.state
           tr.since = now
-          if (was === 'windup') setAnim(pose, e.kind === 'slime' ? 'idle' : 'throw')
+          if (was === 'windup') setAnim(pose, e.kind === 'slime' ? 'idle' : e.kind === 'ogre' ? 'land' : 'throw')
           if (was === 'jump') setAnim(pose, 'land')
         }
         const flashing = e.stunned || (feedback.enemyFlash.get(e.id) ?? 0) > now
@@ -371,7 +419,11 @@ function EnemyActor({ enemy }: { enemy: EnemyView }) {
     >
       {(pose) => (
         <>
-          {enemy.kind === 'slime' ? <Slime pose={pose} /> : enemy.kind === 'thrower' ? <Thrower pose={pose} /> : <SlimeKing pose={pose} />}
+          {enemy.chicken ? <Chicken pose={pose} scale={enemy.kind === 'king' ? 2.4 : enemy.kind === 'ogre' ? 1.5 : 1} /> : <EnemyModel kind={enemy.kind} pose={pose} />}
+          {enemy.burning && <Burning radius={ENEMY[enemy.kind].radius} />}
+          <FxProgress get={() => Math.min(1, (performance.now() - track.current.poofAt) / 450)}>
+            {(p) => <PoofFx progress={p} scale={enemy.kind === 'king' ? 2.4 : enemy.kind === 'ogre' ? 1.6 : 1} />}
+          </FxProgress>
           <EnemyBar enemy={view} />
         </>
       )}
@@ -379,12 +431,23 @@ function EnemyActor({ enemy }: { enemy: EnemyView }) {
   )
 }
 
+function Burning({ radius }: { radius: number }) {
+  const [time, setTime] = useState(0)
+  useFrame(({ clock }) => {
+    // ~15 updates a second is plenty for flickering flames
+    const t = Math.floor(clock.elapsedTime * 15) / 15
+    if (t !== time) setTime(t)
+  })
+  return <BurnFx time={time} radius={radius} />
+}
+
 // Small health bar above an enemy, only once it is hurt.
 function EnemyBar({ enemy }: { enemy: { current: EnemyView } }) {
   const fill = useRef<Mesh>(null)
   const bar = useRef<Group>(null)
-  const h = enemy.current.kind === 'king' ? 3 : 1.25
-  const w = enemy.current.kind === 'king' ? 2.4 : 0.8
+  const kind = enemy.current.kind
+  const h = kind === 'king' ? 3 : kind === 'ogre' ? 2.2 : 1.25
+  const w = kind === 'king' ? 2.4 : kind === 'ogre' ? 1.4 : 0.8
   useFrame(({ camera }) => {
     const e = enemy.current
     if (!bar.current || !fill.current) return
@@ -410,7 +473,7 @@ function EnemyBar({ enemy }: { enemy: { current: EnemyView } }) {
 }
 
 // Enemies removed by the server play a short death before disappearing.
-type Dying = { id: number; kind: EnemyView['kind']; x: number; y: number; facing: number; at: number }
+type Dying = { id: number; kind: EnemyView['kind']; chicken: boolean; x: number; y: number; facing: number; at: number }
 function useDying(s: Snapshot | null) {
   const known = useRef(new Map<number, EnemyView>())
   const dying = useRef<Dying[]>([])
@@ -420,7 +483,7 @@ function useDying(s: Snapshot | null) {
     for (const [id, e] of known.current) {
       if (!ids.has(id)) {
         const p = latestEnemy(id) ?? e
-        dying.current.push({ id, kind: e.kind, x: p.x, y: p.y, facing: e.facing, at: now })
+        dying.current.push({ id, kind: e.kind, chicken: e.chicken, x: p.x, y: p.y, facing: e.facing, at: now })
         known.current.delete(id)
       }
     }
@@ -433,37 +496,47 @@ function useDying(s: Snapshot | null) {
 function DyingActor({ d }: { d: Dying }) {
   return (
     <Actor at={() => (performance.now() - d.at < 700 ? d : null)} facing={() => d.facing} update={(pose) => setAnim(pose, 'die')}>
-      {(pose) => (d.kind === 'slime' ? <Slime pose={pose} /> : d.kind === 'thrower' ? <Thrower pose={pose} /> : <SlimeKing pose={pose} />)}
+      {(pose) => (d.chicken ? <Chicken pose={pose} scale={d.kind === 'king' ? 2.4 : 1} /> : <EnemyModel kind={d.kind} pose={pose} />)}
     </Actor>
   )
 }
 
 // ---------- Projectiles, zones, items ----------
 
+const SHOT_KINDS: ShotKind[] = ['arrow', 'light', 'spark', 'poly']
 function OwnShots() {
   const pool = useRef<(Group | null)[]>([])
   useFrame(() => {
-    for (let i = 0; i < 8; i++) {
-      const g = pool.current[i]
-      const s = ownShots[i]
+    // One small pool per kind: the i-th visible shot of a kind uses that kind's i-th model.
+    const used = [0, 0, 0, 0]
+    for (const g of pool.current) if (g) g.visible = false
+    for (const s of ownShots) {
+      const k = SHOT_KINDS.indexOf(s.kind)
+      const g = pool.current[k * 8 + used[k]++]
       if (!g) continue
-      g.visible = !!s
-      if (!s) continue
+      g.visible = true
       g.position.set(s.x, 0.6, -s.y)
       g.rotation.y = s.dir - Math.PI / 2
       g.scale.setScalar(s.crit ? 1.4 : 1)
     }
   })
+  const kinds = SHOT_KINDS.filter((k) => k === shotKindOf(local.cls) || (local.cls === 'mage' && k === 'poly'))
   return (
     <>
-      {Array.from({ length: 8 }, (_, i) => (
-        <group key={i} ref={(g) => void (pool.current[i] = g)} visible={false}>
-          <HeroBolt crit={false} />
-        </group>
-      ))}
+      {SHOT_KINDS.map((kind, k) =>
+        kinds.includes(kind)
+          ? Array.from({ length: 8 }, (_, i) => (
+              <group key={`${kind}${i}`} ref={(g) => void (pool.current[k * 8 + i] = g)} visible={false}>
+                <ShotModel kind={kind} crit={false} />
+              </group>
+            ))
+          : null,
+      )}
     </>
   )
 }
+
+const shotKindOf = (cls: HeroView['cls']): ShotKind => (cls === 'priest' ? 'light' : cls === 'mage' ? 'spark' : 'arrow')
 
 function Moving({ at, dir, y, children }: { at: () => P | null; dir?: number; y: number; children: ReactNode }) {
   const ref = useRef<Group>(null)
@@ -593,7 +666,7 @@ function PlanGhost({ item }: { item: PlanItem }) {
     pose.t += dt
   })
   const node =
-    item.kind === 'slime' ? <Slime pose={pose} /> : item.kind === 'thrower' ? <Thrower pose={pose} /> : item.kind === 'chest' ? <Chest opened={false} /> : <SpikeTrap pose={pose} />
+    item.kind === 'chest' ? <Chest opened={false} /> : item.kind === 'trap' ? <SpikeTrap pose={pose} /> : <EnemyModel kind={item.kind} pose={pose} />
   return <group position={[item.cx + 0.5, 0, -(item.cy + 0.5)]}>{node}</group>
 }
 
@@ -719,7 +792,7 @@ export default function World() {
         .filter((sh) => sh.owner !== state.you)
         .map((sh) => (
           <Moving key={sh.id} at={() => sampleShot(sh.id)} dir={sh.dir} y={0.6}>
-            <HeroBolt crit={sh.crit} />
+            <ShotModel kind={sh.kind} crit={sh.crit} />
           </Moving>
         ))}
       {s.orbs.map((o) => (

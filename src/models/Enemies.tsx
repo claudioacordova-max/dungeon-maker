@@ -520,3 +520,5 @@ export function Thrower({ pose }: { pose: Pose }) {
     </group>
   </group>
 }
+
+export { loft }

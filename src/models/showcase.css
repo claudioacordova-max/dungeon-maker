@@ -147,3 +147,8 @@
   .dm-gallery-title { top: 10px; }
   .dm-playback { bottom: 8px; }
 }
+.dm-playback { flex-direction: column; }
+.dm-playback-row { display: flex; gap: 8px; }
+.dm-rooms button { padding-inline: clamp(8px, 3vw, 18px); }
+.dm-rooms button[aria-pressed="true"] { background: #ffca79; color: #3e293c; }
+.dm-gallery[data-focused="true"] .dm-rooms { display: none; }

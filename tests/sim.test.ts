@@ -17,6 +17,7 @@ import {
   reportTouched,
   setReady,
   shotHit,
+  shotHeal,
   step,
   type Game,
 } from '../src/shared/sim.ts'
@@ -248,4 +249,138 @@ test('a chest opens when a hero hits it, heals that hero, and stays shut when wa
   assert.equal(openChest(g, 'a', chest.id), false, 'already open')
   run(g, 1.5)
   assert.ok(!g.items.includes(chest), 'it vanishes after opening')
+})
+
+test('cap per room grows 5 per extra hero; the ogre costs 5', () => {
+  assert.equal(createGame([{ id: 'a', cls: 'melee' }]).cap, 10)
+  const ids = ['a', 'b', 'c', 'd'].map((id) => ({ id, cls: 'melee' as const }))
+  assert.equal(createGame(ids.slice(0, 2)).cap, 15)
+  const g = createGame(ids)
+  assert.equal(g.cap, 25)
+  build(g, 0, 1, 'normal')
+  const room = g.rooms[1]
+  for (let i = 0; i < 5; i++) assert.ok(place(g, room.id, 'ogre', 1 + i, 3))
+  assert.equal(difficulty(room.plan), 25)
+  assert.equal(place(g, room.id, 'trap', 1, 5), false, 'over the 4-hero cap')
+})
+
+test('mana: priestess and mage spend it and it recovers; no mana, no attack', () => {
+  const g = createGame([{ id: 'a', cls: 'mage' }])
+  const hero = g.heroes[0]
+  assert.equal(hero.mana, R.MANA.mage.max)
+  let seq = 1
+  for (let i = 0; i < 5; i++) {
+    assert.ok(attack(g, 'a', seq++, 'basic', 0, [], 0))
+    run(g, R.HERO.mage.basic.cooldown)
+  }
+  hero.mana = 0
+  assert.equal(attack(g, 'a', seq++, 'basic', 0, [], 0), null)
+  run(g, R.MANA.mage.regen * 3 + 0.1)
+  assert.ok(attack(g, 'a', seq++, 'charged', 0, [], 0), 'polymorph needs 3')
+})
+
+test('priestess: the orb hurts enemies and heals allies once; the prayer heals everyone close', () => {
+  const g = createGame([
+    { id: 'p', cls: 'priest' },
+    { id: 'b', cls: 'melee' },
+    { id: 'c', cls: 'melee' },
+  ])
+  const [priest, b, c] = g.heroes
+  b.hp = 1
+  c.hp = 1
+  b.x = priest.x + 2
+  b.y = priest.y
+  c.x = priest.x + 20
+  const seq = attack(g, 'p', 1, 'basic', 0, [], 0)!
+  assert.ok(shotHeal(g, 'p', seq, 'b'))
+  assert.equal(b.hp, 2)
+  assert.equal(shotHeal(g, 'p', seq, 'b'), false, 'once per orb and ally')
+  assert.equal(shotHeal(g, 'p', seq, 'c'), false, 'too far')
+  const slime = g.enemies[0]
+  slime.x = priest.x + 3
+  slime.y = priest.y
+  run(g, 0.1)
+  assert.ok(shotHit(g, 'p', seq, slime.id, 0))
+  assert.equal(slime.hp, R.ENEMY.slime.hp - 1)
+  run(g, 0.5)
+  priest.hp = 2
+  c.x = priest.x + 1
+  attack(g, 'p', 2, 'charged', 0, [], 0)
+  assert.deepEqual([priest.hp, b.hp, c.hp], [3, 3, 2])
+})
+
+test('mage: the spark burns; polymorph makes a harmless chicken, short and with a cooldown on the boss', () => {
+  const g = createGame([{ id: 'a', cls: 'mage' }])
+  const hero = g.heroes[0]
+  const [s1, s2] = g.enemies
+  s1.x = hero.x + 3
+  s1.y = hero.y
+  run(g, 0.1)
+  const seq = attack(g, 'a', 1, 'basic', 0, [], 0)!
+  assert.ok(shotHit(g, 'a', seq, s1.id, 0))
+  run(g, R.BURN.seconds + 0.2)
+  assert.equal(s1.hp, R.ENEMY.slime.hp - 1 - R.BURN.perSecond * R.BURN.seconds)
+  s2.x = hero.x + 0.6
+  s2.y = hero.y
+  run(g, 0.1)
+  const poly = attack(g, 'a', 2, 'charged', 0, [], 0)!
+  assert.ok(shotHit(g, 'a', poly, s2.id, 0))
+  assert.ok(s2.poly > 0)
+  assert.equal(reportTouched(g, 'a', s2.id), false, 'a chicken does not hurt')
+  run(g, R.POLYMORPH.seconds + 0.1)
+  assert.equal(s2.poly, 0)
+
+  // Boss
+  const b = createGame([{ id: 'a', cls: 'mage' }])
+  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]) build(b, gx, gy, 'normal')
+  build(b, 0, 7, 'boss')
+  setReady(b, b.rooms.at(-1)!.id, true)
+  const king = b.enemies.find((e) => e.kind === 'king')!
+  const mage = b.heroes[0]
+  mage.x = king.x
+  mage.y = king.y - 3
+  king.cooldown = 0
+  step(b, 0.05)
+  assert.equal(b.strikes.length, 1, 'jump announced')
+  const p1 = attack(b, 'a', 1, 'charged', Math.PI / 2, [], 0)!
+  assert.ok(shotHit(b, 'a', p1, king.id, 0))
+  assert.equal(king.poly, R.POLYMORPH.bossSeconds)
+  assert.equal(b.strikes.length, 0, 'the announced jump is cancelled')
+  run(b, R.POLYMORPH.bossSeconds + 1)
+  mage.mana = R.MANA.mage.max
+  const p2 = attack(b, 'a', 2, 'charged', Math.PI / 2, [], 0)!
+  shotHit(b, 'a', p2, king.id, 0)
+  assert.equal(king.poly, 0, 'boss immune for a while')
+})
+
+test('ogre: announced slam in front that takes 2 hits; boss room spawns the boss after its enemies', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  g.enemies = []
+  build(g, 0, 1, 'normal')
+  const room = g.rooms[1]
+  place(g, room.id, 'ogre', 5, 5)
+  setReady(g, room.id, true)
+  const ogre = g.enemies.find((e) => e.kind === 'ogre')!
+  const hero = g.heroes[0]
+  hero.x = ogre.x
+  hero.y = ogre.y - 1.5
+  ogre.cooldown = 0
+  step(g, 0.05)
+  assert.equal(ogre.state, 'windup')
+  run(g, R.ENEMY_TELEGRAPH)
+  assert.ok(reportStruck(g, 'a', g.strikes[0].id))
+  assert.equal(hero.hp, R.HERO_HITS - 2)
+
+  const b = createGame([{ id: 'a', cls: 'melee' }])
+  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]) build(b, gx, gy, 'normal')
+  build(b, 0, 7, 'boss')
+  const boss = b.rooms.at(-1)!
+  place(b, boss.id, 'slime', 2, 2)
+  setReady(b, boss.id, true)
+  assert.deepEqual(b.enemies.filter((e) => e.room === boss.id).map((e) => e.kind), ['slime'])
+  const slime = b.enemies.find((e) => e.room === boss.id)!
+  slime.hp = 0
+  step(b, 0.05)
+  assert.deepEqual(b.enemies.filter((e) => e.room === boss.id).map((e) => e.kind), ['king'])
+  assert.equal(boss.enemies, 1, 'the doors never see an empty boss room')
 })

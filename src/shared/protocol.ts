@@ -8,9 +8,10 @@
 // +y is north (up the screen), drawn as -z in three.js.
 
 export type Role = 'hero' | 'master'
-export type HeroClass = 'melee' | 'ranged'
-export type Placeable = 'slime' | 'thrower' | 'trap' | 'chest'
-export type EnemyKind = 'slime' | 'thrower' | 'king'
+export type HeroClass = 'melee' | 'ranged' | 'priest' | 'mage'
+export const HERO_CLASSES: readonly HeroClass[] = ['melee', 'ranged', 'priest', 'mage']
+export type Placeable = 'slime' | 'thrower' | 'ogre' | 'trap' | 'chest'
+export type EnemyKind = 'slime' | 'thrower' | 'ogre' | 'king'
 export type RoomKind = 'start' | 'normal' | 'boss'
 export type Dir = 'n' | 'e' | 's' | 'w'
 export type DoorState = 'none' | 'closed' | 'open' | 'locked'
@@ -43,6 +44,8 @@ export type HeroView = {
   dead: boolean
   respawnIn: number
   act: HeroAct | null // last attack, for others to animate
+  mana: number // priestess and mage (0 for the others)
+  heals: number // times this hero was healed: a change shows the heal effect
 }
 export type EnemyView = {
   id: number
@@ -55,15 +58,20 @@ export type EnemyView = {
   facing: number
   state: 'idle' | 'move' | 'windup' | 'jump' | 'recover'
   stunned: boolean
+  burning: boolean
+  chicken: boolean // polymorphed
 }
 export type StrikeView = { id: number; x: number; y: number; r: number; remaining: number }
 export type AimView = { enemy: number; dir: number; remaining: number } // thrower / boss aim before throwing
 export type OrbView = { id: number; x: number; y: number }
-export type ShotView = { id: number; owner: string; x: number; y: number; dir: number; crit: boolean }
+// kind: arrow (archer), light (priestess orb), spark (mage), poly (polymorph)
+export type ShotKind = 'arrow' | 'light' | 'spark' | 'poly'
+export type ShotView = { id: number; owner: string; x: number; y: number; dir: number; crit: boolean; kind: ShotKind }
 export type ItemView = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number; opened: boolean }
 
 export type Snapshot = {
   lives: number
+  cap: number // difficulty cap of each room in this match
   rooms: RoomView[]
   normalRooms: number
   heroes: HeroView[]
@@ -93,6 +101,8 @@ export type ClientMessage =
   // enemies in the past (half the round trip + interpolation), so the server checks against what was seen.
   | { type: 'attack'; seq: number; kind: 'basic' | 'charged'; dir: number; hits: number[]; viewDelay: number }
   | { type: 'shotHit'; seq: number; target: number; viewDelay: number }
+  // The priestess's orb reached an ally on her screen: it heals that ally (once per orb and ally).
+  | { type: 'shotHeal'; seq: number; ally: string }
   // The device saw an enemy attack land on its hero.
   | { type: 'struck'; strike: number }
   | { type: 'orbHit'; orb: number }

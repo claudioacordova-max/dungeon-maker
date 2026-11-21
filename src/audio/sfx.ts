@@ -137,6 +137,47 @@ export const sfx = {
       tone({ type: 'triangle', f0: 1760, f1: 2640, dur: 0.12, vol: 0.15, at: 0.02 }, s)
       noise({ dur: 0.12, vol: 0.35, filter: 'lowpass', f0: 4000 }, s)
     }),
+  noMana: (v = 1) => play('no-mana', v, (s) => tone({ type: 'sine', f0: 260, f1: 180, dur: 0.12, vol: 0.18 }, s), 250),
+  light: (v = 1) =>
+    play('light', v, (s) => {
+      tone({ type: 'sine', f0: 990, f1: 1480, dur: 0.18, vol: 0.2 }, s)
+      tone({ type: 'triangle', f0: 1980, dur: 0.1, vol: 0.08, at: 0.03 }, s)
+    }),
+  prayer: (v = 1) =>
+    play('prayer', v, (s) => {
+      ;[523, 659, 784, 1047].forEach((f, i) => tone({ type: 'sine', f0: f, dur: 0.5 - i * 0.06, vol: 0.16, at: i * 0.05, attack: 0.04 }, s))
+    }),
+  heal: (v = 1) =>
+    play('heal', v, (s) => {
+      ;[784, 1175].forEach((f, i) => tone({ type: 'sine', f0: f, f1: f * 1.06, dur: 0.18, vol: 0.18, at: i * 0.07 }, s))
+    }, 90),
+  spark: (v = 1) =>
+    play('spark', v, (s) => {
+      noise({ dur: 0.16, vol: 0.3, filter: 'bandpass', f0: 1800, f1: 600, q: 1.2 }, s)
+      tone({ type: 'sawtooth', f0: 520, f1: 260, dur: 0.12, vol: 0.12 }, s)
+    }),
+  polyCast: (v = 1) =>
+    play('poly-cast', v, (s) => {
+      tone({ type: 'sine', f0: 300, f1: 1200, dur: 0.3, vol: 0.2 }, s)
+      tone({ type: 'triangle', f0: 600, f1: 2400, dur: 0.3, vol: 0.08, at: 0.04 }, s)
+    }),
+  poof: (v = 1) =>
+    play('poof', v, (s) => {
+      noise({ dur: 0.3, vol: 0.3, filter: 'lowpass', f0: 2000, f1: 300 }, s)
+      // a little cluck
+      tone({ type: 'square', f0: 900, f1: 600, dur: 0.05, vol: 0.14, at: 0.15 }, s)
+      tone({ type: 'square', f0: 1000, f1: 650, dur: 0.06, vol: 0.14, at: 0.24 }, s)
+    }, 120),
+  ogreSlam: (v = 1) =>
+    play('ogre-slam', v, (s) => {
+      tone({ type: 'sine', f0: 110, f1: 40, dur: 0.4, vol: 0.5 }, s)
+      noise({ dur: 0.3, vol: 0.4, filter: 'lowpass', f0: 900, f1: 100 }, s)
+    }),
+  ogreDie: (v = 1) =>
+    play('ogre-die', v, (s) => {
+      tone({ type: 'sawtooth', f0: 160, f1: 50, dur: 0.7, vol: 0.32 }, s)
+      noise({ dur: 0.5, vol: 0.3, filter: 'lowpass', f0: 700, f1: 90 }, s)
+    }),
   enemyHurt: (v = 1) => play('enemy-hurt', v, (s) => tone({ type: 'square', f0: 300, f1: 160, dur: 0.08, vol: 0.18 }, s), 70),
   slimeDie: (v = 1) =>
     play('slime-die', v, (s) => {

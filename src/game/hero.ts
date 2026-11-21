@@ -3,10 +3,10 @@
 // attacks are resolved here, against what this screen shows, and reported to the server.
 import { sfx } from '../audio/sfx'
 import { useNet } from '../net/connection'
-import { INTERP_DELAY, sampleEnemy, sampleOrb } from '../net/interp'
+import { INTERP_DELAY, sampleEnemy, sampleHero, sampleOrb } from '../net/interp'
 import { angleDiff, moveHero } from '../shared/map'
-import type { HeroClass, Snapshot, StrikeView } from '../shared/protocol'
-import { CHARGE_TIME, ENEMY, HERO, HERO_RADIUS, HIT_INVULNERABLE } from '../shared/rules'
+import type { EnemyKind, HeroClass, ShotKind, Snapshot, StrikeView } from '../shared/protocol'
+import { CHARGE_TIME, ENEMY, HERO, HERO_RADIUS, HIT_INVULNERABLE, MANA } from '../shared/rules'
 import { attackInput, moveInput } from './input'
 
 export const local = {
@@ -19,6 +19,14 @@ export const local = {
   moving: false,
   charge: 0, // 0..1 while holding attack
   aim: null as number | null, // direction shown while aiming
+  mana: 0, // priestess and mage, predicted here like the server does
+  noManaAt: -1e9, // performance.now() of the last attack refused for lack of mana
+}
+
+export const manaMax = (cls: HeroClass) => (cls === 'priest' || cls === 'mage' ? MANA[cls].max : 0)
+export function manaCost(cls: HeroClass, charged: boolean) {
+  const spec = HERO[cls][charged ? 'charged' : 'basic']
+  return 'mana' in spec ? spec.mana : 0
 }
 
 // Local feedback (performance.now() ms), read by the scene for animations and effects.
@@ -31,7 +39,7 @@ export const feedback = {
 }
 
 // Own shots fly on this device; hits are reported with the attack's seq.
-export type LocalShot = { seq: number; x: number; y: number; dir: number; speed: number; left: number; crit: boolean }
+export type LocalShot = { seq: number; x: number; y: number; dir: number; speed: number; left: number; crit: boolean; kind: ShotKind; healed: Set<string> }
 export const shots: LocalShot[] = []
 
 type PendingStrike = StrikeView & { landsAt: number; done: boolean }
@@ -58,12 +66,18 @@ export function onSnapshot(s: Snapshot, you: string) {
     local.facing = me.facing
     local.epoch = me.epoch
     local.cls = me.cls
+    local.mana = me.mana
     local.ready = true
   }
+  // Mana is predicted here; adopt the server's value when they drift apart (e.g. a refused attack).
+  if (me && Math.abs(me.mana - local.mana) > 0.75) local.mana = me.mana
   const now = performance.now()
+  const live = new Set(s.strikes.map((st) => st.id))
   for (const strike of s.strikes) {
     if (!strikes.has(strike.id)) strikes.set(strike.id, { ...strike, landsAt: now + strike.remaining * 1000, done: false })
   }
+  // A strike that vanished before landing was cancelled (its enemy became a chicken).
+  for (const [id, strike] of strikes) if (!live.has(id) && !strike.done && strike.landsAt - now > 120) strikes.delete(id)
   for (const [id, strike] of strikes) if (now - strike.landsAt > 3000) strikes.delete(id)
   if (orbsHit.size > 64) orbsHit.clear()
 }
@@ -96,8 +110,8 @@ function hurt(now: number) {
   invulnerableUntil = now + HIT_INVULNERABLE * 1000
 }
 
-function enemyRadius(kind: string) {
-  return kind === 'king' ? ENEMY.king.radius : kind === 'thrower' ? ENEMY.thrower.radius : ENEMY.slime.radius
+function enemyRadius(kind: EnemyKind) {
+  return ENEMY[kind].radius
 }
 
 // Nearest enemy (as shown here) within `range`, for auto-aim.
@@ -123,6 +137,13 @@ function fire(charged: boolean, manualDir: number | null) {
   const now = performance.now()
   if (!net.snapshot || !me || me.dead || !local.ready || now < readyAt) return
   const spec = HERO[local.cls][charged ? 'charged' : 'basic']
+  const cost = manaCost(local.cls, charged)
+  if (local.mana < cost) {
+    local.noManaAt = now
+    sfx.noMana()
+    return
+  }
+  local.mana -= cost
   readyAt = now + spec.cooldown * 1000
   const dir = manualDir ?? autoAim(spec.range * 1.4) ?? local.facing
   local.facing = dir
@@ -133,7 +154,9 @@ function fire(charged: boolean, manualDir: number | null) {
   const viewDelay = (net.latency / 2 + INTERP_DELAY) / 1000
   const hits: number[] = []
   if (local.cls === 'melee') (charged ? sfx.spin : sfx.swing)()
-  else (charged ? sfx.critShot : sfx.shot)()
+  else if (local.cls === 'ranged') (charged ? sfx.critShot : sfx.shot)()
+  else if (local.cls === 'priest') (charged ? sfx.prayer : sfx.light)()
+  else (charged ? sfx.polyCast : sfx.spark)()
   if (local.cls === 'melee') {
     const melee = HERO.melee
     for (const e of net.snapshot.enemies) {
@@ -161,9 +184,10 @@ function fire(charged: boolean, manualDir: number | null) {
         : d <= melee.basic.range && (d < 0.3 || angleDiff(Math.atan2(dy, dx), dir) <= melee.basic.arc / 2)
       if (inside) net.send({ type: 'openChest', item: item.id })
     }
-  } else {
-    const s = HERO.ranged[charged ? 'charged' : 'basic']
-    shots.push({ seq, x: local.x, y: local.y, dir, speed: s.speed, left: s.range, crit: charged })
+  } else if (!(local.cls === 'priest' && charged)) {
+    const s = spec as { speed: number; range: number }
+    const kind: ShotKind = local.cls === 'priest' ? 'light' : local.cls === 'mage' ? (charged ? 'poly' : 'spark') : 'arrow'
+    shots.push({ seq, x: local.x, y: local.y, dir, speed: s.speed, left: s.range, crit: local.cls === 'ranged' && charged, kind, healed: new Set() })
   }
   net.send({ type: 'attack', seq, kind: charged ? 'charged' : 'basic', dir, hits, viewDelay })
 }
@@ -175,6 +199,8 @@ export function frame(dt: number) {
   if (!local.ready || !me || !s) return
   const now = performance.now()
   const step = Math.min(dt, 0.1)
+  const max = manaMax(local.cls)
+  if (max > 0 && !me.dead) local.mana = Math.min(max, local.mana + step / MANA[local.cls as 'priest' | 'mage'].regen)
 
   // Own shots (drawn by the scene) and their hits.
   for (let i = shots.length - 1; i >= 0; i--) {
@@ -184,11 +210,24 @@ export function frame(dt: number) {
     shot.y += Math.sin(shot.dir) * move
     shot.left -= move
     let hit = false
+    // The priestess's orb heals every ally it passes through, then keeps flying.
+    if (shot.kind === 'light') {
+      for (const h of s.heroes) {
+        if (h.id === net.you || h.dead || shot.healed.has(h.id)) continue
+        const p = sampleHero(h.id)
+        if (p && Math.hypot(p.x - shot.x, p.y - shot.y) <= HERO_RADIUS + 0.3) {
+          shot.healed.add(h.id)
+          net.send({ type: 'shotHeal', seq: shot.seq, ally: h.id })
+          if (h.hp < 4) sfx.heal()
+        }
+      }
+    }
     for (const e of s.enemies) {
       const p = sampleEnemy(e.id)
       if (p && Math.hypot(p.x - shot.x, p.y - shot.y) <= enemyRadius(e.kind) + 0.2) {
         net.send({ type: 'shotHit', seq: shot.seq, target: e.id, viewDelay: (net.latency / 2 + INTERP_DELAY) / 1000 })
-        ;(shot.crit ? sfx.critHit : sfx.hit)()
+        if (shot.kind === 'poly') sfx.poof()
+        else (shot.crit ? sfx.critHit : sfx.hit)()
         feedback.enemyFlash.set(e.id, now + 180)
         hit = true
         break
@@ -271,7 +310,7 @@ export function frame(dt: number) {
     }
   }
   for (const e of s.enemies) {
-    if (e.kind === 'thrower') continue
+    if ((e.kind !== 'slime' && e.kind !== 'king') || e.chicken) continue
     const p = sampleEnemy(e.id)
     if (!p || Math.hypot(p.x - local.x, p.y - local.y) > enemyRadius(e.kind) + HERO_RADIUS) continue
     const cooldown = e.kind === 'king' ? ENEMY.king.touchCooldown : ENEMY.slime.touchCooldown

@@ -9,7 +9,7 @@ export const art = (file: string) => `/ui/${file}`
 
 export const PLAYER_COLORS = ['#38bdf8', '#f472b6', '#facc15', '#a3e635', '#fb923c']
 
-const CLASS_NAME: Record<HeroClass, string> = { melee: 'Espadachín', ranged: 'Arquera' }
+const CLASS_NAME: Record<HeroClass, string> = { melee: 'Espadachín', ranged: 'Arquera', priest: 'Sacerdotisa', mage: 'Mago' }
 
 // Dungeon backdrop for the menus (home, lobby, connecting).
 function MenuScreen({ label, children, kind = '' }: { label: string; children: ReactNode; kind?: string }) {
@@ -133,6 +133,8 @@ const PICKS: Pick[] = [
   { id: 'master', title: 'Maestro de mazmorra', tag: 'Construye la mazmorra', image: 'card-master.webp' },
   { id: 'melee', title: 'Espadachín', tag: 'Cuerpo a cuerpo', image: 'card-melee.webp' },
   { id: 'ranged', title: 'Arquera', tag: 'A distancia', image: 'card-ranged.webp' },
+  { id: 'priest', title: 'Sacerdotisa', tag: 'Cura al equipo', image: 'card-priest.webp' },
+  { id: 'mage', title: 'Mago', tag: 'Hechizos', image: 'card-mage.webp' },
 ]
 
 export function LobbyScreen() {
@@ -227,8 +229,10 @@ export function LobbyScreen() {
               >
                 {isSel && <CrownIcon />}
                 <span className="pick-art" style={{ backgroundImage: `url(${art(pick.image)})` }} />
-                <b>{pick.title}</b>
-                <small>{taken ? `Lo es ${master?.name}` : pick.tag}</small>
+                <span className="pick-text">
+                  <b>{pick.title}</b>
+                  <small>{taken ? `Lo es ${master?.name}` : pick.tag}</small>
+                </span>
               </button>
             )
           })}

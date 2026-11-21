@@ -15,7 +15,7 @@ import {
   walkable,
   type MapRoom,
 } from './map.ts'
-import type { EnemyKind, HeroAct, HeroClass, PlanItem, Placeable, RoomKind, Snapshot } from './protocol.ts'
+import type { EnemyKind, HeroAct, HeroClass, PlanItem, Placeable, RoomKind, ShotKind, Snapshot } from './protocol.ts'
 import * as R from './rules.ts'
 
 export { moveHero }
@@ -35,7 +35,9 @@ export type Hero = {
   readyAt: number // game time of the next allowed attack
   lastAttackAt: number
   act: HeroAct | null
-  shots: Map<number, { charged: boolean; at: number; used: boolean }>
+  mana: number
+  heals: number
+  shots: Map<number, { charged: boolean; at: number; used: boolean; healed: Set<string> }>
 }
 
 type EnemyState = 'idle' | 'move' | 'windup' | 'jump' | 'recover'
@@ -54,16 +56,20 @@ type Enemy = {
   cooldown2: number // boss: fan of orbs
   stun: number
   aim: number // direction of the next throw
-  pending: 'throw' | 'fan' | 'jump' | null
+  pending: 'throw' | 'fan' | 'jump' | 'slam' | null
   jumpFrom: { x: number; y: number }
   jumpTo: { x: number; y: number }
   touched: Map<string, number> // hero id -> game time of the last contact hit
+  burn: number // seconds of burning left
+  burnTick: number // seconds to the next burn damage
+  poly: number // seconds left as a chicken
+  polyImmuneUntil: number // boss: game time before which it cannot be polymorphed again
 }
 
-type Room = MapRoom & { kind: RoomKind; entered: boolean; plan: PlanItem[] }
-type Strike = { id: number; x: number; y: number; r: number; landsAt: number; claimed: Set<string> }
+type Room = MapRoom & { kind: RoomKind; entered: boolean; plan: PlanItem[]; bossSpawned: boolean }
+type Strike = { id: number; owner: number; x: number; y: number; r: number; hits: number; landsAt: number; claimed: Set<string> }
 type Orb = { id: number; room: number; x: number; y: number; vx: number; vy: number; left: number; hitBy: Set<string> }
-type Shot = { id: number; owner: string; x: number; y: number; dir: number; speed: number; left: number; crit: boolean }
+type Shot = { id: number; owner: string; seq: number; x: number; y: number; dir: number; speed: number; left: number; crit: boolean; kind: ShotKind }
 type Item = { id: number; room: number; kind: 'trap' | 'chest'; x: number; y: number; openedAt: number | null }
 type EnemyFrame = { time: number; pos: Map<number, { x: number; y: number }> }
 
@@ -81,7 +87,11 @@ export type Game = {
   history: EnemyFrame[]
   result: 'playing' | 'heroes-won' | 'master-won'
   nextId: number
+  cap: number // difficulty cap of each room (grows with the number of heroes)
 }
+
+const usesMana = (cls: HeroClass): cls is 'priest' | 'mage' => cls === 'priest' || cls === 'mage'
+const enemyRadius = (kind: EnemyKind) => R.ENEMY[kind].radius
 
 const ORB_RADIUS = 0.25
 
@@ -111,8 +121,9 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
     history: [],
     result: 'playing',
     nextId: 1,
+    cap: R.roomCap(heroes.length),
   }
-  const start: Room = { id: game.nextId++, gx: 0, gy: 0, kind: 'start', ready: true, entered: true, enemies: 0, plan: [] }
+  const start: Room = { id: game.nextId++, gx: 0, gy: 0, kind: 'start', ready: true, entered: true, enemies: 0, plan: [], bossSpawned: false }
   start.plan = [
     { kind: 'slime' as const, cx: 3, cy: 9 },
     { kind: 'slime' as const, cx: 7, cy: 10 },
@@ -135,13 +146,15 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
     readyAt: 0,
     lastAttackAt: -99,
     act: null,
+    mana: usesMana(h.cls) ? R.MANA[h.cls].max : 0,
+    heals: 0,
     shots: new Map(),
   }))
   return game
 }
 
 function spawnEnemy(game: Game, room: Room, kind: EnemyKind, x: number, y: number) {
-  const hp = kind === 'king' ? R.ENEMY.king.hp : R.ENEMY[kind].hp
+  const hp = R.ENEMY[kind].hp
   game.enemies.push({
     id: game.nextId++,
     kind,
@@ -161,6 +174,10 @@ function spawnEnemy(game: Game, room: Room, kind: EnemyKind, x: number, y: numbe
     jumpFrom: { x, y },
     jumpTo: { x, y },
     touched: new Map(),
+    burn: 0,
+    burnTick: 0,
+    poly: 0,
+    polyImmuneUntil: 0,
   })
 }
 
@@ -172,14 +189,19 @@ function spawnRoom(game: Game, room: Room) {
   for (const p of room.plan) {
     const x = o.x + p.cx + 0.5
     const y = o.y + p.cy + 0.5
-    if (p.kind === 'slime' || p.kind === 'thrower') spawnEnemy(game, room, p.kind, x, y)
-    else game.items.push({ id: game.nextId++, room: room.id, kind: p.kind, x, y, openedAt: null })
+    if (p.kind === 'trap' || p.kind === 'chest') game.items.push({ id: game.nextId++, room: room.id, kind: p.kind, x, y, openedAt: null })
+    else spawnEnemy(game, room, p.kind, x, y)
   }
-  if (room.kind === 'boss') {
-    const c = roomCenter(room)
-    spawnEnemy(game, room, 'king', c.x, c.y + 2)
-  }
+  room.bossSpawned = false
+  // Boss room in phases: the boss appears once the enemies the master placed there are defeated.
+  if (room.kind === 'boss' && !game.enemies.some((e) => e.room === room.id)) spawnBoss(game, room)
   countEnemies(game)
+}
+
+function spawnBoss(game: Game, room: Room) {
+  const c = roomCenter(room)
+  spawnEnemy(game, room, 'king', c.x, c.y + 2)
+  room.bossSpawned = true
 }
 
 function countEnemies(game: Game) {
@@ -202,7 +224,7 @@ export function build(game: Game, gx: number, gy: number, kind: 'normal' | 'boss
   if (game.rooms.some((r) => r.kind === 'boss')) return false // the boss room is always the last one
   if (kind === 'normal' && normalRooms(game) >= R.MAX_ROOMS) return false
   if (kind === 'boss' && normalRooms(game) < R.MAX_ROOMS) return false
-  game.rooms.push({ id: game.nextId++, gx, gy, kind, ready: false, entered: false, enemies: 0, plan: [] })
+  game.rooms.push({ id: game.nextId++, gx, gy, kind, ready: false, entered: false, enemies: 0, plan: [], bossSpawned: false })
   return true
 }
 
@@ -240,7 +262,7 @@ export function place(game: Game, roomId: number, kind: Placeable, cx: number, c
   if (!room || !(kind in R.DIFFICULTY) || !isPlaceableCell(cx, cy)) return false
   if (room.plan.some((p) => p.cx === cx && p.cy === cy)) return false
   if (room.kind === 'boss' && Math.abs(cx + 0.5 - R.ROOM_W / 2) < 2 && Math.abs(cy + 0.5 - (R.ROOM_H / 2 + 2)) < 2) return false
-  if (!canAdd(room.plan, kind)) return false
+  if (!canAdd(room.plan, kind, game.cap)) return false
   room.plan.push({ kind, cx, cy })
   if (room.ready) spawnRoom(game, room)
   return true
@@ -253,7 +275,7 @@ export function removeItem(game: Game, roomId: number, cx: number, cy: number): 
   if (index < 0) return false
   const next = room.plan.filter((_, i) => i !== index)
   // Removing a chest may push the room over the cap: not allowed.
-  if (next.reduce((s, p) => s + R.DIFFICULTY[p.kind], 0) > R.ROOM_DIFFICULTY_CAP) return false
+  if (next.reduce((s, p) => s + R.DIFFICULTY[p.kind], 0) > game.cap) return false
   room.plan = next
   if (room.ready) spawnRoom(game, room)
   return true
@@ -309,11 +331,11 @@ function enemyPositionAt(game: Game, enemyId: number, time: number) {
 function hurtEnemy(game: Game, hero: Hero, enemy: Enemy, damage: number) {
   enemy.hp -= damage
   enemy.stun = R.ENEMY_HIT_STUN
-  if (enemy.kind !== 'king') {
+  if (enemy.kind !== 'king' && enemy.kind !== 'ogre') {
     const d = dist(enemy.x, enemy.y, hero.x, hero.y) || 1
     const room = game.rooms.find((r) => r.id === enemy.room)
     const pushed = { x: enemy.x + ((enemy.x - hero.x) / d) * R.ENEMY_KNOCKBACK, y: enemy.y + ((enemy.y - hero.y) / d) * R.ENEMY_KNOCKBACK }
-    const c = room ? clampToRoom(room, pushed.x, pushed.y, R.ENEMY[enemy.kind].radius) : pushed
+    const c = room ? clampToRoom(room, pushed.x, pushed.y, enemyRadius(enemy.kind)) : pushed
     enemy.x = c.x
     enemy.y = c.y
   }
@@ -323,8 +345,7 @@ function hurtEnemy(game: Game, hero: Hero, enemy: Enemy, damage: number) {
 function plausible(game: Game, hero: Hero, enemy: Enemy, reach: number, viewDelay: number) {
   const delay = Math.max(0, Math.min(R.MAX_VIEW_DELAY, Number(viewDelay) || 0))
   const seen = enemyPositionAt(game, enemy.id, game.time - delay) ?? enemy
-  const radius = enemy.kind === 'king' ? R.ENEMY.king.radius : R.ENEMY[enemy.kind].radius
-  const limit = reach + radius + R.HIT_RANGE_TOLERANCE
+  const limit = reach + enemyRadius(enemy.kind) + R.HIT_RANGE_TOLERANCE
   return dist(seen.x, seen.y, hero.x, hero.y) <= limit || dist(enemy.x, enemy.y, hero.x, hero.y) <= limit
 }
 
@@ -343,6 +364,11 @@ export function attack(
   if (!hero || game.time < hero.readyAt - 0.08 || !Number.isFinite(dir)) return null
   if (!Number.isInteger(seq) || seq <= (hero.act?.seq ?? 0)) return null // the device numbers its attacks
   const spec = R.HERO[hero.cls][kind === 'charged' ? 'charged' : 'basic']
+  if ('mana' in spec) {
+    // Mana regenerates the same way on the device; a small margin absorbs timing differences.
+    if (hero.mana < spec.mana - 0.25) return null
+    hero.mana = Math.max(0, hero.mana - spec.mana)
+  }
   hero.readyAt = game.time + spec.cooldown
   hero.lastAttackAt = game.time
   hero.facing = dir
@@ -351,37 +377,107 @@ export function attack(
     const ids = Array.isArray(hits) ? hits.slice(0, 12).map(Number) : []
     for (const id of new Set(ids)) {
       const enemy = game.enemies.find((e) => e.id === id && e.hp > 0)
-      if (enemy && plausible(game, hero, enemy, spec.range, viewDelay)) hurtEnemy(game, hero, enemy, spec.damage)
+      if (enemy && plausible(game, hero, enemy, spec.range, viewDelay)) hurtEnemy(game, hero, enemy, R.HERO.melee[kind].damage)
     }
     finishEnemies(game)
     return seq
   }
-  const s = spec as (typeof R.HERO)['ranged']['basic']
-  hero.shots.set(seq, { charged: kind === 'charged', at: game.time, used: false })
+  if (hero.cls === 'priest' && kind === 'charged') {
+    // Prayer: heals every living ally close to her, herself included.
+    const pray = R.HERO.priest.charged
+    for (const ally of game.heroes) {
+      if (!ally.dead && dist(ally.x, ally.y, hero.x, hero.y) <= pray.range + R.HIT_RANGE_TOLERANCE) heal(ally, pray.heal)
+    }
+    return seq
+  }
+  const s = spec as { speed: number; range: number }
+  hero.shots.set(seq, { charged: kind === 'charged', at: game.time, used: false, healed: new Set() })
   if (hero.shots.size > 8) hero.shots.delete(hero.shots.keys().next().value!)
-  game.shots.push({ id: game.nextId++, owner: hero.id, x: hero.x, y: hero.y, dir, speed: s.speed, left: s.range, crit: kind === 'charged' })
+  game.shots.push({
+    id: game.nextId++,
+    owner: hero.id,
+    seq,
+    x: hero.x,
+    y: hero.y,
+    dir,
+    speed: s.speed,
+    left: s.range,
+    crit: hero.cls === 'ranged' && kind === 'charged',
+    kind: shotKind(hero.cls, kind),
+  })
   return seq
+}
+
+function shotKind(cls: HeroClass, kind: 'basic' | 'charged'): ShotKind {
+  if (cls === 'priest') return 'light'
+  if (cls === 'mage') return kind === 'charged' ? 'poly' : 'spark'
+  return 'arrow'
+}
+
+function heal(hero: Hero, amount: number) {
+  if (hero.dead || hero.hp >= R.HERO_HITS) return false
+  hero.hp = Math.min(R.HERO_HITS, hero.hp + amount)
+  hero.heals += 1
+  return true
+}
+
+// The mage's polymorph: a defenseless chicken for a few seconds; it drops whatever attack it was announcing.
+function polymorph(game: Game, enemy: Enemy) {
+  if (enemy.kind === 'king') {
+    if (game.time < enemy.polyImmuneUntil) return
+    enemy.poly = R.POLYMORPH.bossSeconds
+    enemy.polyImmuneUntil = game.time + R.POLYMORPH.bossSeconds + R.POLYMORPH.bossImmune
+  } else enemy.poly = R.POLYMORPH.seconds
+  if (enemy.state === 'jump') {
+    // Lands where it was going, harmlessly.
+    enemy.x = enemy.jumpTo.x
+    enemy.y = enemy.jumpTo.y
+  }
+  game.strikes = game.strikes.filter((s) => s.owner !== enemy.id || s.landsAt <= game.time)
+  enemy.state = 'idle'
+  enemy.pending = null
+  enemy.stateTime = 0
 }
 
 export function shotHit(game: Game, heroId: string, seq: number, target: number, viewDelay: number): boolean {
   const hero = heroOf(game, heroId)
   const shot = hero?.shots.get(seq)
   const enemy = game.enemies.find((e) => e.id === target && e.hp > 0)
-  if (!hero || hero.cls !== 'ranged' || !shot || shot.used || !enemy || game.time - shot.at > 1.5) return false
-  const spec = R.HERO.ranged[shot.charged ? 'charged' : 'basic']
-  if (!plausible(game, hero, enemy, spec.range, viewDelay)) return false
+  if (!hero || hero.cls === 'melee' || !shot || shot.used || !enemy || game.time - shot.at > 1.5) return false
+  const kind = shot.charged ? 'charged' : 'basic'
+  if (!plausible(game, hero, enemy, R.HERO[hero.cls][kind].range, viewDelay)) return false
   shot.used = true
-  hurtEnemy(game, hero, enemy, spec.damage)
+  if (hero.cls === 'mage' && shot.charged) polymorph(game, enemy)
+  else {
+    const spec = R.HERO[hero.cls][kind] as { damage: number }
+    hurtEnemy(game, hero, enemy, spec.damage)
+    if (hero.cls === 'mage') {
+      if (enemy.burn <= 0) enemy.burnTick = 1
+      enemy.burn = R.BURN.seconds
+    }
+  }
   // The shot stops for everyone at the enemy it hit.
-  const flying = game.shots.filter((s) => s.owner === hero.id)
-  if (flying.length) game.shots = game.shots.filter((s) => s !== flying[0])
+  game.shots = game.shots.filter((s) => !(s.owner === hero.id && s.seq === seq))
   finishEnemies(game)
   return true
 }
 
-function damageHero(game: Game, hero: Hero) {
+// The priestess's light orb passed through an ally on her screen.
+export function shotHeal(game: Game, heroId: string, seq: number, allyId: string): boolean {
+  const hero = heroOf(game, heroId)
+  const shot = hero?.shots.get(seq)
+  const ally = game.heroes.find((h) => h.id === allyId)
+  if (!hero || hero.cls !== 'priest' || !shot || shot.charged || !ally || ally === hero || shot.healed.has(allyId)) return false
+  if (game.time - shot.at > 1.5) return false
+  const spec = R.HERO.priest.basic
+  if (dist(ally.x, ally.y, hero.x, hero.y) > spec.range + R.HIT_RANGE_TOLERANCE + 1) return false
+  shot.healed.add(allyId)
+  return heal(ally, spec.heal)
+}
+
+function damageHero(game: Game, hero: Hero, hits = 1) {
   if (hero.dead || hero.invulnerable > 0 || game.result !== 'playing') return false
-  hero.hp -= 1
+  hero.hp -= hits
   hero.invulnerable = R.HIT_INVULNERABLE
   if (hero.hp <= 0) {
     hero.hp = 0
@@ -403,7 +499,7 @@ export function reportStruck(game: Game, heroId: string, strikeId: number): bool
   if (game.time < strike.landsAt - R.ENEMY_TELEGRAPH || game.time > strike.landsAt + R.STRIKE_CLAIM_WINDOW) return false
   if (dist(strike.x, strike.y, hero.x, hero.y) > strike.r + 2) return false
   strike.claimed.add(heroId)
-  return damageHero(game, hero)
+  return damageHero(game, hero, strike.hits)
 }
 
 export function reportOrb(game: Game, heroId: string, orbId: number): boolean {
@@ -431,8 +527,8 @@ export function openChest(game: Game, heroId: string, itemId: number): boolean {
 export function reportTouched(game: Game, heroId: string, enemyId: number): boolean {
   const hero = heroOf(game, heroId)
   const enemy = game.enemies.find((e) => e.id === enemyId && e.hp > 0)
-  if (!hero || !enemy || enemy.kind === 'thrower') return false
-  const reach = (enemy.kind === 'king' ? R.ENEMY.king.radius : R.ENEMY.slime.radius) + R.HERO_RADIUS + 0.9
+  if (!hero || !enemy || (enemy.kind !== 'slime' && enemy.kind !== 'king') || enemy.poly > 0) return false
+  const reach = enemyRadius(enemy.kind) + R.HERO_RADIUS + 0.9
   if (dist(enemy.x, enemy.y, hero.x, hero.y) > reach) return false
   const cooldown = enemy.kind === 'king' ? R.ENEMY.king.touchCooldown : R.ENEMY.slime.touchCooldown
   if (game.time - (enemy.touched.get(heroId) ?? -99) < cooldown) return false
@@ -449,8 +545,12 @@ export function removeHero(game: Game, heroId: string) {
 function finishEnemies(game: Game) {
   const killedBoss = game.enemies.some((e) => e.kind === 'king' && e.hp <= 0)
   game.enemies = game.enemies.filter((e) => e.hp > 0)
-  countEnemies(game)
   if (killedBoss && game.result === 'playing') game.result = 'heroes-won'
+  for (const room of game.rooms) {
+    // Same tick as the last placed enemy falls, so the doors never open in between.
+    if (room.kind === 'boss' && room.ready && !room.bossSpawned && !game.enemies.some((e) => e.room === room.id)) spawnBoss(game, room)
+  }
+  countEnemies(game)
 }
 
 function throwOrb(game: Game, enemy: Enemy, dir: number) {
@@ -473,6 +573,15 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
   enemy.cooldown = Math.max(0, enemy.cooldown - dt)
   enemy.cooldown2 = Math.max(0, enemy.cooldown2 - dt)
   enemy.stun = Math.max(0, enemy.stun - dt)
+  if (enemy.burn > 0) {
+    enemy.burn -= dt
+    enemy.burnTick -= dt
+    if (enemy.burnTick <= 0) {
+      enemy.hp -= R.BURN.perSecond // no stun: burning never locks an enemy in place
+      enemy.burnTick += 1
+    }
+    if (enemy.burn <= 0) enemy.burn = 0
+  }
   let target: Hero | undefined
   let best = Infinity
   for (const hero of heroes) {
@@ -482,6 +591,23 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
       best = d
       target = hero
     }
+  }
+
+  if (enemy.poly > 0) {
+    // A chicken: no attacks, it just runs away from the nearest hero.
+    enemy.poly = Math.max(0, enemy.poly - dt)
+    if (!target || enemy.stun > 0) {
+      enemy.state = 'idle'
+      return
+    }
+    const away = Math.atan2(enemy.y - target.y, enemy.x - target.x)
+    enemy.facing = away
+    enemy.state = 'move'
+    const flee = R.POLYMORPH.fleeSpeed * dt
+    const p = clampToRoom(room, enemy.x + Math.cos(away) * flee, enemy.y + Math.sin(away) * flee, enemyRadius(enemy.kind))
+    enemy.x = p.x
+    enemy.y = p.y
+    return
   }
 
   if (enemy.state === 'windup' || enemy.state === 'jump') {
@@ -497,9 +623,10 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
       const n = R.ENEMY.king.fanOrbs
       for (let i = 0; i < n; i++) throwOrb(game, enemy, enemy.aim + (i - (n - 1) / 2) * 0.32)
     }
+    const slammed = enemy.pending === 'slam'
     enemy.pending = null
     enemy.state = 'recover'
-    enemy.stateTime = 0.45
+    enemy.stateTime = slammed ? R.ENEMY.ogre.recover : 0.45
     return
   }
   if (enemy.state === 'recover') {
@@ -538,13 +665,36 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
     return
   }
 
+  if (enemy.kind === 'ogre') {
+    const spec = R.ENEMY.ogre
+    if (enemy.cooldown <= 0 && best <= spec.reach) {
+      // Club slam: a red zone in front of it, announced like every enemy attack.
+      game.strikes.push({
+        id: game.nextId++,
+        owner: enemy.id,
+        x: enemy.x + Math.cos(toward) * spec.slamAhead,
+        y: enemy.y + Math.sin(toward) * spec.slamAhead,
+        r: spec.slamRadius,
+        hits: spec.slamHits,
+        landsAt: game.time + R.ENEMY_TELEGRAPH,
+        claimed: new Set(),
+      })
+      enemy.state = 'windup'
+      enemy.stateTime = R.ENEMY_TELEGRAPH
+      enemy.pending = 'slam'
+      enemy.aim = toward
+      enemy.cooldown = spec.cooldown
+      return
+    }
+  }
+
   if (enemy.kind === 'king') {
     const spec = R.ENEMY.king
     if (enemy.cooldown <= 0) {
       // Jump onto the target: a red zone where it will land.
       const to = clampToRoom(room, target.x, target.y, spec.radius)
       const id = game.nextId++
-      game.strikes.push({ id, x: to.x, y: to.y, r: spec.jumpRadius, landsAt: game.time + R.ENEMY_TELEGRAPH, claimed: new Set() })
+      game.strikes.push({ id, owner: enemy.id, x: to.x, y: to.y, r: spec.jumpRadius, hits: 1, landsAt: game.time + R.ENEMY_TELEGRAPH, claimed: new Set() })
       enemy.state = 'jump'
       enemy.stateTime = R.ENEMY_TELEGRAPH
       enemy.pending = 'jump'
@@ -563,7 +713,7 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
     }
   }
 
-  const spec = enemy.kind === 'king' ? R.ENEMY.king : R.ENEMY.slime
+  const spec = R.ENEMY[enemy.kind]
   if (enemy.stun > 0 || best < spec.radius + R.HERO_RADIUS * 0.6) {
     enemy.state = 'idle'
     return
@@ -581,6 +731,7 @@ export function step(game: Game, dt: number) {
   const alive = game.heroes.filter((h) => !h.dead)
   for (const hero of game.heroes) {
     hero.invulnerable = Math.max(0, hero.invulnerable - dt)
+    if (usesMana(hero.cls)) hero.mana = Math.min(R.MANA[hero.cls].max, hero.mana + dt / R.MANA[hero.cls].regen)
     if (hero.dead && game.time >= hero.respawnAt) {
       hero.dead = false
       hero.hp = R.HERO_HITS
@@ -638,6 +789,7 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
   const r2 = (v: number) => Math.round(v * 100) / 100
   return {
     lives: game.lives,
+    cap: game.cap,
     normalRooms: normalRooms(game),
     rooms: game.rooms.map((room) => ({
       id: room.id,
@@ -660,6 +812,8 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       dead: h.dead,
       respawnIn: h.dead ? Math.max(0, Math.ceil(h.respawnAt - game.time)) : 0,
       act: h.act,
+      mana: r2(h.mana),
+      heals: h.heals,
     })),
     enemies: game.enemies.map((e) => ({
       id: e.id,
@@ -672,6 +826,8 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       facing: r2(e.facing),
       state: e.state,
       stunned: e.stun > 0,
+      burning: e.burn > 0,
+      chicken: e.poly > 0,
     })),
     strikes: game.strikes
       .filter((s) => s.landsAt >= game.time)
@@ -680,7 +836,7 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       .filter((e) => e.state === 'windup' && (e.pending === 'throw' || e.pending === 'fan'))
       .map((e) => ({ enemy: e.id, dir: r2(e.aim), remaining: r2(e.stateTime) })),
     orbs: game.orbs.map((o) => ({ id: o.id, x: r2(o.x), y: r2(o.y) })),
-    shots: game.shots.map((s) => ({ id: s.id, owner: s.owner, x: r2(s.x), y: r2(s.y), dir: r2(s.dir), crit: s.crit })),
+    shots: game.shots.map((s) => ({ id: s.id, owner: s.owner, x: r2(s.x), y: r2(s.y), dir: r2(s.dir), crit: s.crit, kind: s.kind })),
     items: game.items.map((i) => ({ id: i.id, room: i.room, kind: i.kind, x: i.x, y: i.y, opened: i.openedAt !== null })),
   }
 }

@@ -2,7 +2,8 @@
 // thumb touches (lower-left area), and an attack stick bottom-right: tap = attack with auto-aim, drag = aim by
 // hand, hold = charge the powered attack, released when the thumb lifts.
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { local } from '../game/hero'
+import { local, manaMax } from '../game/hero'
+import type { HeroClass } from '../shared/protocol'
 import { setAttackStick, setMoveStick } from '../game/input'
 
 const MOVE_RADIUS = 52 // design px the knob can travel
@@ -72,7 +73,42 @@ export function MoveStick() {
   )
 }
 
-export function AttackStick({ melee }: { melee: boolean }) {
+const KNOB: Record<HeroClass, string> = {
+  melee: 'M19 3 9 13l2 2L21 5V3zM5 15l4 4M3 21l3-3M8 12l4 4',
+  ranged: 'M4 20 20 4M14 4h6v6M4 14l6 6',
+  priest: 'M12 3v18M6 9h12',
+  mage: 'M5 19 15 9M13 4l1.5 3L18 8.5 14.5 10 13 13l-1.5-3L8 8.5 11.5 7z',
+}
+
+// Mana pips over the attack stick (priestess and mage), refreshed every frame; they flash when an attack is
+// refused for lack of mana.
+function ManaBar({ cls }: { cls: HeroClass }) {
+  const pips = useRef<(HTMLElement | null)[]>([])
+  const bar = useRef<HTMLDivElement>(null)
+  const max = manaMax(cls)
+  useEffect(() => {
+    let raf = 0
+    const tick = () => {
+      for (let i = 0; i < max; i++) {
+        const el = pips.current[i]
+        if (el) el.style.setProperty('--fill', String(Math.max(0, Math.min(1, local.mana - i))))
+      }
+      bar.current?.classList.toggle('is-empty', performance.now() - local.noManaAt < 400)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [max])
+  return (
+    <div ref={bar} className="mana-bar" role="img" aria-label="Maná">
+      {Array.from({ length: max }, (_, i) => (
+        <i key={i} ref={(el) => void (pips.current[i] = el)} />
+      ))}
+    </div>
+  )
+}
+
+export function AttackStick({ cls }: { cls: HeroClass }) {
   const base = useRef<HTMLDivElement>(null)
   const ring = useRef<HTMLDivElement>(null)
   const knob = useRef<HTMLDivElement>(null)
@@ -114,7 +150,7 @@ export function AttackStick({ melee }: { melee: boolean }) {
   return (
     <div
       ref={base}
-      className={melee ? 'attack-stick is-melee' : 'attack-stick is-ranged'}
+      className={`attack-stick is-${cls}`}
       data-width="118"
       role="button"
       aria-label="Atacar (mantener para cargar)"
@@ -130,13 +166,10 @@ export function AttackStick({ melee }: { melee: boolean }) {
       <div ref={ring} className="charge-ring" />
       <div ref={knob} className="attack-knob">
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          {melee ? (
-            <path d="M19 3 9 13l2 2L21 5V3zM5 15l4 4M3 21l3-3M8 12l4 4" stroke="currentColor" strokeWidth="2.4" fill="none" strokeLinecap="round" />
-          ) : (
-            <path d="M4 20 20 4M14 4h6v6M4 14l6 6" stroke="currentColor" strokeWidth="2.4" fill="none" strokeLinecap="round" />
-          )}
+          <path d={KNOB[cls]} stroke="currentColor" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
+      {manaMax(cls) > 0 && <ManaBar cls={cls} />}
     </div>
   )
 }

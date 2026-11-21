@@ -62,8 +62,8 @@ export function difficulty(plan: readonly PlanItem[]): number {
   return plan.reduce((sum, p) => sum + R.DIFFICULTY[p.kind], 0)
 }
 
-export function canAdd(plan: readonly PlanItem[], kind: Placeable): boolean {
-  return difficulty(plan) + R.DIFFICULTY[kind] <= R.ROOM_DIFFICULTY_CAP
+export function canAdd(plan: readonly PlanItem[], kind: Placeable, cap: number): boolean {
+  return difficulty(plan) + R.DIFFICULTY[kind] <= cap
 }
 
 // True when a circle of radius r at (x, y) is on walkable floor: inside a room's floor, or crossing a wall

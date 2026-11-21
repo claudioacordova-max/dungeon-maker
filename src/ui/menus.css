@@ -601,7 +601,36 @@
 }
 
 .pick-cards {
-  grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pick-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2em;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The master gets a whole row (art beside the text); the four heroes share the row below. */
+.pick-card.is-master {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: 0.6em;
+  padding: 0.3em 0.6em;
+}
+
+.pick-card.is-master .pick-art {
+  width: 26%;
+  aspect-ratio: 1;
+  flex: none;
+}
+
+.pick-card.is-master b {
+  font-size: 0.8em;
+  min-height: 0;
 }
 
 .pick-card {
@@ -610,6 +639,7 @@
 
 .pick-card.is-master small {
   white-space: normal;
+  font-size: 0.58em;
   line-height: 1.15;
   text-align: center;
 }

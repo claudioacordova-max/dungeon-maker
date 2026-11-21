@@ -3,7 +3,7 @@ import { useMaster } from '../game/master'
 import { me, useNet } from '../net/connection'
 import { canAdd, difficulty } from '../shared/map'
 import type { Placeable, Snapshot } from '../shared/protocol'
-import { DIFFICULTY, MAX_ROOMS, ROOM_DIFFICULTY_CAP, TEAM_LIVES } from '../shared/rules'
+import { DIFFICULTY, MAX_ROOMS, TEAM_LIVES } from '../shared/rules'
 import { AttackStick, MoveStick } from './Controls'
 import MiniMap from './MiniMap'
 import SoundToggle from './SoundToggle'
@@ -63,7 +63,7 @@ export default function Hud() {
         !own.dead && (
           <>
             <MoveStick />
-            <AttackStick melee={own.cls === 'melee'} />
+            <AttackStick cls={own.cls} />
           </>
         )
       )}
@@ -75,6 +75,7 @@ export default function Hud() {
 const TOOLS: { kind: Placeable; label: string }[] = [
   { kind: 'slime', label: 'Slime' },
   { kind: 'thrower', label: 'Lanzador' },
+  { kind: 'ogre', label: 'Ogro' },
   { kind: 'trap', label: 'Trampa' },
   { kind: 'chest', label: 'Cofre' },
 ]
@@ -118,6 +119,7 @@ function MasterPanel({ s }: { s: Snapshot }) {
   if (mode === 'room' && room) {
     const plan = room.plan ?? []
     const value = difficulty(plan)
+    const cap = s.cap
     const locked = room.entered || room.kind === 'start'
     return (
       <div className="master-panel panel">
@@ -125,13 +127,13 @@ function MasterPanel({ s }: { s: Snapshot }) {
           <button type="button" className="ui-button small" onClick={toMap}>
             Mapa
           </button>
-          <div className="meter" aria-label={`Dificultad ${value} de ${ROOM_DIFFICULTY_CAP}`}>
+          <div className="meter" aria-label={`Dificultad ${value} de ${cap}`}>
             <span className="meter-label">{room.kind === 'boss' ? 'Sala del jefe' : 'Dificultad'}</span>
             <span className="meter-bar">
-              <i style={{ width: `${Math.max(0, Math.min(1, value / ROOM_DIFFICULTY_CAP)) * 100}%` }} />
+              <i style={{ width: `${Math.max(0, Math.min(1, value / cap)) * 100}%` }} />
             </span>
             <b>
-              {value}/{ROOM_DIFFICULTY_CAP}
+              {value}/{cap}
             </b>
           </div>
         </div>
@@ -146,7 +148,7 @@ function MasterPanel({ s }: { s: Snapshot }) {
                   type="button"
                   className={tool === t.kind ? 'ui-button tool is-selected' : 'ui-button tool'}
                   aria-pressed={tool === t.kind}
-                  disabled={!canAdd(plan, t.kind)}
+                  disabled={!canAdd(plan, t.kind, cap)}
                   onClick={() => setTool(t.kind)}
                 >
                   <span>{t.label}</span>
@@ -202,6 +204,7 @@ function MasterPanel({ s }: { s: Snapshot }) {
                 </button>
               )}
             </div>
+            {room.kind === 'boss' && <p className="master-note">El jefe aparece cuando caen los enemigos de esta sala.</p>}
             <p className="master-note">Toca una casilla para poner {TOOLS.find((t) => t.kind === tool)?.label.toLowerCase()}; tócala de nuevo para quitarlo.</p>
           </>
         )}

@@ -325,3 +325,6 @@ function Hero({ pose, tint, ranged }: HeroProps & { ranged: boolean }) {
 
 export function MeleeHero(props: HeroProps) { return <Hero {...props} ranged={false} /> }
 export function RangedHero(props: HeroProps) { return <Hero {...props} ranged /> }
+
+// Shared sculpting pieces for the other hero rigs. All sizes are in board cells.
+export { shell, fold, beveled, band, toe, face, taper, diamond, eyes, liftVisor, part, paint, team, lit, ramp }

@@ -1,7 +1,10 @@
-import { useLayoutEffect, useMemo, useRef, type RefObject } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Group, MathUtils, PerspectiveCamera, Vector3 } from 'three'
 import { MeleeHero, RangedHero } from './Heroes'
+import { PriestHero, MageHero } from './Spellcasters'
+import { Ogre, Chicken } from './Creatures'
+import { PreviewMagic, type MagicExhibit } from './MagicEffects'
 import { Slime, SlimeKing, Thrower } from './Enemies'
 import { Chest, RoomShell, SpikeTrap } from './Dungeon'
 import { BlobShadow, EnemyOrb, HeroBolt, PreviewStroke } from './Effects'
@@ -9,21 +12,39 @@ import { bake, box, toon } from './kit'
 import { makePose, type Anim, type Pose } from './types'
 import './showcase.css'
 
-type Exhibit = { name: string; x: number; z: number; labelOffset: number; anims?: Anim[] }
+type Name = 'Warrior' | 'Ranger' | 'Priestess' | 'Mage' | 'Ogre' | 'Chicken' | 'Thrower' | 'Slime' |
+  'Slime King' | 'Chest' | 'Spikes' | 'Bolts' | 'Orb' | 'Slash' | 'Spin' | MagicExhibit
+type Exhibit = { name: Name; x: number; z: number; labelOffset: number; anims?: Anim[]; width?: number; height?: number }
 const heroClips: Anim[] = ['idle', 'run', 'attack', 'charge', 'special', 'hurt', 'die']
-const exhibits: Exhibit[] = [
-  { name: 'Warrior', x: .18, z: .85, labelOffset: .40, anims: heroClips },
-  { name: 'Ranger', x: .50, z: .85, labelOffset: .40, anims: heroClips },
-  { name: 'Thrower', x: .82, z: .85, labelOffset: .40, anims: ['idle', 'run', 'windup', 'throw', 'hurt', 'die'] },
-  { name: 'Slime', x: .16, z: .49, labelOffset: .46, anims: ['idle', 'run', 'hurt', 'die'] },
-  { name: 'Slime King', x: .50, z: .47, labelOffset: 1.04, anims: ['idle', 'run', 'windup', 'jump', 'land', 'throw', 'hurt', 'die'] },
-  { name: 'Chest', x: .84, z: .49, labelOffset: .55 },
-  { name: 'Bolts', x: .105, z: .17, labelOffset: .48 },
-  { name: 'Orb', x: .30, z: .17, labelOffset: .48 },
-  { name: 'Spikes', x: .495, z: .17, labelOffset: .48, anims: ['idle', 'trigger'] },
-  { name: 'Slash', x: .69, z: .17, labelOffset: .48 },
-  { name: 'Spin', x: .89, z: .17, labelOffset: .48 },
-]
+const smallClips: Anim[] = ['idle','run','hurt','die']
+const pages = ['Heroes','Dungeon','Combat','Magic'] as const
+type Page = typeof pages[number]
+const rooms: Record<Page, Exhibit[]> = {
+  Heroes: [
+    { name: 'Warrior', x: .27, z: .74, labelOffset: .40, anims: heroClips },
+    { name: 'Ranger', x: .73, z: .74, labelOffset: .40, anims: heroClips },
+    { name: 'Priestess', x: .27, z: .30, labelOffset: .42, anims: heroClips },
+    { name: 'Mage', x: .73, z: .30, labelOffset: .42, anims: heroClips },
+  ],
+  Dungeon: [
+    { name: 'Slime King', x: .26, z: .78, labelOffset: 1.04, anims: ['idle','run','windup','jump','land','throw','hurt','die'], width: 3.45, height: .72 },
+    { name: 'Ogre', x: .74, z: .78, labelOffset: .85, anims: ['idle','run','windup','land','hurt','die'], width: 2.85, height: .86 },
+    { name: 'Thrower', x: .19, z: .45, labelOffset: .41, anims: ['idle','run','windup','throw','hurt','die'] },
+    { name: 'Chicken', x: .50, z: .45, labelOffset: .27, anims: smallClips, width: 1.12, height: .23 },
+    { name: 'Slime', x: .81, z: .45, labelOffset: .46, anims: smallClips },
+    { name: 'Chest', x: .27, z: .18, labelOffset: .53 },
+    { name: 'Spikes', x: .73, z: .18, labelOffset: .50, anims: ['idle','trigger'] },
+  ],
+  Combat: [
+    { name: 'Bolts', x: .27, z: .74, labelOffset: .48 }, { name: 'Orb', x: .73, z: .74, labelOffset: .48 },
+    { name: 'Slash', x: .27, z: .30, labelOffset: .55 }, { name: 'Spin', x: .73, z: .30, labelOffset: .55 },
+  ],
+  Magic: [
+    { name: 'Light orb', x: .27, z: .79, labelOffset: .42 }, { name: 'Fire spark', x: .73, z: .79, labelOffset: .42 },
+    { name: 'Poly bolt', x: .27, z: .50, labelOffset: .42 }, { name: 'Burn', x: .73, z: .50, labelOffset: .48 },
+    { name: 'Heal', x: .27, z: .20, labelOffset: .58 }, { name: 'Poof', x: .73, z: .20, labelOffset: .48 },
+  ],
+}
 const doors = { n: 'closed', s: 'none', e: 'locked', w: 'open' } as const
 const interval = 1.55
 type Playback = { t: number; paused: boolean; focus: number }
@@ -34,12 +55,12 @@ const plinth = bake([
   { g: box, c: '#3b304a', p: [0, -.42, 0], s: [.95, .12, .95] },
 ], 0).color
 
-function FrameScene({ play, labels, w, h }: { play: Playback; labels: LabelRefs; w: number; h: number }) {
+function FrameScene({ play, labels, w, h, exhibits }: { play: Playback; labels: LabelRefs; w: number; h: number; exhibits: Exhibit[] }) {
   const camera = useThree(s => s.camera) as PerspectiveCamera
   const size = useThree(s => s.size)
   const project = useMemo(() => new Vector3(), [])
   const lastFocus = useRef(-2)
-  useLayoutEffect(() => { lastFocus.current = -2 }, [size, w, h])
+  useLayoutEffect(() => { lastFocus.current = -2 }, [size, w, h, exhibits])
   useFrame((_, dt) => {
     if (!play.paused) play.t += Math.min(dt, .1)
     if (lastFocus.current === play.focus) return
@@ -47,7 +68,7 @@ function FrameScene({ play, labels, w, h }: { play: Playback; labels: LabelRefs;
     const exhibit = exhibits[play.focus]
     const targetX = exhibit ? exhibit.x * w : w / 2
     const targetZ = exhibit ? -exhibit.z * h : -h / 2
-    const targetY = exhibit ? (play.focus === 4 ? .72 : .43) : .22
+    const targetY = exhibit ? (exhibit.height ?? .43) : .22
     const tilt = MathUtils.degToRad(50)
     function place(distance: number) {
       camera.position.set(targetX, targetY + Math.sin(tilt) * distance, targetZ + Math.cos(tilt) * distance)
@@ -55,7 +76,7 @@ function FrameScene({ play, labels, w, h }: { play: Playback; labels: LabelRefs;
       camera.updateMatrixWorld()
     }
     if (exhibit) {
-      const subjectWidth = play.focus === 4 ? 4.15 : 2.55
+      const subjectWidth = exhibit.width ?? 1.8
       place(Math.max(subjectWidth / camera.aspect, subjectWidth * .93) / (2 * Math.tan(MathUtils.degToRad(camera.fov / 2))))
     } else {
       // Fit all eight corners, including the front corners closest to the lens.
@@ -87,8 +108,8 @@ function FrameScene({ play, labels, w, h }: { play: Playback; labels: LabelRefs;
   return null
 }
 
-function Display({ i, play, w, h, labels }: { i: number; play: Playback; w: number; h: number; labels: LabelRefs }) {
-  const { x, z, anims } = exhibits[i]
+function Display({ entry, i, play, w, h, labels }: { entry: Exhibit; i: number; play: Playback; w: number; h: number; labels: LabelRefs }) {
+  const { name, x, z, anims } = entry
   const pose = useMemo(makePose, [])
   const exhibit = useRef<Group>(null)
   const motion = useRef<Group>(null)
@@ -103,7 +124,7 @@ function Display({ i, play, w, h, labels }: { i: number; play: Playback; w: numb
     pose.charge = Math.min(1, t / .85)
     pose.flash = anim === 'hurt' ? Math.max(0, 1 - t * 4.6) : 0
     let label: string = anims ? anim : ''
-    if (i === 5) {
+    if (name === 'Chest') {
       const opened = step % 2 === 1
       shut.current!.visible = !opened
       open.current!.visible = opened
@@ -113,49 +134,55 @@ function Display({ i, play, w, h, labels }: { i: number; play: Playback; w: numb
       const el = labels.current[i]?.lastElementChild
       if (el) { el.textContent = label; lastLabel.current = label }
     }
-    if (i === 4 && motion.current) motion.current.position.y = anim === 'jump' ? .39 + .11 * Math.sin(t * 5) : 0
-    if ((i === 6 || i === 7) && motion.current) {
+    if (name === 'Slime King' && motion.current) motion.current.position.y = anim === 'jump' ? .39 + .11 * Math.sin(t * 5) : 0
+    if (motion.current && (name === 'Bolts' || name === 'Orb' || name === 'Light orb' || name === 'Fire spark' || name === 'Poly bolt')) {
       motion.current.position.y = .38 + .055 * Math.sin(play.t * 4)
-      if (i === 7) motion.current.rotation.y = play.t * 2
+      motion.current.rotation.y = name === 'Orb' ? play.t * 2 : -.61
     }
   }, -2)
-  return <group ref={exhibit} name={exhibits[i].name} position={[x * w, 0, -z * h]}
+  return <group ref={exhibit} name={name} position={[x * w, 0, -z * h]}
     onClick={e => { e.stopPropagation(); labels.current[i]?.click() }}>
     <group ref={motion}>
-      <Model i={i} pose={pose} play={play} shut={shut} open={open} />
+      <Model name={name} pose={pose} play={play} shut={shut} open={open} />
     </group>
   </group>
 }
 
-function Model({ i, pose, play, shut, open }: {
-  i: number; pose: Pose; play: Playback; shut: RefObject<Group | null>; open: RefObject<Group | null>
+function Model({ name, pose, play, shut, open }: {
+  name: Name; pose: Pose; play: Playback; shut: RefObject<Group | null>; open: RefObject<Group | null>
 }) {
-  switch (i) {
-    case 0: return <group rotation-y={2.72}><MeleeHero pose={pose} tint="#ff6b59" /></group>
-    case 1: return <group rotation-y={3.59}><RangedHero pose={pose} tint="#56e7bf" /></group>
-    case 2: return <group rotation-y={3.46}><Thrower pose={pose} /></group>
-    case 3: return <group rotation-y={2.92}><Slime pose={pose} /></group>
-    case 4: return <group rotation-y={3.38}><SlimeKing pose={pose} /></group>
-    case 5: return <group rotation-y={3.44}>
+  switch (name) {
+    case 'Warrior': return <group rotation-y={2.72}><MeleeHero pose={pose} tint="#ff6b59" /></group>
+    case 'Ranger': return <group rotation-y={3.59}><RangedHero pose={pose} tint="#56e7bf" /></group>
+    case 'Priestess': return <group rotation-y={3.48}><PriestHero pose={pose} tint="#45d2bc" /></group>
+    case 'Mage': return <group rotation-y={3.43}><MageHero pose={pose} tint="#db68af" /></group>
+    case 'Ogre': return <group rotation-y={3.58}><Ogre pose={pose} /></group>
+    case 'Chicken': return <group rotation-y={2.59}><Chicken pose={pose} /></group>
+    case 'Thrower': return <group rotation-y={3.46}><Thrower pose={pose} /></group>
+    case 'Slime': return <group rotation-y={2.92}><Slime pose={pose} /></group>
+    case 'Slime King': return <group rotation-y={3.38}><SlimeKing pose={pose} /></group>
+    case 'Chest': return <group rotation-y={3.44}>
       <group ref={shut}><Chest opened={false} /></group>
       <group ref={open} visible={false}><Chest opened /></group>
     </group>
-    case 6: return <group rotation-y={-.61}>
+    case 'Bolts': return <group>
       <group position-x={-.14}><HeroBolt crit={false} /></group>
       <group position-x={.14}><HeroBolt crit /></group>
     </group>
-    case 7: return <EnemyOrb />
-    case 8: return <SpikeTrap pose={pose} />
-    default: return <PreviewStroke time={play} spin={i === 10} />
+    case 'Orb': return <EnemyOrb />
+    case 'Spikes': return <SpikeTrap pose={pose} />
+    case 'Slash': case 'Spin': return <PreviewStroke time={play} spin={name === 'Spin'} />
+    default: return <PreviewMagic name={name} clock={play} />
   }
 }
 
-function Diorama({ play, labels }: { play: Playback; labels: LabelRefs }) {
+function Diorama({ play, labels, page }: { play: Playback; labels: LabelRefs; page: Page }) {
   const size = useThree(s => s.size)
   const wide = size.width > size.height
-  const w = wide ? 9 : 6, h = wide ? 7 : 10
+  const w = page === 'Dungeon' ? 6 : 4, h = wide ? 5 : page === 'Dungeon' ? 8 : 6
+  const exhibits = rooms[page]
   return <>
-    <FrameScene play={play} labels={labels} w={w} h={h} />
+    <FrameScene play={play} labels={labels} w={w} h={h} exhibits={exhibits} />
     <ambientLight color="#e8e2ff" intensity={1.08} />
     <directionalLight position={[-5, 8, 4]} color="#fff0d2" intensity={2.55} />
     <group position={[w / 2 + .13, -.59, -h / 2 + .19]} scale={[w * .82, 1, h * .92]}>
@@ -163,11 +190,13 @@ function Diorama({ play, labels }: { play: Playback; labels: LabelRefs }) {
     </group>
     <mesh geometry={plinth} material={toon} position={[w / 2, -.028, -h / 2]} scale={[w + .85, 1, h + .85]} dispose={null} />
     <RoomShell w={w} h={h} doors={doors} />
-    {exhibits.map((e, i) => <Display key={e.name} i={i} w={w} h={h} play={play} labels={labels} />)}
+    {exhibits.map((e, i) => <Display key={e.name} entry={e} i={i} w={w} h={h} play={play} labels={labels} />)}
   </>
 }
 
 export default function Showcase() {
+  const [page, setPage] = useState<Page>('Heroes')
+  const exhibits = rooms[page]
   const play = useMemo<Playback>(() => ({ t: 0, paused: false, focus: -1 }), [])
   const labels = useRef<(HTMLButtonElement | null)[]>([])
   const overview = useRef<HTMLButtonElement>(null)
@@ -179,7 +208,7 @@ export default function Showcase() {
   }
   return <main ref={gallery} className="dm-gallery" aria-label="Dungeon Maker model showcase">
     <Canvas dpr={[1, 2]} camera={{ fov: 30, near: .1, far: 100 }} gl={{ antialias: true, alpha: true }}>
-      <Diorama play={play} labels={labels} />
+      <Diorama play={play} labels={labels} page={page} />
     </Canvas>
     <header className="dm-gallery-title">
       <div className="dm-crest" aria-hidden="true"><i /></div>
@@ -189,20 +218,30 @@ export default function Showcase() {
       {exhibits.map((e, i) => <button type="button" className="dm-marker" key={e.name}
         ref={el => { labels.current[i] = el }} aria-label={'Inspect ' + e.name}
         onClick={() => focus(play.focus === i ? -1 : i)}>
-        <strong>{e.name}</strong><small>{e.anims ? 'idle' : i === 5 ? 'closed' : ''}</small>
+        <strong>{e.name}</strong><small>{e.anims ? 'idle' : e.name === 'Chest' ? 'closed' : ''}</small>
       </button>)}
     </div>
     <div className="dm-playback">
-      <button type="button" className="dm-back" hidden ref={overview} onClick={() => focus(-1)}>All models</button>
-      <div className="dm-transport">
-        <button type="button" aria-pressed="false" onClick={e => {
-          play.paused = !play.paused
-          e.currentTarget.setAttribute('aria-pressed', String(play.paused))
-          e.currentTarget.lastElementChild!.textContent = play.paused ? 'Play' : 'Pause'
-        }}><i className="dm-pause-icon" aria-hidden="true" /><span>Pause</span></button>
-        <button type="button" onClick={() => { play.t = (Math.floor(play.t / interval) + 1) * interval + .17 }}>
-          <i className="dm-next-icon" aria-hidden="true" /><span>Next pose</span>
-        </button>
+      <div className="dm-transport dm-rooms" role="group" aria-label="Exhibit rooms">
+        {pages.map(room => <button type="button" key={room} aria-pressed={page === room} onClick={() => {
+          if (page === room) return
+          focus(-1)
+          play.t = .17
+          setPage(room)
+        }}>{room}</button>)}
+      </div>
+      <div className="dm-playback-row">
+        <button type="button" className="dm-back" hidden ref={overview} onClick={() => focus(-1)}>All models</button>
+        <div className="dm-transport">
+          <button type="button" aria-pressed="false" onClick={e => {
+            play.paused = !play.paused
+            e.currentTarget.setAttribute('aria-pressed', String(play.paused))
+            e.currentTarget.lastElementChild!.textContent = play.paused ? 'Play' : 'Pause'
+          }}><i className="dm-pause-icon" aria-hidden="true" /><span>Pause</span></button>
+          <button type="button" onClick={() => { play.t = (Math.floor(play.t / interval) + 1) * interval + .17 }}>
+            <i className="dm-next-icon" aria-hidden="true" /><span>Next pose</span>
+          </button>
+        </div>
       </div>
     </div>
   </main>

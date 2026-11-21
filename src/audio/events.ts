@@ -25,15 +25,22 @@ export function playSnapshotSounds(prev: Snapshot | null, next: Snapshot, you: s
     if (!n) {
       if (e.kind === 'slime') sfx.slimeDie(v)
       else if (e.kind === 'thrower') sfx.throwerDie(v)
+      else if (e.kind === 'ogre') sfx.ogreDie(v)
       else sfx.bossDie(1)
       continue
     }
+    if (n.chicken !== e.chicken) sfx.poof(v)
+    if (e.kind === 'ogre' && e.state === 'windup' && n.state !== 'windup' && !n.chicken) sfx.ogreSlam(v)
     const ownHit = (feedback.enemyFlash.get(e.id) ?? 0) > now - 250
     if (n.stunned && !e.stunned && !ownHit) sfx.enemyHurt(v * 0.7)
     if (n.state === 'windup' && e.state !== 'windup') sfx.aim(v)
     if (n.state === 'jump' && e.state !== 'jump') sfx.bossJump(1)
     if (e.state === 'jump' && n.state !== 'jump') sfx.bossLand(v)
   }
+
+  // The boss appearing after the boss room's first enemies fall.
+  const prevIds = new Set(prev.enemies.map((e) => e.id))
+  for (const e of next.enemies) if (e.kind === 'king' && !prevIds.has(e.id) && prev.rooms.some((r) => r.id === e.room && r.ready)) sfx.bossLand(1)
 
   // Enemy orbs thrown.
   const prevOrbs = new Set(prev.orbs.map((o) => o.id))
@@ -49,10 +56,14 @@ export function playSnapshotSounds(prev: Snapshot | null, next: Snapshot, you: s
     if (h.dead && !p.dead) sfx.heroDie(v)
     else if (!h.dead && p.dead) sfx.respawn(v)
     else if (h.hp < p.hp && !own) sfx.heroHurt(v)
+    else if (h.heals > p.heals) sfx.heal(v)
     else if (h.hp > p.hp) sfx.chest(v)
     if (!own && h.act && h.act.seq !== p.act?.seq) {
-      if (h.cls === 'melee') (h.act.kind === 'charged' ? sfx.spin : sfx.swing)(v * 0.6)
-      else (h.act.kind === 'charged' ? sfx.critShot : sfx.shot)(v * 0.6)
+      const charged = h.act.kind === 'charged'
+      if (h.cls === 'melee') (charged ? sfx.spin : sfx.swing)(v * 0.6)
+      else if (h.cls === 'ranged') (charged ? sfx.critShot : sfx.shot)(v * 0.6)
+      else if (h.cls === 'priest') (charged ? sfx.prayer : sfx.light)(v * 0.6)
+      else (charged ? sfx.polyCast : sfx.spark)(v * 0.6)
     }
   }
 

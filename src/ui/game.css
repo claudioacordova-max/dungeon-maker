@@ -552,6 +552,43 @@
   background: radial-gradient(circle at 35% 30%, #fde68a, #f59e0b 60%, #b45309);
 }
 
+.attack-stick.is-priest .attack-knob {
+  background: radial-gradient(circle at 35% 30%, #fffbeb, #fcd34d 55%, #a16207);
+}
+
+.attack-stick.is-mage .attack-knob {
+  background: radial-gradient(circle at 35% 30%, #f5d0fe, #c026d3 60%, #6b21a8);
+}
+
+.mana-bar {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8 * var(--ui-px));
+  transform: translateX(-50%);
+  display: flex;
+  gap: calc(4 * var(--ui-px));
+  pointer-events: none;
+}
+
+.mana-bar i {
+  --fill: 1;
+  width: calc(16 * var(--ui-px));
+  height: calc(16 * var(--ui-px));
+  border-radius: 50%;
+  border: calc(2 * var(--ui-px)) solid #1e1b4b;
+  background: conic-gradient(#60a5fa calc(var(--fill) * 360deg), rgb(30 27 75 / 0.55) 0);
+  box-shadow: 0 calc(2 * var(--ui-px)) 0 rgb(0 0 0 / 0.35);
+}
+
+.mana-bar.is-empty i {
+  animation: mana-empty 0.4s ease;
+}
+
+@keyframes mana-empty {
+  0%, 100% { transform: none; }
+  30% { transform: translateY(calc(-3 * var(--ui-px))); border-color: #ef4444; }
+}
+
 .attack-knob svg {
   width: 52%;
   height: 52%;
@@ -610,8 +647,8 @@
 
 .palette {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.35em;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.3em;
 }
 
 .ui-button.tool {

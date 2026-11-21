@@ -1,4 +1,7 @@
 export { MeleeHero, RangedHero } from './Heroes'
+export { PriestHero, MageHero } from './Spellcasters'
+export { Ogre, Chicken } from './Creatures'
+export { LightOrb, FireSpark, PolyBolt, BurnFx, HealFx, PoofFx } from './MagicEffects'
 export { Slime, Thrower, SlimeKing } from './Enemies'
 export { HeroBolt, EnemyOrb, SlashFx, SpinFx, BlobShadow } from './Effects'
 export { RoomShell, Chest, SpikeTrap, type Door } from './Dungeon'
