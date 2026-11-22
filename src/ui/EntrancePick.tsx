@@ -6,7 +6,7 @@ import { useNet } from '../net/connection'
 import { HERO_CLASSES, type HeroClass, type HeroView, type PassiveId, type Snapshot } from '../shared/protocol'
 import { CLASS_PASSIVES } from '../shared/rules'
 import { PassiveIcon } from './icons'
-import { art, CLASS_NAME, CLASS_TAG, PASSIVE_INFO, PHOTO, PLAYER_COLORS } from './screens'
+import { CLASS_NAME, CLASS_TAG, PASSIVE_INFO, PLAYER_COLORS, Portrait } from './screens'
 
 export default function EntrancePick({ s, own }: { s: Snapshot; own: HeroView }) {
   const send = useNet((st) => st.send)
@@ -25,8 +25,10 @@ export default function EntrancePick({ s, own }: { s: Snapshot; own: HeroView })
   const colorOf = (id: string) => PLAYER_COLORS[players.find((p) => p.id === id)?.color ?? 0]
   const takenBy = (c: HeroClass) => s.heroes.find((h) => h.id !== own.id && h.chosen && h.cls === c)
 
+  const [cheers, setCheers] = useState(0)
   function pickClass(c: HeroClass) {
     if (ready || takenBy(c)) return
+    if (c !== cls) setCheers((n) => n + 1)
     setWant({ cls: c, at: performance.now() })
     send({ type: 'class', cls: c })
   }
@@ -74,7 +76,7 @@ export default function EntrancePick({ s, own }: { s: Snapshot; own: HeroView })
                     disabled={!!taken}
                     onClick={() => pickClass(c)}
                   >
-                    <img className="hero-pick-photo" src={art(PHOTO[c])} alt="" />
+                    <Portrait className="hero-pick-photo" who={c} live={sel} cheer={cheers} />
                     <b>{CLASS_NAME[c]}</b>
                     <small style={taken ? { color: colorOf(taken.id) } : undefined}>{taken ? nameOf(taken.id) : CLASS_TAG[c]}</small>
                   </button>

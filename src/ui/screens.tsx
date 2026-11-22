@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { me, useNet } from '../net/connection'
 import type { HeroClass, PassiveId } from '../shared/protocol'
 import { MAX_HEROES } from '../shared/rules'
@@ -26,6 +26,19 @@ export const PASSIVE_INFO: Record<PassiveId, { name: string; text: string }> = {
   tough: { name: 'Piel dura', text: 'A veces (10 %) ignora un golpe.' },
   keenEye: { name: 'Ojo certero', text: 'Sus flechas básicas pueden ser críticas (3 %, doble daño).' },
   focus: { name: 'Mente clara', text: 'Cada enemigo que derrota le devuelve 1 de maná.' },
+}
+
+// The selected card shows its character alive (high-detail model, idle loop and a cheer on each pick); the others,
+// and this one until the 3D chunk arrives, show the still photo.
+const LivePortrait = lazy(() => import('./LivePortrait'))
+export function Portrait({ who, live, cheer, className }: { who: keyof typeof PHOTO; live: boolean; cheer: number; className: string }) {
+  const still = <img className={className} src={art(PHOTO[who])} alt="" />
+  if (!live) return still
+  return (
+    <Suspense fallback={still}>
+      <LivePortrait who={who} cheer={cheer} className={className} />
+    </Suspense>
+  )
 }
 
 // Dungeon backdrop for the menus (home, lobby, connecting).
@@ -172,7 +185,9 @@ export function LobbyScreen() {
   }, [optimistic, confirmed])
   const selected = optimistic?.id ?? confirmed
 
+  const [cheer, setCheer] = useState(0)
   function choose(id: RolePick) {
+    if (id !== selected) setCheer((c) => c + 1)
     setOptimistic({ id, at: performance.now() })
     state.send({ type: 'role', role: id })
   }
@@ -222,7 +237,7 @@ export function LobbyScreen() {
             disabled={!!master && master.id !== state.you}
             onClick={() => choose('master')}
           >
-            <img className="role-photo" src={art(PHOTO.master)} alt="" />
+            <Portrait className="role-photo" who="master" live={selected === 'master'} cheer={cheer} />
             <b>Maestro</b>
             <small>{master && master.id !== state.you ? `Lo es ${master.name}` : 'Construye la mazmorra'}</small>
           </button>
@@ -233,7 +248,7 @@ export function LobbyScreen() {
             disabled={heroes.length >= MAX_HEROES && self?.role !== 'hero'}
             onClick={() => choose('hero')}
           >
-            <img className="role-photo" src={art(PHOTO.party)} alt="" />
+            <Portrait className="role-photo" who="party" live={selected === 'hero'} cheer={cheer} />
             <b>Héroes</b>
             <small>
               {heroes.length}/{MAX_HEROES} · Eligen su héroe al llegar

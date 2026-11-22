@@ -178,6 +178,8 @@ Versión 2 desplegada (2026-11-20):
 
 - 2026-11-22: **entrada de la mazmorra.** En la sala solo se elige Maestro o Héroes (tarjetas con fotos de los modelos 3D, tomadas con `?photos`; las tarjetas pintadas siguen en `public/ui/card-*.webp`). Los héroes empiezan fuera, en un claro del bosque frente a la puerta de la mazmorra (arte de Codex, GPT-6.2-Astra, xhigh), y ahí eligen héroe (distinto cada uno, con su foto) y una de dos pasivas; entran cuando todos están listos. Pasivas: icono junto a las pociones que salta al activarse y su nombre sobre el héroe. Poción más visible: brillo más largo y grande, «+2», barra que parpadea y bordes rosados en la pantalla propia.
 
+- 2026-11-22: **modelos HD para los menús** (`src/models/hd/`, arte de Codex, GPT-6.2-Astra, xhigh), aparte de los del juego, que no cambian: caras con expresión, más detalle y una animación de espera con personalidad, más un festejo al elegirlos. La carta elegida (Maestro o Héroes en la sala, el héroe en la entrada) los muestra animados en vivo; las demás usan fotos tomadas de ellos (`?photos`). Codex se quedó sin cuota antes de terminar de pulirlos.
+
 Problemas conocidos:
 - Los slimes son muy letales contra un héroe que no se mueve: en la prueba automática el héroe perdió 2 vidas en la primera sala. Para balancear jugando.
 - Rendimiento en un teléfono real sin medir (Codex estimó ~1.500 triángulos y ≤8 llamadas de dibujo por personaje).

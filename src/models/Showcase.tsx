@@ -5,6 +5,8 @@ import { SHAPES, type RoomShape } from '../shared/layouts'
 import type { SpikePhase } from '../shared/protocol'
 import { ROOM_H, ROOM_W } from '../shared/rules'
 import { MeleeHero, RangedHero } from './Heroes'
+import { HdArcher, HdSwordsman } from './hd/HdFighters'
+import type { MenuPose } from './hd/menuPose'
 import { PriestHero, MageHero } from './Spellcasters'
 import { Ogre, Chicken } from './Creatures'
 import { PreviewMagic, type MagicExhibit } from './MagicEffects'
@@ -28,9 +30,10 @@ function pair(entry: Omit<Exhibit,'x'>): Exhibit[] {
 const exhibitTitle = (entry: Exhibit) => entry.possessed ? 'Possessed ' + entry.name : entry.name
 const heroClips: Anim[] = ['idle', 'run', 'attack', 'charge', 'special', 'hurt', 'die']
 const smallClips: Anim[] = ['idle','run','hurt','die']
-const pages = ['Heroes','Dungeon','Maestro','Floors','Combat','Magic','Entrance'] as const
+const pages = ['Heroes','Dungeon','Maestro','Floors','Combat','Magic','Entrance','HD'] as const
 type Page = typeof pages[number]
 const rooms: Record<Page, Exhibit[]> = {
+  HD: [],
   Entrance: [{ name: 'Gate', x: .5, z: .73, labelOffset: 1.3, width: 5.7, height: 1.15 }],
   Heroes: [
     { name: 'Swordsman', x: .27, z: .74, labelOffset: .40, anims: heroClips },
@@ -250,10 +253,24 @@ function Diorama({ play, labels, page, shape, phase }: {
   </>
 }
 
+const menuModels = { Espadachín: HdSwordsman, Arquera: HdArcher }
+type MenuName = keyof typeof menuModels
+
+function MenuExhibit({ name, pose }: { name: MenuName; pose: MenuPose }) {
+  const Model = menuModels[name]
+  useFrame((_, dt) => {
+    pose.t += Math.min(.1, dt)
+    if (pose.anim === 'cheer' && pose.t >= 1.6) { pose.anim = 'idle'; pose.t = 0 }
+  }, -1)
+  return <group rotation-y={-.22}><Model pose={pose} /></group>
+}
+
 export default function Showcase() {
   const [page, setPage] = useState<Page>('Heroes')
   const [shape, setShape] = useState<RoomShape>('banks')
   const [phase, setPhase] = useState<SpikePhase>('down')
+  const [menuName, setMenuName] = useState<MenuName>('Espadachín')
+  const menuPose = useMemo<MenuPose>(() => ({ anim: 'idle', t: 0 }), [menuName, page])
   const exhibits = rooms[page]
   const play = useMemo<Playback>(() => ({ t: 0, paused: false, focus: -1 }), [])
   const labels = useRef<(HTMLButtonElement | null)[]>([])
@@ -263,9 +280,15 @@ export default function Showcase() {
     setFocusIndex(i)
   }
   return <main data-focused={focusIndex !== -1} className="dm-gallery" aria-label="Dungeon Maker model showcase">
-    <Canvas dpr={[1, 2]} camera={{ fov: 30, near: .1, far: 240 }} gl={{ antialias: true, alpha: true }}>
+    {page === 'HD' ? <Canvas key="menu" dpr={[1, 2]} camera={{ position: [.72, 1.35, 3.6], fov: 32 }}
+      onCreated={({ camera }) => camera.lookAt(0, .63, 0)}>
+      <ambientLight intensity={1.15} />
+      <directionalLight position={[4, 9, 6]} intensity={1.9} />
+      <directionalLight position={[-5, 3, -4]} intensity={.6} color="#c4b5fd" />
+      <MenuExhibit name={menuName} pose={menuPose} />
+    </Canvas> : <Canvas key="gallery" dpr={[1, 2]} camera={{ fov: 30, near: .1, far: 240 }} gl={{ antialias: true, alpha: true }}>
       <Diorama play={play} labels={labels} page={page} shape={shape} phase={phase} />
-    </Canvas>
+    </Canvas>}
     <header className="dm-gallery-title">
       <div className="dm-crest" aria-hidden="true"><i /></div>
       <div><div className="dm-wordmark">Dungeon Maker</div><h1>Model showcase</h1></div>
@@ -287,6 +310,11 @@ export default function Showcase() {
         }}>{room}</button>)}
       </div>
       <div className="dm-playback-row">
+        {page === 'HD' && <div className="dm-transport dm-shapes" role="group" aria-label="Menu models">
+          {(Object.keys(menuModels) as MenuName[]).map(name => <button type="button" key={name}
+            aria-pressed={menuName === name} onClick={() => setMenuName(name)}>{name}</button>)}
+          <button type="button" onClick={() => { menuPose.anim = 'cheer'; menuPose.t = 0 }}>Cheer</button>
+        </div>}
         <button type="button" className="dm-back" hidden={focusIndex === -1} onClick={() => focus(-1)}>
           {page === 'Floors' ? 'Room view' : 'All models'}
         </button>
@@ -299,7 +327,7 @@ export default function Showcase() {
               <button type="button" key={p} aria-pressed={phase === p} onClick={() => setPhase(p)}>{p}</button>)}
           </div>
         </>}
-        <div className="dm-transport" hidden={page === 'Floors' || page === 'Entrance'}>
+        <div className="dm-transport" hidden={page === 'Floors' || page === 'Entrance' || page === 'HD'}>
           <button type="button" aria-pressed="false" onClick={e => {
             play.paused = !play.paused
             e.currentTarget.setAttribute('aria-pressed', String(play.paused))
