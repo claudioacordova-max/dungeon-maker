@@ -180,9 +180,9 @@ Versión 2 desplegada (2026-11-20):
 
 - 2026-11-22: **modelos HD para los menús** (`src/models/hd/`, arte de Codex, GPT-6.2-Astra, xhigh), aparte de los del juego, que no cambian: caras con expresión, más detalle y una animación de espera con personalidad, más un festejo al elegirlos. La carta elegida (Maestro o Héroes en la sala, el héroe en la entrada) los muestra animados en vivo; las demás usan fotos tomadas de ellos (`?photos`). Codex se quedó sin cuota antes de terminar de pulirlos.
 
+- 2026-11-22: arreglo: un héroe que caía al abismo a veces quedaba congelado al borde para siempre (su teléfono lo daba por caído y el servidor no, por el redondeo de la posición; había que reconectarse). Ahora el teléfono decide la caída sobre la misma posición redondeada que envía, la reenvía hasta que el servidor la cuenta y, si no la cuenta en 2,5 s, devuelve el control en el borde.
+
 Problemas conocidos:
 - Los slimes son muy letales contra un héroe que no se mueve: en la prueba automática el héroe perdió 2 vidas en la primera sala. Para balancear jugando.
 - Rendimiento en un teléfono real sin medir (Codex estimó ~1.500 triángulos y ≤8 llamadas de dibujo por personaje).
 - El paquete del juego pesa ~1,2 MB (343 KB comprimido).
-
-- 2026-11-22: arreglo: un héroe que caía al abismo a veces quedaba congelado al borde para siempre (su teléfono lo daba por caído y el servidor no, por el redondeo de la posición; había que reconectarse). Ahora el teléfono decide la caída sobre la misma posición redondeada que envía, la reenvía hasta que el servidor la cuenta y, si no la cuenta en 2,5 s, devuelve el control en el borde.
