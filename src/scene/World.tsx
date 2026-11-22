@@ -139,13 +139,14 @@ function CameraRig() {
         cx = ctl.x
         cy = ctl.y + 1.6
         dist *= held.kind === 'king' ? 1.35 : 1.1
-      } else if (!cine && lord.ready && (lord.moving || performance.now() - lord.stillSince < 600)) {
-        // The Maestro's body moving: follow it, a little wider than a hero.
+      } else if (!cine && lord.ready && !useMaster.getState().buildView) {
+        // The Maestro's body: always followed, a little wider than a hero.
         cx = lord.x
         cy = lord.y + 1.6
         dist *= 1.15
       } else {
-        // Standing still (or the boss entrance): the whole room (or free spot) fits the screen, to build with care.
+        // After touching a building control (or the boss entrance): the whole room fits the screen, to build with
+        // care. Moving the body ends it.
         tilt = 1.15
         const gx = cine ? cine.gx : Math.floor(lord.x / ROOM_W)
         const gy = cine ? cine.gy : Math.floor(lord.y / ROOM_H)
@@ -158,7 +159,7 @@ function CameraRig() {
     }
     target.set(cx, 0, -cy)
     wanted.set(cx, Math.sin(tilt) * dist, -cy + Math.cos(tilt) * dist)
-    const k = 1 - Math.exp(-dt * (isMaster ? 6 : 10))
+    const k = 1 - Math.exp(-dt * (isMaster && (useMaster.getState().buildView || s?.cinematic) ? 6 : 10))
     cam.position.lerp(wanted, k)
     cam.lookAt(cam.position.x, 0, cam.position.z - Math.cos(tilt) * dist)
     // Development only: lets the visual tests find a world point on the screen.

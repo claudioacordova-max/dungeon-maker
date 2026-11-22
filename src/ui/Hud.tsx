@@ -4,7 +4,7 @@ import { MAX_ROOMS } from '../shared/rules'
 import { AttackStick, MoveStick, SpecialStick } from './Controls'
 import MasterHud from './MasterHud'
 import SoundToggle from './SoundToggle'
-import { ExitIcon, HeartIcon, PotionIcon } from './icons'
+import { ExitIcon, HeartIcon, PotionIcon, SkullIcon } from './icons'
 import { PLAYER_COLORS } from './screens'
 
 // In-game HUD over the scene. Heroes: lives, party and the two sticks. Master: map counters and build tools.
@@ -19,6 +19,12 @@ export default function Hud() {
   return (
     <div className="hud">
       <div className="hud-top">
+        {isMaster ? (
+          <div className="chip kills" aria-label={`Héroes derrotados: ${s.kills}`}>
+            <SkullIcon />
+            <b>{s.kills}</b>
+          </div>
+        ) : (
         <div className="chip lives" role="group" aria-label={`Vidas del equipo: ${s.lives}. Pociones: ${s.potions}`}>
           {Array.from({ length: s.maxLives }, (_, i) => (
             <HeartIcon key={i} empty={i >= s.lives} />
@@ -28,6 +34,7 @@ export default function Hud() {
             <b>{s.potions}</b>
           </span>
         </div>
+        )}
         <div className="chip rooms" aria-label={`Habitaciones ${s.normalRooms} de ${MAX_ROOMS}`}>
           <span className="chip-label">Salas</span>
           <b>

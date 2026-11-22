@@ -15,6 +15,8 @@ type MasterState = {
   shapes: boolean // floor shapes list open
   cell: { cx: number; cy: number } | null
   summoning: boolean
+  buildView: boolean // the camera shows the whole room, after touching a building control; moving ends it
+  setBuildView: (on: boolean) => void
   setHere: (here: { gx: number; gy: number }) => void
   setMapOpen: (open: boolean) => void
   setSummoning: (on: boolean) => void
@@ -33,12 +35,14 @@ export const useMaster = create<MasterState>()((set) => ({
   shapes: false,
   cell: null,
   summoning: false,
+  buildView: false,
+  setBuildView: (buildView) => set({ buildView }),
   setHere: (here) => set({ here, ...closed }),
   setMapOpen: (mapOpen) => set({ mapOpen, ...closed }),
   setSummoning: (summoning) => set({ summoning }),
   setTool: (tool) => set({ tool }),
-  setPicker: (picker, cell = null) => set({ picker, cell: picker ? cell : null, shapes: false }),
-  setShapes: (shapes) => set({ shapes, picker: false, cell: null }),
+  setPicker: (picker, cell = null) => set({ picker, cell: picker ? cell : null, shapes: false, buildView: true }),
+  setShapes: (shapes) => set({ shapes, picker: false, cell: null, buildView: true }),
 }))
 
 export const heroesInside = (s: Snapshot, room: RoomView) => s.heroes.some((h) => !h.dead && roomAtPoint(s.rooms, h.x, h.y)?.id === room.id)
@@ -50,6 +54,7 @@ export const isBuilding = (s: Snapshot, room: RoomView) => room.kind === 'normal
 // enemy list opens and the enemy picked there goes on this cell.
 export function tapCell(room: RoomView, cx: number, cy: number, send: (m: ClientMessage) => void) {
   const m = useMaster.getState()
+  m.setBuildView(true)
   if ((room.plan ?? []).some((p) => p.cx === cx && p.cy === cy)) send({ type: 'remove', room: room.id, cx, cy })
   else if (m.tool) send({ type: 'place', room: room.id, kind: m.tool, cx, cy })
   else m.setPicker(true, { cx, cy })

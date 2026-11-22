@@ -106,6 +106,7 @@ export type Game = {
   possessed: number | null // enemy the Maestro controls
   summonAt: number // game time the Maestro can summon again
   summonWait: number // length of that wait
+  kills: number // times a hero fell (the Maestro's counter)
 }
 
 const usesMana = (cls: HeroClass): cls is 'priest' | 'mage' => cls === 'priest' || cls === 'mage'
@@ -150,6 +151,7 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
     possessed: null,
     summonAt: 0,
     summonWait: 0,
+    kills: 0,
   }
   const start: Room = { id: game.nextId++, gx: 0, gy: 0, kind: 'start', ready: true, entered: true, enemies: 0, plan: [], layout: EMPTY_LAYOUT }
   start.plan = [
@@ -588,6 +590,7 @@ function downHero(game: Game, hero: Hero) {
   hero.hp = 0
   hero.dead = true
   hero.respawnAt = game.time + R.RESPAWN_SECONDS
+  game.kills += 1
   game.lives -= 1
   if (game.lives <= 0) {
     game.lives = 0
@@ -1136,6 +1139,7 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
     })(),
     summonIn: r2(Math.max(0, game.summonAt - game.time)),
     summonWait: game.summonWait,
+    kills: game.kills,
   }
 }
 

@@ -19,6 +19,8 @@ export function MoveStick() {
   const [stick, setStick] = useState<{ x: number; y: number; kx: number; ky: number } | null>(null)
   const pointer = useRef<number | null>(null)
   const origin = useRef({ x: 0, y: 0, scale: 1 })
+  // If the stick goes away while held (the controls around it change), it must not stay pushed.
+  useEffect(() => () => setMoveStick(0, 0), [])
 
   function update(e: PointerEvent) {
     const o = origin.current

@@ -81,6 +81,8 @@ export default function MasterHud({ s }: { s: Snapshot }) {
           Los héroes leen la historia · listos {s.heroes.length - waiting}/{s.heroes.length}
         </div>
       )}
+      {/* One movement stick for the body and for a possessed enemy: it must not be rebuilt when the room changes. */}
+      {!s.cinematic && !mapOpen && <MoveStick />}
       {body}
     </>
   )
@@ -126,7 +128,6 @@ function FreeSpot({ s }: { s: Snapshot }) {
   const bossNext = s.normalRooms >= MAX_ROOMS
   return (
     <>
-      <MoveStick />
       {buildable && <div className="master-top observe-tag">{bossNext ? 'Aquí puede ir la sala del jefe' : 'Espacio libre para una sala'}</div>}
       <div className="master-panel master-dock">
         <span />
@@ -138,7 +139,11 @@ function FreeSpot({ s }: { s: Snapshot }) {
             <button
               type="button"
               className={bossNext ? 'ui-button ui-button-boss round-big' : 'ui-button ui-button-primary round-big'}
-              onClick={() => here && send({ type: 'build', gx: here.gx, gy: here.gy, kind: bossNext ? 'boss' : 'normal' })}
+              onClick={() => {
+                if (!here) return
+                send({ type: 'build', gx: here.gx, gy: here.gy, kind: bossNext ? 'boss' : 'normal' })
+                useMaster.getState().setBuildView(true)
+              }}
             >
               {bossNext ? 'Sala del jefe' : 'Construir aquí'}
             </button>
@@ -173,7 +178,6 @@ function BuildControls({ s, room }: { s: Snapshot; room: RoomView }) {
           <i style={{ width: `${Math.max(0, Math.min(1, value / cap)) * 100}%` }} />
         </span>
       </div>
-      <MoveStick />
       <BuildRail room={room} cap={cap} maxChests={s.maxChests} />
       <div className="master-panel master-dock">
         <span />
@@ -216,7 +220,10 @@ function BuildRail({ room, cap, maxChests }: { room: RoomView; cap: number; maxC
   const enemies = difficulty(plan, { shape: 'full', spikes: false, chests: 0 })
   // A change is offered when it fits (enemies over a gap the new shape opens are dropped by the server).
   const fits = (next: Layout) => enemies + layoutCost(next) <= cap || layoutCost(next) <= layoutCost(layout)
-  const set = (next: Layout) => send({ type: 'layout', room: room.id, ...next })
+  const set = (next: Layout) => {
+    useMaster.getState().setBuildView(true)
+    send({ type: 'layout', room: room.id, ...next })
+  }
   const nextChests = layout.chests >= maxChests ? 0 : layout.chests + 1
   const label = ENEMIES.find((e) => e.kind === tool)?.label
   return (
@@ -333,7 +340,6 @@ function PowerControls({ s, room }: { s: Snapshot; room: RoomView }) {
   return (
     <>
       <div className={summoning ? 'master-top observe-tag is-armed' : 'master-top observe-tag'}>{hint}</div>
-      <MoveStick />
       <div className="master-panel master-dock">
         <span />
         <div className="dock-right">
@@ -384,7 +390,6 @@ function PossessControls({ s, held }: { s: Snapshot; held: EnemyView }) {
         Controlas: <b>{NAME[held.kind]}</b>
         {held.chicken && ' (gallina)'}
       </div>
-      <MoveStick />
       <div className="master-panel master-dock is-possess">
         <span />
         <div className="dock-right">

@@ -539,3 +539,8 @@
   outline: 0.2em solid #ffffff;
   outline-offset: 0.1em;
 }
+
+.chip.kills .icon {
+  width: 1.25em;
+  height: 1.25em;
+}

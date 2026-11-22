@@ -108,3 +108,14 @@ export function PotionIcon() {
     </svg>
   )
 }
+
+export function SkullIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 1.5c-3.3 0-5.5 2.2-5.5 5.2 0 1.8.8 3 2 3.7V13a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-2.6c1.2-.7 2-1.9 2-3.7 0-3-2.2-5.2-5.5-5.2z" fill="#f3e8ff" stroke="#1a0f2e" strokeWidth="0.9" />
+      <circle cx="5.7" cy="7.3" r="1.35" fill="#1a0f2e" />
+      <circle cx="10.3" cy="7.3" r="1.35" fill="#1a0f2e" />
+      <path d="M7.3 10.2 8 9l.7 1.2zM6.5 14v-1.6M8 14v-1.6M9.5 14v-1.6" stroke="#1a0f2e" strokeWidth="0.8" fill="#1a0f2e" />
+    </svg>
+  )
+}

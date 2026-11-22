@@ -92,6 +92,7 @@ export type Snapshot = {
   shots: ShotView[]
   items: ItemView[]
   potions: number // the team's shared potions
+  kills: number // times a hero fell: what the Maestro sees instead of lives and potions
   introWaiting: string[] // heroes still reading the intro; the heroes' match starts when it is empty
   cinematic: { room: number; t: number; total: number } | null // boss entrance (t: seconds since it began)
   possessed: number | null // enemy the Maestro controls

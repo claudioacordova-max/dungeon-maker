@@ -118,11 +118,9 @@ export function lordFrame(dt: number) {
   const lx = lord.x - Math.floor(lord.x / ROOM_W) * ROOM_W
   const ly = lord.y - Math.floor(lord.y / ROOM_H) * ROOM_H
   const b = LORD.wallBand
-  const inWall =
-    (lx < b && isOpen(lord.x - b, lord.y)) ||
-    (lx > ROOM_W - b && isOpen(lord.x + b, lord.y)) ||
-    (ly < b && isOpen(lord.x, lord.y - b)) ||
-    (ly > ROOM_H - b && isOpen(lord.x, lord.y + b))
+  const wallX = (lx < b && isOpen(lord.x - b, lord.y)) || (lx > ROOM_W - b && isOpen(lord.x + b, lord.y)) // a west/east wall
+  const wallY = (ly < b && isOpen(lord.x, lord.y - b)) || (ly > ROOM_H - b && isOpen(lord.x, lord.y + b)) // a south/north wall
+  const inWall = wallX || wallY
   const target = inWall ? 1 : 0
   lord.phase += (target - lord.phase) * Math.min(1, step * 14)
   if (inWall && !wasInWall) puff(lord.x, lord.y)
@@ -130,10 +128,15 @@ export function lordFrame(dt: number) {
 
   lord.moving = v.x !== 0 || v.y !== 0
   if (lord.moving) {
+    // Walls are only crossed, never walked along: inside one, only the movement across it counts.
+    let vx = v.x
+    let vy = v.y
+    if (wallX && (!wallY || Math.abs(v.x) >= Math.abs(v.y))) vy = 0
+    else if (wallY) vx = 0
     const speed = LORD.speed * (inWall ? LORD.wallSpeed : 1)
-    const nx = lord.x + v.x * speed * step
-    const ny = lord.y + v.y * speed * step
-    const margin = 0.35
+    const nx = lord.x + vx * speed * step
+    const ny = lord.y + vy * speed * step
+    const margin = 0.6 // keeps it off the outer walls
     const fits = (x: number, y: number) => isOpen(x, y) && isOpen(x + Math.sign(v.x) * margin, y) && isOpen(x, y + Math.sign(v.y) * margin)
     if (fits(nx, ny)) {
       lord.x = nx
@@ -142,6 +145,8 @@ export function lordFrame(dt: number) {
     else if (fits(lord.x, ny)) lord.y = ny
     lord.facing = Math.atan2(v.y, v.x)
     lord.stillSince = now
+    // Moving leaves the wider building view.
+    if (useMaster.getState().buildView) useMaster.getState().setBuildView(false)
   }
   updateHere()
 }

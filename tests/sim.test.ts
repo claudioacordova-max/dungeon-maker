@@ -297,6 +297,7 @@ test('the boss jump is an announced strike; defeating the boss wins; no lives le
   s.y = g2.heroes[0].y
   reportTouched(g2, 'a', s.id)
   assert.equal(g2.result, 'master-won')
+  assert.equal(g2.kills, 1, "the Maestro's counter of fallen heroes")
 })
 
 test('a chest opens when a hero hits it and gives the team potions; it stays shut when walked over', () => {
