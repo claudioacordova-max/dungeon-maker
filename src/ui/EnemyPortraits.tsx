@@ -9,7 +9,9 @@ import { usePortraits } from './portraits'
 const CELL = 160 // css px per portrait
 const KINDS: Placeable[] = ['slime', 'thrower', 'ogre']
 // Each model is scaled to read at the same size in its square.
-const SCALE: Record<Placeable, number> = { slime: 1.7, thrower: 1.05, ogre: 0.78 }
+const SCALE: Record<Placeable, number> = { slime: 1.5, thrower: 1.15, ogre: 0.66 }
+// Width of one portrait at the models (camera 7.9 units away, fov 14): 2 * 7.9 * tan(7deg).
+const SPACING = 1.93
 
 function Capture() {
   const gl = useThree((s) => s.gl)
@@ -49,13 +51,13 @@ export default function EnemyPortraits() {
       <Canvas
         dpr={2}
         gl={{ preserveDrawingBuffer: true, alpha: true, antialias: true }}
-        camera={{ fov: 22, position: [0, 2.6, 7.6] }}
-        onCreated={({ camera }) => camera.lookAt(0, 0.7, 0)}
+        camera={{ fov: 14, position: [0, 2.6, 7.6] }}
+        onCreated={({ camera }) => camera.lookAt(0, 0.55, 0)}
       >
         <ambientLight intensity={1.15} />
         <directionalLight position={[6, 14, 4]} intensity={1.8} />
         {KINDS.map((kind, i) => (
-          <group key={kind} position={[(i - 1) * 3, 0, 0]} rotation={[0, -0.45, 0]} scale={SCALE[kind]}>
+          <group key={kind} position={[(i - 1) * SPACING, 0, 0]} rotation={[0, Math.PI - 0.45, 0]} scale={SCALE[kind]}>
             <Model kind={kind} />
           </group>
         ))}
