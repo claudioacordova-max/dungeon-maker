@@ -36,7 +36,7 @@ export const useMaster = create<MasterState>()((set) => ({
   pending: null,
   setPending: (pending) => set({ pending }),
   editRoom: (room) => set({ mode: 'room', room, pending: null, ...closed }),
-  observe: (room) => set({ mode: 'observe', room, ...closed }),
+  observe: (room) => set({ mode: 'observe', room, pending: null, ...closed }),
   toMap: () => set({ mode: 'map', room: null, ...closed }),
   setTool: (tool) => set({ tool }),
   setPicker: (picker, cell = null) => set({ picker, cell: picker ? cell : null, shapes: false }),

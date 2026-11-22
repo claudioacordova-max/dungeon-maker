@@ -56,6 +56,7 @@ let lastSent = { x: NaN, y: NaN, at: 0 }
 let readyAt = 0
 let seq = 0
 let invulnerableUntil = 0
+let lastHp = 0
 let holdStart = -1
 let specialHeld = false
 
@@ -76,6 +77,9 @@ export function onSnapshot(s: Snapshot, you: string) {
     local.fallAt = -1
     local.ready = true
   }
+  // A hit decided elsewhere (the Maestro's possessed enemy, spikes): show it here too.
+  if (me && me.epoch === local.epoch && me.hp < lastHp && !me.dead && performance.now() - feedback.hurtAt > 700) hurt(performance.now())
+  lastHp = me?.hp ?? lastHp
   // Mana is predicted here; adopt the server's value when they drift apart (e.g. a refused attack).
   if (me && Math.abs(me.mana - local.mana) > 0.75) local.mana = me.mana
   const now = performance.now()
@@ -359,7 +363,8 @@ export function frame(dt: number) {
     }
   }
   for (const e of s.enemies) {
-    if ((e.kind !== 'slime' && e.kind !== 'king') || e.chicken) continue
+    // The possessed enemy's contacts are decided on the Maestro's device (it sees where it rams).
+    if ((e.kind !== 'slime' && e.kind !== 'king') || e.chicken || e.possessed) continue
     const p = sampleEnemy(e.id)
     if (!p || Math.hypot(p.x - local.x, p.y - local.y) > enemyRadius(e.kind) + HERO_RADIUS) continue
     const cooldown = e.kind === 'king' ? ENEMY.king.touchCooldown : ENEMY.slime.touchCooldown

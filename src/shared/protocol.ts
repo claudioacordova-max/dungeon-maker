@@ -141,6 +141,8 @@ export type ClientMessage =
   | { type: 'steer'; x: number; y: number; facing: number }
   | { type: 'enemyAct'; kind: 'attack' | 'special'; dir: number }
   | { type: 'summon'; room: number }
+  // The possessed slime (or boss) touched this hero on the Maestro's screen.
+  | { type: 'ram'; hero: string }
   | { type: 'lobby' }
   | { type: 'leave' } // leaving on purpose (no grace period)
 

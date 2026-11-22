@@ -13,6 +13,7 @@ import {
   steer,
   enemyAct,
   summon,
+  reportRam,
   place,
   removeHero,
   removeItem,
@@ -237,6 +238,9 @@ export class Room {
           return
         case 'summon':
           summon(game, Number(message.room))
+          return
+        case 'ram':
+          reportRam(game, String(message.hero))
           return
       }
     }

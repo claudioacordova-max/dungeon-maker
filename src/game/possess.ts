@@ -6,7 +6,8 @@ import { latestEnemy, sampleHero } from '../net/interp'
 import { clampToRoom, roomOrigin } from '../shared/map'
 import { touchesGap } from '../shared/layouts'
 import type { Snapshot } from '../shared/protocol'
-import { ENEMY, POLYMORPH, POSSESS } from '../shared/rules'
+import { ENEMY, HERO_RADIUS, POLYMORPH, POSSESS } from '../shared/rules'
+import { sfx } from '../audio/sfx'
 import { attackInput, moveInput, specialInput } from './input'
 
 export const ctl = {
@@ -24,6 +25,7 @@ let dashReadyAt = 0
 let sentAt = 0
 let sent = { x: NaN, y: NaN }
 let attackHeld = false
+const rammedAt = new Map<string, number>() // hero id -> performance.now() of the last contact hit
 let specialHeld = false
 
 function nearestHero(s: Snapshot, x: number, y: number): number | null {
@@ -102,6 +104,21 @@ export function possessFrame(dt: number) {
     net.send({ type: 'steer', x: ctl.x, y: ctl.y, facing: ctl.facing })
     sent = { x: ctl.x, y: ctl.y }
     sentAt = now
+  }
+
+  // Contact damage of the possessed slime (or boss), decided here with what this screen shows: the heroes see this
+  // enemy late, so their own check would miss a ram. The server checks it is plausible.
+  if ((enemy.kind === 'slime' || enemy.kind === 'king') && !enemy.chicken && enemy.state !== 'jump') {
+    const reach = ENEMY[enemy.kind].radius + HERO_RADIUS
+    const cooldown = (enemy.kind === 'king' ? ENEMY.king.touchCooldown : ENEMY.slime.touchCooldown) * 1000
+    for (const h of s.heroes) {
+      if (h.dead) continue
+      const p = sampleHero(h.id) ?? h
+      if (Math.hypot(p.x - ctl.x, p.y - ctl.y) > reach || now - (rammedAt.get(h.id) ?? -1e9) < cooldown) continue
+      rammedAt.set(h.id, now)
+      net.send({ type: 'ram', hero: h.id })
+      sfx.hit()
+    }
   }
 
   // Buttons: fire on release, toward the dragged direction or the nearest hero.

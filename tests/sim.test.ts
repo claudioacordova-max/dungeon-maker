@@ -13,6 +13,7 @@ import {
   introReady,
   possess,
   release,
+  reportRam,
   steer,
   summon,
   openChest,
@@ -616,4 +617,25 @@ test('summon: one slime at the doorway farthest from the heroes, only while they
   run(g, R.SUMMON_COOLDOWN)
   g.enemies = []
   assert.equal(summon(g, room.id), false, 'no fight, no summon')
+})
+
+test('possessed slime: its rams are reported by the Maestro (checked for distance and cooldown), not by the hero', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  const slime = g.enemies[0]
+  const hero = g.heroes[0]
+  assert.equal(reportRam(g, 'a'), false, 'nothing possessed')
+  assert.ok(possess(g, slime.id))
+  slime.x = hero.x + 5
+  slime.y = hero.y
+  assert.equal(reportRam(g, 'a'), false, 'too far here')
+  slime.x = hero.x + 1.5 // the hero already stepped away on the server: within the tolerance
+  assert.ok(reportRam(g, 'a'))
+  assert.equal(hero.hp, R.HERO_HITS - 1)
+  hero.invulnerable = 0
+  assert.equal(reportRam(g, 'a'), false, 'touch cooldown')
+  slime.x = hero.x + 0.4
+  run(g, 1)
+  hero.invulnerable = 0
+  assert.equal(reportTouched(g, 'a', slime.id), false, 'the hero device does not report the possessed slime')
+  assert.ok(reportRam(g, 'a'))
 })

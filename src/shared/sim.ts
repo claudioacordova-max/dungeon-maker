@@ -632,6 +632,7 @@ export function reportTouched(game: Game, heroId: string, enemyId: number): bool
   const hero = heroOf(game, heroId)
   const enemy = game.enemies.find((e) => e.id === enemyId && e.hp > 0)
   if (!hero || !enemy || (enemy.kind !== 'slime' && enemy.kind !== 'king') || enemy.poly > 0) return false
+  if (enemy.id === game.possessed) return false // the Maestro's device reports its contacts (reportRam)
   const reach = enemyRadius(enemy.kind) + R.HERO_RADIUS + 0.9
   if (dist(enemy.x, enemy.y, hero.x, hero.y) > reach) return false
   const cooldown = enemy.kind === 'king' ? R.ENEMY.king.touchCooldown : R.ENEMY.slime.touchCooldown
@@ -770,6 +771,21 @@ export function steer(game: Game, x: number, y: number, facing: number) {
   const k = d > allowed ? allowed / d : 1
   moveEnemy(game, enemy, enemy.x + (x - enemy.x) * k, enemy.y + (y - enemy.y) * k)
   enemy.movedAt = game.time
+}
+
+// The possessed slime (or boss) touched a hero on the Maestro's screen: the Maestro's device decides it, like a
+// hero's device decides its own hits (the hero sees the possessed enemy late, so its own check would miss). The
+// server checks it is plausible: close enough here, with room for the delays.
+export const RAM_TOLERANCE = 1.4
+export function reportRam(game: Game, heroId: string): boolean {
+  const enemy = possessedEnemy(game)
+  const hero = heroOf(game, heroId)
+  if (!enemy || !hero || (enemy.kind !== 'slime' && enemy.kind !== 'king') || enemy.poly > 0) return false
+  if (dist(enemy.x, enemy.y, hero.x, hero.y) > enemyRadius(enemy.kind) + R.HERO_RADIUS + RAM_TOLERANCE) return false
+  const cooldown = enemy.kind === 'king' ? R.ENEMY.king.touchCooldown : R.ENEMY.slime.touchCooldown
+  if (game.time - (enemy.touched.get(heroId) ?? -99) < cooldown) return false
+  enemy.touched.set(heroId, game.time)
+  return damageHero(game, hero)
 }
 
 // The Maestro's attack button (and the boss's second one) on the possessed enemy, toward `dir`.
