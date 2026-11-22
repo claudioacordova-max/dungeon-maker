@@ -55,6 +55,29 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 - La habitación inicial trae 2 slimes de serie (propuesta).
 - Carga del ataque potenciado: 0,6 s manteniendo presionado (propuesta). Vida del jefe: 30 golpes básicos (propuesta).
 
+## Próxima versión: validar al maestro (aprobada el 2026-11-21, sin implementar)
+
+<!-- Del diseñador. Al implementarse, cada punto pasa a Reglas y Números y reemplaza lo que contradiga. -->
+Objetivo: que el maestro se sienta dentro de la misma partida que los héroes, no construyendo aparte.
+
+- **5 habitaciones** más la del jefe (antes 6).
+- **Introducción narrativa:** al empezar, los héroes leen un texto fijo y breve que termina en un botón «Entrar a la mazmorra»; la partida de los héroes empieza cuando todos lo presionan, sin límite de tiempo. Mientras tanto el maestro ya construye y ve cuántos héroes están listos.
+- **Vista Observar:** además de Mapa y Construir, el maestro toca una sala con héroes y la cámara la encuadra. Ahí usa sus poderes, que solo funcionan en la sala que observa. Si los héroes se separan, él elige cuál mirar.
+- **Poseer un enemigo** (habilidad principal del maestro): toca un enemigo de la sala que observa y lo controla con joystick y botón de ataque, con la misma fuerza que tiene. Sin costo, sin tiempo límite y sin espera; termina cuando el maestro lo suelta o el enemigo muere. Mientras posee, no construye.
+- **Invocar un slime** (secundaria): solo en una sala activa con combate; aparece en una puerta, lejos de los héroes; tiempo de espera largo.
+- **Sin recurso aparte** para los poderes y **sin activar trampas**.
+- **Jefe final:** la sala del jefe viene prediseñada, sin enemigos, trampas ni hoyos, y el maestro no la edita. Al entrar, una cinemática breve que no se puede saltar y que ven todos: héroes y enemigos quietos, el maestro aparece junto al jefe (ahora verde), mira a los héroes, se vuelve, se deshace en humo morado y lo posee; el jefe se vuelve morado con los ojos del maestro. Después el maestro controla al jefe con los ataques que ya tiene (salto con zona roja y abanico de orbes). Reemplaza la sala del jefe por fases.
+- **Modelo del maestro:** un modelo propio. Al construir aparece en el centro de la sala que edita, y solo lo ve él; los héroes lo ven solo en la cinemática.
+- **Pociones en vez de curación en los cofres:** el cofre da pociones a un inventario compartido del equipo, como las vidas. Se usan solas, sin botón: después de un golpe, si al héroe le quedan 1 o 0 golpes y hay pociones, se gasta una y le cura. Con 0 no cae. Caer al vacío no se salva con pociones. Tiene su propio sonido y un brillo de curación alrededor del héroe.
+- **Panel del maestro rediseñado:** la interfaz de construcción se rehace entera (jerarquía, menos espacio, acciones rápidas), con propuesta revisada antes de implementar. Ideas del diseñador: los enemigos en un desplegable al costado con miniatura y costo; si no hay ninguno elegido, se despliega solo al tocar el suelo; con uno elegido, tocar coloca y se puede quitar; sin pestaña Enemigos aparte; cofres y pinchos más simples; el «+» del mapa empieza a construir la sala de inmediato, sin preguntar.
+- Fuera de esta versión: temáticas, tienda, puzles y plantillas de sala.
+
+Números (los marcados como propuesta los eligió el agente):
+- Poción: cura 2 golpes, sin pasar de 4; el cofre da 1, o 2 con probabilidad del 20 %; sin máximo en el inventario.
+- Vida del jefe: 30, +5 % por cada héroe extra (30; 31,5; 33; 34,5).
+- Cinemática del jefe: unos 4 s (propuesta).
+- Invocar slime: espera de 30 s (propuesta).
+
 ## Preguntas abiertas
 
 <!-- Del diseñador. -->
