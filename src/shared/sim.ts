@@ -7,6 +7,7 @@ import {
   canAdd,
   difficulty,
   clampToRoom,
+  FALL_MARGIN,
   isPlaceableCell,
   moveHero,
   roomAtGrid,
@@ -397,8 +398,9 @@ export function reportPosition(game: Game, heroId: string, x: number, y: number,
   const allowed = R.HERO_SPEED * elapsed * R.MOVE_TOLERANCE + 0.25
   const d = dist(x, y, hero.x, hero.y)
   const k = d > allowed ? allowed / d : 1
-  const nx = hero.x + (x - hero.x) * k
-  const ny = hero.y + (y - hero.y) * k
+  // Within the allowed step the reported point is taken exactly (a fall decided on the device stays a fall here).
+  const nx = k === 1 ? x : hero.x + (x - hero.x) * k
+  const ny = k === 1 ? y : hero.y + (y - hero.y) * k
   if (!walkable(game.rooms, nx, ny, R.HERO_RADIUS * 0.8)) return
   hero.x = nx
   hero.y = ny
@@ -646,8 +648,6 @@ function downHero(game: Game, hero: Hero) {
   }
 }
 
-// How far past the edge a hero's center must be to fall (a little grace when brushing it).
-export const FALL_MARGIN = 0.15
 
 export function reportStruck(game: Game, heroId: string, strikeId: number): boolean {
   const hero = heroOf(game, heroId)

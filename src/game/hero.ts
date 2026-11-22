@@ -4,7 +4,7 @@
 import { sfx } from '../audio/sfx'
 import { useNet } from '../net/connection'
 import { INTERP_DELAY, sampleEnemy, sampleHero, sampleOrb } from '../net/interp'
-import { angleDiff, moveHero, overGap } from '../shared/map'
+import { angleDiff, fallPoint, moveHero } from '../shared/map'
 import type { EnemyKind, HeroClass, ShotKind, Snapshot, StrikeView } from '../shared/protocol'
 import { CHARGE_TIME, ENEMY, HERO, HERO_RADIUS, HIT_INVULNERABLE, MANA } from '../shared/rules'
 import { attackInput, moveInput, specialInput } from './input'
@@ -26,7 +26,11 @@ export const local = {
   fallAt: -1, // performance.now() when this hero walked off the edge (until the server brings it back)
 }
 
-const FALL_MARGIN = 0.15 // same grace as the server (sim.ts)
+// While falling, the fall point is re-sent this often until the server takes it; if it never does, after
+// FALL_GIVE_UP_MS the device gives control back at the server's spot instead of staying frozen.
+const FALL_RESEND_MS = 300
+const FALL_GIVE_UP_MS = 2500
+let fallPos = { x: 0, y: 0 }
 
 export const manaMax = (cls: HeroClass) => (cls === 'priest' || cls === 'mage' ? MANA[cls].max : 0)
 export function manaCost(cls: HeroClass, charged: boolean) {
@@ -272,11 +276,21 @@ export function frame(dt: number) {
     return
   }
 
-  // Off the edge: no control while falling; the server counts the fall from the reported position.
+  // Off the edge: no control while falling; the server counts the fall from the reported position (it answers with
+  // the hero down and then a new epoch, which ends the fall here).
   if (local.fallAt >= 0) {
     local.moving = false
     local.charge = 0
     holdStart = -1
+    if (now - local.fallAt > FALL_GIVE_UP_MS) {
+      local.x = me.x
+      local.y = me.y
+      local.fallAt = -1
+      lastSent = { x: NaN, y: NaN, at: 0 }
+    } else if (now - lastSent.at >= FALL_RESEND_MS) {
+      net.send({ type: 'pos', x: fallPos.x, y: fallPos.y, facing: Math.round(local.facing * 100) / 100, epoch: local.epoch })
+      lastSent = { x: local.x, y: local.y, at: now }
+    }
     return
   }
   // Movement on this device, inside the map's walls and open doors.
@@ -321,10 +335,14 @@ export function frame(dt: number) {
     local.aiming = false
   }
 
-  if (overGap(s.rooms, local.x, local.y, FALL_MARGIN)) {
+  // The fall is decided on the rounded point that is sent, so the server always agrees.
+  const fell = fallPoint(s.rooms, local.x, local.y)
+  if (fell) {
     local.fallAt = now
+    fallPos = fell
     sfx.fall()
-    net.send({ type: 'pos', x: Math.round(local.x * 100) / 100, y: Math.round(local.y * 100) / 100, facing: local.facing, epoch: local.epoch })
+    net.send({ type: 'pos', x: fell.x, y: fell.y, facing: Math.round(local.facing * 100) / 100, epoch: local.epoch })
+    lastSent = { x: local.x, y: local.y, at: now }
     return
   }
 

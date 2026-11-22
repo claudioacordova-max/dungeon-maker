@@ -131,6 +131,19 @@ export function angleDiff(a: number, b: number): number {
   return Math.abs(d)
 }
 
+// Positions travel rounded to 0.01. The device decides its own fall on this same rounded point, so the server
+// (which only sees the rounded one) always agrees with it.
+export const netRound = (v: number) => Math.round(v * 100) / 100
+
+// How far past the edge a hero's center must be to fall (a little grace when brushing it).
+export const FALL_MARGIN = 0.15
+
+// The point a device reports for its hero's fall, or null when it is not over the edge.
+export function fallPoint(rooms: readonly (MapRoom & { shape?: RoomShape })[], x: number, y: number) {
+  const p = { x: netRound(x), y: netRound(y) }
+  return overGap(rooms, p.x, p.y, FALL_MARGIN) ? p : null
+}
+
 // True when (x, y) is over a missing stretch of floor of its room, at least `margin` past the edge.
 export function overGap(rooms: readonly (MapRoom & { shape?: RoomShape })[], x: number, y: number, margin: number): boolean {
   const room = roomAtPoint(rooms, x, y)

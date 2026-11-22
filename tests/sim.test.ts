@@ -1,7 +1,7 @@
 // Rules from DESIGN.md (v2) and the netcode checks, on the pure simulation (run with `npm test`).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { buildableSlots, difficulty, doorState, walkable } from '../src/shared/map.ts'
+import { buildableSlots, difficulty, doorState, FALL_MARGIN, fallPoint, walkable } from '../src/shared/map.ts'
 import { CHEST_SLOTS, floorCell, SHAPES, SPIKES } from '../src/shared/layouts.ts'
 import * as R from '../src/shared/rules.ts'
 import {
@@ -107,6 +107,28 @@ test('layouts: every spike and chest is on floor; enemies cannot stand over the 
   assert.equal(room.plan.length, 0, 'the slime over the gap is removed')
   assert.equal(place(g, room.id, 'slime', 1, 1), false)
   assert.ok(place(g, room.id, 'slime', 5, 1))
+})
+
+test('a fall the device decides is always a fall on the server too (same rounded point)', () => {
+  // Points crossing the west edge of the "banks" south-west gap (x 2.5) in tiny steps, around the fall margin,
+  // where rounding to 0.01 used to put the reported point back on the floor and freeze the hero.
+  for (let i = 0; i < 400; i++) {
+    const g = createGame([{ id: 'a', cls: 'melee' }])
+    g.enemies = []
+    build(g, 0, 1, 'normal')
+    const room = g.rooms[1]
+    setLayout(g, room.id, 'banks', false, 0)
+    setReady(g, room.id, true)
+    const hero = g.heroes[0]
+    const x = 2.5 - FALL_MARGIN + 0.02 - i * 0.0001
+    const y = R.ROOM_H + 2
+    hero.x = x + 0.05
+    hero.y = y
+    const fell = fallPoint(g.rooms.map((r) => ({ ...r, shape: r.layout.shape })), x, y)
+    if (fell) reportPosition(g, 'a', fell.x, fell.y, 0, hero.epoch)
+    step(g, 0.05)
+    assert.equal(hero.dead, !!fell, `device and server disagree at x=${x}`)
+  }
 })
 
 test('walking off the edge is a fall: the team loses a life; spikes hurt only while up', () => {
