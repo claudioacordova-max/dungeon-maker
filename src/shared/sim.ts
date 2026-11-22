@@ -1130,6 +1130,10 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
     introWaiting: [...game.intro],
     cinematic: game.cinematic ? { room: game.cinematic.room, t: r2(game.time - game.cinematic.at), total: R.CINEMATIC_SECONDS } : null,
     possessed: game.possessed,
+    possessedWait: (() => {
+      const e = game.enemies.find((x) => x.id === game.possessed)
+      return e ? { attack: r2(e.cooldown), special: r2(e.cooldown2) } : null
+    })(),
     summonIn: r2(Math.max(0, game.summonAt - game.time)),
     summonWait: game.summonWait,
   }

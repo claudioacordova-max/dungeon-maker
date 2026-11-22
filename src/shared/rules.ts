@@ -77,6 +77,9 @@ export const TICK_HZ = 20
 
 // The Maestro controlling an enemy (agent's feel values): the slime's attack is a short dash; the boss jumps up to
 // `kingJump` cells in the aimed direction.
+// The Maestro's own body (designer, 2026-11-22): twice a hero's speed, 70% while crossing a wall (`wallBand` cells
+// on each side of it); its smoke trail into a possessed enemy lasts `smokeSeconds`.
+export const LORD = { speed: 8.4, wallSpeed: 0.7, wallBand: 0.6, smokeSeconds: 0.5 } as const
 export const POSSESS = { dashSeconds: 0.3, dashSpeed: 3, dashCooldown: 0.9, kingJump: 4.5, autoAim: 9 } as const
 
 // Netcode tolerances (server checks on what devices report).

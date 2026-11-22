@@ -502,3 +502,40 @@
   height: 4.6em;
   margin: -0.8em 0 -0.4em;
 }
+
+/* ---------- The Maestro's body (2026-11-22): enemy button on the rail, waits on the possessed buttons ---------- */
+.rail-pop.enemy-list {
+  grid-template-columns: repeat(3, calc(76 * var(--ui-px)));
+}
+
+.rail-button .enemy-thumb-img {
+  width: 3.6em;
+  height: 3.6em;
+  margin: -0.7em 0 -0.5em;
+}
+
+.rail-button .enemy-plus {
+  font-size: 2.4em;
+}
+
+.master-stick {
+  position: relative;
+}
+
+.master-stick.is-waiting::after {
+  content: '';
+  position: absolute;
+  inset: 14%;
+  border-radius: 50%;
+  background: conic-gradient(rgb(10 5 30 / 0.62) calc(var(--wait) * 360deg), transparent 0);
+  pointer-events: none;
+}
+
+.teleport-row {
+  justify-content: space-between;
+}
+
+.mini-room[aria-current='location'] {
+  outline: 0.2em solid #ffffff;
+  outline-offset: 0.1em;
+}

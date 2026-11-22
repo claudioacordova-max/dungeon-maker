@@ -18,6 +18,7 @@ export const ctl = {
   moving: false,
   aim: null as number | null, // direction shown while a button is held
   aiming: false,
+  button: 'attack' as 'attack' | 'special', // which button is held (the preview on the floor shows its attack)
 }
 
 let dashUntil = 0
@@ -139,8 +140,9 @@ export function possessFrame(dt: number) {
   }
   if (a.held) {
     attackHeld = true
-    ctl.aim = a.aiming ? a.dir : nearestHero(s, ctl.x, ctl.y)
+    ctl.aim = a.aiming ? a.dir : (nearestHero(s, ctl.x, ctl.y) ?? ctl.facing)
     ctl.aiming = true
+    ctl.button = 'attack'
   } else if (attackHeld) {
     attackHeld = false
     fire('attack', a.aiming, a.dir)
@@ -148,8 +150,9 @@ export function possessFrame(dt: number) {
     ctl.aiming = false
   } else if (sp.held && enemy.kind === 'king') {
     specialHeld = true
-    ctl.aim = sp.aiming ? sp.dir : nearestHero(s, ctl.x, ctl.y)
+    ctl.aim = sp.aiming ? sp.dir : (nearestHero(s, ctl.x, ctl.y) ?? ctl.facing)
     ctl.aiming = true
+    ctl.button = 'special'
   } else if (specialHeld) {
     specialHeld = false
     fire('special', sp.aiming, sp.dir)

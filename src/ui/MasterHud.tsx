@@ -1,17 +1,21 @@
-// The Maestro's controls, laid out where the thumbs fall (design "C · Mando del Maestro", 2026-11-21):
-// - Map: the minimap at the bottom; "+" builds at once, a room opens for building or, with heroes, for watching.
-// - Building a room: the difficulty meter on top, the terrain rail on the right edge (floor, spikes, chests), the
-//   chosen enemy bottom-left (its list opens beside it) and a big "Sala lista" bottom-right, with Mapa above it.
-// - A ready room: the Maestro's powers. Tap an enemy to control it (movement stick left, attack right), also before
-//   the heroes arrive; "Invocar" and then a tap on the floor summons a slime there.
+// The Maestro's controls (designer, 2026-11-22). The Maestro moves its own body with the stick (bottom-left, like a
+// hero); the room where it is decides the rest:
+// - a room still being built: the difficulty on top; on the right edge a rail with the chosen enemy (its list opens to
+//   the left; it also opens by itself when the floor is tapped with no enemy chosen), floor, spikes and chests; a big
+//   "Sala lista" bottom-right;
+// - a ready room: its powers. Tap an enemy to control it (the body turns into smoke and goes into it); "Invocar" and
+//   then a tap on the floor summons a slime there;
+// - a free spot next to a room: "Construir aquí".
+// "Mapa" (above the big button) opens the map as a teleport.
 import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent } from 'react'
 import { setAttackStick, setSpecialStick } from '../game/input'
-import { heroesInside, useMaster } from '../game/master'
+import { hereRoom, teleportLord } from '../game/lord'
+import { heroesInside, isBuilding, useMaster } from '../game/master'
 import { useNet } from '../net/connection'
 import { layoutCost, SHAPE_NAME, SHAPES, type Layout } from '../shared/layouts'
-import { canAdd, difficulty } from '../shared/map'
+import { buildableSlots, canAdd, difficulty } from '../shared/map'
 import type { EnemyView, Placeable, RoomView, Snapshot } from '../shared/protocol'
-import { DIFFICULTY, MAX_ROOMS } from '../shared/rules'
+import { DIFFICULTY, ENEMY, MAX_ROOMS, POSSESS } from '../shared/rules'
 import { MoveStick } from './Controls'
 import MiniMap from './MiniMap'
 import { usePortraits } from './portraits'
@@ -51,26 +55,20 @@ function ShapeIcon({ shape }: { shape: Layout['shape'] }) {
 }
 
 export default function MasterHud({ s }: { s: Snapshot }) {
-  const mode = useMaster((m) => m.mode)
-  const roomId = useMaster((m) => m.room)
-  const observe = useMaster((m) => m.observe)
-  const pending = useMaster((m) => m.pending)
-  const editRoom = useMaster((m) => m.editRoom)
-  // A room just built opens for building as soon as the server confirms it.
-  useEffect(() => {
-    if (!pending) return
-    const built = s.rooms.find((r) => r.gx === pending.gx && r.gy === pending.gy)
-    if (built) (built.kind === 'normal' ? editRoom : observe)(built.id)
-  }, [pending, s.rooms, editRoom, observe])
-  // The boss entrance and the enemy under control take the Maestro to that room.
-  const focus = s.cinematic?.room ?? s.enemies.find((e) => e.id === s.possessed)?.room ?? null
-  useEffect(() => {
-    if (focus !== null) observe(focus)
-  }, [focus, observe])
-
-  const room = s.rooms.find((r) => r.id === roomId)
-  const waiting = s.introWaiting.length
+  const here = useMaster((m) => m.here)
+  const mapOpen = useMaster((m) => m.mapOpen)
   const portraitsDone = usePortraits((p) => p.done)
+  const waiting = s.introWaiting.length
+  const room = here ? hereRoom(s) : undefined
+  const held = s.enemies.find((e) => e.id === s.possessed)
+
+  let body
+  if (s.cinematic) body = <div className="cinema-bars" aria-hidden="true" />
+  else if (held) body = <PossessControls s={s} held={held} />
+  else if (mapOpen) body = <TeleportMap s={s} />
+  else if (room) body = isBuilding(s, room) ? <BuildControls s={s} room={room} /> : <PowerControls s={s} room={room} />
+  else body = <FreeSpot s={s} />
+
   return (
     <>
       {!portraitsDone && (
@@ -83,25 +81,71 @@ export default function MasterHud({ s }: { s: Snapshot }) {
           Los héroes leen la historia · listos {s.heroes.length - waiting}/{s.heroes.length}
         </div>
       )}
-      {mode === 'room' && room ? <BuildControls s={s} room={room} /> : mode === 'observe' && room ? <ObserveControls s={s} room={room} /> : <MapPanel s={s} />}
+      {body}
     </>
   )
 }
 
-function MapPanel({ s }: { s: Snapshot }) {
-  const bossPlaced = s.rooms.some((r) => r.kind === 'boss')
-  const bossNext = s.normalRooms >= MAX_ROOMS
+function MapButton() {
+  const setMapOpen = useMaster((m) => m.setMapOpen)
+  return (
+    <button type="button" className="ui-button small" onClick={() => setMapOpen(true)}>
+      Mapa
+    </button>
+  )
+}
+
+// The map as a teleport: tap a room (or a free spot) and the Maestro appears there.
+function TeleportMap({ s }: { s: Snapshot }) {
+  const setMapOpen = useMaster((m) => m.setMapOpen)
   return (
     <div className="master-panel panel">
-      <MiniMap s={s} />
-      <p className="master-note">
-        {bossPlaced
-          ? 'Mapa completo. Toca una sala para usar tus poderes.'
-          : bossNext
-            ? `Ya tienes ${MAX_ROOMS} salas: el + morado pone la sala del jefe.`
-            : 'Toca un + para construir. Toca una sala en obra para editarla, o una lista para usar tus poderes.'}
-      </p>
+      <MiniMap
+        s={s}
+        onPick={(gx, gy) => {
+          teleportLord(gx, gy)
+          setMapOpen(false)
+        }}
+      />
+      <div className="master-row teleport-row">
+        <p className="master-note">Toca una sala para aparecer en ella.</p>
+        <button type="button" className="ui-button small" onClick={() => setMapOpen(false)}>
+          Cerrar
+        </button>
+      </div>
     </div>
+  )
+}
+
+// A free spot next to a room: build here (the boss room once the normal rooms are done).
+function FreeSpot({ s }: { s: Snapshot }) {
+  const send = useNet((st) => st.send)
+  const here = useMaster((m) => m.here)
+  const bossPlaced = s.rooms.some((r) => r.kind === 'boss')
+  const buildable = !!here && !bossPlaced && buildableSlots(s.rooms).some((sl) => sl.gx === here.gx && sl.gy === here.gy)
+  const bossNext = s.normalRooms >= MAX_ROOMS
+  return (
+    <>
+      <MoveStick />
+      {buildable && <div className="master-top observe-tag">{bossNext ? 'Aquí puede ir la sala del jefe' : 'Espacio libre para una sala'}</div>}
+      <div className="master-panel master-dock">
+        <span />
+        <div className="dock-right">
+          <div className="dock-small">
+            <MapButton />
+          </div>
+          {buildable && (
+            <button
+              type="button"
+              className={bossNext ? 'ui-button ui-button-boss round-big' : 'ui-button ui-button-primary round-big'}
+              onClick={() => here && send({ type: 'build', gx: here.gx, gy: here.gy, kind: bossNext ? 'boss' : 'normal' })}
+            >
+              {bossNext ? 'Sala del jefe' : 'Construir aquí'}
+            </button>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -109,31 +153,16 @@ function MapPanel({ s }: { s: Snapshot }) {
 
 function BuildControls({ s, room }: { s: Snapshot; room: RoomView }) {
   const send = useNet((st) => st.send)
-  const toMap = useMaster((m) => m.toMap)
-  const observe = useMaster((m) => m.observe)
   const plan = room.plan ?? []
-  const layout = layoutOf(room)
-  const value = difficulty(plan, layout)
+  const value = difficulty(plan, layoutOf(room))
   const cap = s.cap
-  const locked = room.entered || room.kind !== 'normal'
-  // The ready button waits for the server's answer (a double tap must not undo it); editing a ready room asks first.
-  const [awaiting, setAwaiting] = useState<boolean | null>(null)
-  const [confirmEdit, setConfirmEdit] = useState(false)
+  // The ready button waits for the server's answer (a double tap must not undo it).
+  const [awaiting, setAwaiting] = useState(false)
   useEffect(() => {
-    if (awaiting !== null && room.ready === awaiting) setAwaiting(null)
-  }, [awaiting, room.ready])
-  useEffect(() => {
-    if (awaiting === null) return
-    const t = setTimeout(() => setAwaiting(null), 2000)
+    if (!awaiting) return
+    const t = setTimeout(() => setAwaiting(false), 2000)
     return () => clearTimeout(t)
   }, [awaiting])
-  useEffect(() => setConfirmEdit(false), [room.id])
-
-  const setReady = (ready: boolean) => {
-    setAwaiting(ready)
-    send({ type: 'ready', room: room.id, ready })
-  }
-
   return (
     <>
       <div className="master-top master-meter" aria-label={`Dificultad ${value} de ${cap}`}>
@@ -144,81 +173,44 @@ function BuildControls({ s, room }: { s: Snapshot; room: RoomView }) {
           <i style={{ width: `${Math.max(0, Math.min(1, value / cap)) * 100}%` }} />
         </span>
       </div>
-      {locked ? (
-        <div className="master-panel master-dock">
-          <p className="master-note dock-note">Los héroes ya entraron: esta sala no se puede cambiar.</p>
-          <div className="dock-right">
-            <button type="button" className="ui-button small" onClick={toMap}>
-              Mapa
+      <MoveStick />
+      <BuildRail room={room} cap={cap} maxChests={s.maxChests} />
+      <div className="master-panel master-dock">
+        <span />
+        <div className="dock-right">
+          <div className="dock-small">
+            <button type="button" className="ui-button small danger" onClick={() => send({ type: 'demolish', room: room.id })}>
+              Quitar
             </button>
-            <button type="button" className="ui-button ui-button-primary round-big" onClick={() => observe(room.id)}>
-              Observar
-            </button>
+            <MapButton />
           </div>
+          <button
+            type="button"
+            className="ui-button ui-button-primary round-big"
+            disabled={awaiting}
+            onClick={() => {
+              setAwaiting(true)
+              send({ type: 'ready', room: room.id, ready: true })
+            }}
+          >
+            {awaiting ? '…' : 'Sala lista'}
+          </button>
         </div>
-      ) : (
-        <>
-          {!room.ready && <TerrainRail room={room} cap={cap} maxChests={s.maxChests} />}
-          <div className="master-panel master-dock">
-            {room.ready ? <p className="master-note dock-note">Sala lista. Los héroes podrán entrar.</p> : <EnemyPicker room={room} cap={cap} />}
-            <div className="dock-right">
-              <div className="dock-small">
-                {!room.ready && (
-                  <button
-                    type="button"
-                    className="ui-button small danger"
-                    onClick={() => {
-                      send({ type: 'demolish', room: room.id })
-                      toMap()
-                    }}
-                  >
-                    Quitar
-                  </button>
-                )}
-                <button type="button" className="ui-button small" onClick={toMap}>
-                  Mapa
-                </button>
-              </div>
-              {room.ready && confirmEdit ? (
-                <div className="dock-confirm">
-                  <span>¿Editarla?</span>
-                  <button type="button" className="ui-button small danger" disabled={awaiting !== null} onClick={() => (setConfirmEdit(false), setReady(false))}>
-                    Sí
-                  </button>
-                  <button type="button" className="ui-button small" onClick={() => setConfirmEdit(false)}>
-                    No
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className={room.ready ? 'ui-button round-big is-done' : 'ui-button ui-button-primary round-big'}
-                  disabled={awaiting !== null}
-                  onClick={() => {
-                    if (room.ready) setConfirmEdit(true)
-                    else {
-                      // A finished room: back to the map, to go and watch the heroes.
-                      setReady(true)
-                      toMap()
-                    }
-                  }}
-                >
-                  {awaiting !== null ? '…' : room.ready ? 'Editar' : 'Sala lista'}
-                </button>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+      </div>
     </>
   )
 }
 
-// Right edge: floor shape (its list opens to the left), spikes on/off, chests (each tap adds one, back to 0).
-function TerrainRail({ room, cap, maxChests }: { room: RoomView; cap: number; maxChests: number }) {
+// Right edge: the chosen enemy (its list opens to the left), floor shape, spikes on/off, chests (each tap adds one).
+function BuildRail({ room, cap, maxChests }: { room: RoomView; cap: number; maxChests: number }) {
   const send = useNet((st) => st.send)
-  const open = useMaster((m) => m.shapes)
+  const shapesOpen = useMaster((m) => m.shapes)
   const setShapes = useMaster((m) => m.setShapes)
+  const tool = useMaster((m) => m.tool)
+  const setTool = useMaster((m) => m.setTool)
+  const pickerOpen = useMaster((m) => m.picker)
+  const cell = useMaster((m) => m.cell)
+  const setPicker = useMaster((m) => m.setPicker)
   const plan = room.plan ?? []
   const layout = layoutOf(room)
   const enemies = difficulty(plan, { shape: 'full', spikes: false, chests: 0 })
@@ -226,9 +218,21 @@ function TerrainRail({ room, cap, maxChests }: { room: RoomView; cap: number; ma
   const fits = (next: Layout) => enemies + layoutCost(next) <= cap || layoutCost(next) <= layoutCost(layout)
   const set = (next: Layout) => send({ type: 'layout', room: room.id, ...next })
   const nextChests = layout.chests >= maxChests ? 0 : layout.chests + 1
+  const label = ENEMIES.find((e) => e.kind === tool)?.label
   return (
-    <div className="master-rail" role="group" aria-label="Terreno">
-      <button type="button" className={open ? 'rail-button is-open' : 'rail-button'} aria-expanded={open} onClick={() => setShapes(!open)}>
+    <div className="master-rail" role="group" aria-label="Construir">
+      <button
+        type="button"
+        className={tool ? 'rail-button rail-enemy is-on' : 'rail-button rail-enemy'}
+        aria-expanded={pickerOpen}
+        aria-label={tool ? `Enemigo: ${label}. Cambiar` : 'Elegir enemigo'}
+        onClick={() => setPicker(!pickerOpen)}
+      >
+        {tool ? <EnemyThumb kind={tool} /> : <span className="enemy-plus">+</span>}
+        <span>{tool ? label : 'Enemigo'}</span>
+        {tool && <small>{cost(DIFFICULTY[tool])}</small>}
+      </button>
+      <button type="button" className={shapesOpen ? 'rail-button is-open' : 'rail-button'} aria-expanded={shapesOpen} onClick={() => setShapes(!shapesOpen)}>
         <ShapeIcon shape={layout.shape} />
         <span>{SHAPE_NAME[layout.shape]}</span>
         <small>{layout.shape === 'full' ? '0' : cost(DIFFICULTY.brokenFloor)}</small>
@@ -261,7 +265,28 @@ function TerrainRail({ room, cap, maxChests }: { room: RoomView; cap: number; ma
         <small>{cost(DIFFICULTY.chest)}</small>
         <b className="rail-badge">{layout.chests}</b>
       </button>
-      {open && (
+      {pickerOpen && (
+        <div className="rail-pop enemy-list" role="group" aria-label="Enemigos">
+          {ENEMIES.map((e) => (
+            <button
+              key={e.kind}
+              type="button"
+              className={tool === e.kind ? 'pop-tile is-current' : 'pop-tile'}
+              disabled={!canAdd(plan, layout, e.kind, cap)}
+              onClick={() => {
+                setTool(e.kind)
+                if (cell) send({ type: 'place', room: room.id, kind: e.kind, cx: cell.cx, cy: cell.cy })
+                setPicker(false)
+              }}
+            >
+              <EnemyThumb kind={e.kind} />
+              <span>{e.label}</span>
+              <small>{cost(DIFFICULTY[e.kind])}</small>
+            </button>
+          ))}
+        </div>
+      )}
+      {shapesOpen && (
         <div className="rail-pop" role="group" aria-label="Forma del suelo">
           {SHAPES.map((shape) => {
             const next = { ...layout, shape }
@@ -289,96 +314,13 @@ function TerrainRail({ room, cap, maxChests }: { room: RoomView; cap: number; ma
   )
 }
 
-// Bottom-left: the chosen enemy; its list opens beside it (also by itself when the floor is tapped with none chosen).
-function EnemyPicker({ room, cap }: { room: RoomView; cap: number }) {
-  const send = useNet((st) => st.send)
-  const tool = useMaster((m) => m.tool)
-  const setTool = useMaster((m) => m.setTool)
-  const open = useMaster((m) => m.picker)
-  const cell = useMaster((m) => m.cell)
-  const setPicker = useMaster((m) => m.setPicker)
-  const plan = room.plan ?? []
-  return (
-    <div className="enemy-picker">
-      <button
-        type="button"
-        className={tool ? 'enemy-current ui-button-primary' : 'enemy-current is-empty'}
-        aria-expanded={open}
-        aria-label={tool ? `Enemigo: ${ENEMIES.find((e) => e.kind === tool)?.label}. Cambiar` : 'Elegir enemigo'}
-        onClick={() => setPicker(!open)}
-      >
-        {tool ? <EnemyThumb kind={tool} /> : <span className="enemy-plus">+</span>}
-        <span>{tool ? ENEMIES.find((e) => e.kind === tool)?.label : 'Enemigo'}</span>
-      </button>
-      {open && (
-        <div className="enemy-pop" role="group" aria-label="Enemigos">
-          {ENEMIES.map((e) => (
-            <button
-              key={e.kind}
-              type="button"
-              className={tool === e.kind ? 'pop-tile is-current' : 'pop-tile'}
-              disabled={!canAdd(plan, layoutOf(room), e.kind, cap)}
-              onClick={() => {
-                setTool(e.kind)
-                if (cell) send({ type: 'place', room: room.id, kind: e.kind, cx: cell.cx, cy: cell.cy })
-                setPicker(false)
-              }}
-            >
-              <EnemyThumb kind={e.kind} />
-              <span>{e.label}</span>
-              <small>{cost(DIFFICULTY[e.kind])}</small>
-            </button>
-          ))}
-        </div>
-      )}
-      {!open && <p className="picker-hint">{tool ? 'Toca el suelo para poner · toca un enemigo para quitarlo' : 'Toca el suelo para poner un enemigo'}</p>}
-    </div>
-  )
-}
-
 // ---------- Powers (a ready room) ----------
 
-function ObserveControls({ s, room }: { s: Snapshot; room: RoomView }) {
+function PowerControls({ s, room }: { s: Snapshot; room: RoomView }) {
   const send = useNet((st) => st.send)
-  const toMap = useMaster((m) => m.toMap)
-  const editRoom = useMaster((m) => m.editRoom)
   const summoning = useMaster((m) => m.summoning)
   const setSummoning = useMaster((m) => m.setSummoning)
-  const held = s.enemies.find((e) => e.id === s.possessed)
-  const inside = heroesInside(s, room)
-  const canEdit = room.kind === 'normal' && !room.entered && !inside
-
-  if (s.cinematic) return <div className="cinema-bars" aria-hidden="true" />
-
-  if (held) {
-    const boss = held.kind === 'king'
-    return (
-      <>
-        <div className="master-top possess-tag">
-          Controlas: <b>{NAME[held.kind]}</b>
-          {held.chicken && ' (gallina)'}
-        </div>
-        <MoveStick />
-        <div className="master-panel master-dock is-possess">
-          <span />
-          <div className="dock-right">
-            {!boss && (
-              <div className="dock-small">
-                <button type="button" className="ui-button small" onClick={() => send({ type: 'release' })}>
-                  Soltar
-                </button>
-              </div>
-            )}
-            <div className="possess-buttons">
-              {boss && <MasterStick kind="special" label="Orbes" />}
-              <MasterStick kind="attack" label={held.kind === 'king' ? 'Salto' : held.kind === 'slime' ? 'Embestir' : held.kind === 'ogre' ? 'Garrote' : 'Lanzar'} />
-            </div>
-          </div>
-        </div>
-      </>
-    )
-  }
-
+  const canEdit = room.kind === 'normal' && !room.entered && !heroesInside(s, room)
   const ready = s.summonIn <= 0
   const hint =
     room.kind === 'boss'
@@ -391,25 +333,17 @@ function ObserveControls({ s, room }: { s: Snapshot; room: RoomView }) {
   return (
     <>
       <div className={summoning ? 'master-top observe-tag is-armed' : 'master-top observe-tag'}>{hint}</div>
+      <MoveStick />
       <div className="master-panel master-dock">
         <span />
         <div className="dock-right">
           <div className="dock-small">
             {canEdit && (
-              <button
-                type="button"
-                className="ui-button small"
-                onClick={() => {
-                  if (room.ready) send({ type: 'ready', room: room.id, ready: false })
-                  editRoom(room.id)
-                }}
-              >
+              <button type="button" className="ui-button small" onClick={() => send({ type: 'ready', room: room.id, ready: false })}>
                 Editar
               </button>
             )}
-            <button type="button" className="ui-button small" onClick={toMap}>
-              Mapa
-            </button>
+            <MapButton />
           </div>
           {room.kind !== 'boss' && room.ready && (
             <button
@@ -429,8 +363,55 @@ function ObserveControls({ s, room }: { s: Snapshot; room: RoomView }) {
   )
 }
 
-// The possessed enemy's buttons: tap = toward the nearest hero, drag = aim by hand, fired on release.
-function MasterStick({ kind, label }: { kind: 'attack' | 'special'; label: string }) {
+// ---------- Controlling an enemy ----------
+
+// Full wait of each attack, for the ring on its button.
+function fullWait(kind: EnemyView['kind'], button: 'attack' | 'special') {
+  if (kind === 'king') return button === 'attack' ? ENEMY.king.jumpEvery : ENEMY.king.fanEvery
+  if (kind === 'slime') return POSSESS.dashCooldown
+  if (kind === 'ogre') return ENEMY.ogre.cooldown
+  return ENEMY.thrower.cooldown
+}
+
+function PossessControls({ s, held }: { s: Snapshot; held: EnemyView }) {
+  const send = useNet((st) => st.send)
+  const boss = held.kind === 'king'
+  const wait = s.possessedWait ?? { attack: 0, special: 0 }
+  const ring = (button: 'attack' | 'special') => Math.max(0, Math.min(1, (button === 'attack' ? wait.attack : wait.special) / fullWait(held.kind, button)))
+  return (
+    <>
+      <div className="master-top possess-tag">
+        Controlas: <b>{NAME[held.kind]}</b>
+        {held.chicken && ' (gallina)'}
+      </div>
+      <MoveStick />
+      <div className="master-panel master-dock is-possess">
+        <span />
+        <div className="dock-right">
+          {!boss && (
+            <div className="dock-small">
+              <button type="button" className="ui-button small" onClick={() => send({ type: 'release' })}>
+                Soltar
+              </button>
+            </div>
+          )}
+          <div className="possess-buttons">
+            {boss && <MasterStick kind="special" label="Orbes" wait={ring('special')} />}
+            <MasterStick
+              kind="attack"
+              label={held.kind === 'king' ? 'Salto' : held.kind === 'slime' ? 'Embestir' : held.kind === 'ogre' ? 'Garrote' : 'Lanzar'}
+              wait={ring('attack')}
+            />
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// The possessed enemy's buttons: tap = toward the nearest hero, drag = aim by hand, fired on release. A dark ring
+// shows how long until the attack is ready again.
+function MasterStick({ kind, label, wait }: { kind: 'attack' | 'special'; label: string; wait: number }) {
   const base = useRef<HTMLDivElement>(null)
   const knob = useRef<HTMLDivElement>(null)
   const pointer = useRef<number | null>(null)
@@ -459,7 +440,8 @@ function MasterStick({ kind, label }: { kind: 'attack' | 'special'; label: strin
   return (
     <div
       ref={base}
-      className={`master-stick is-${kind}`}
+      className={wait > 0 ? `master-stick is-${kind} is-waiting` : `master-stick is-${kind}`}
+      style={{ ['--wait' as string]: String(wait) }}
       data-width={kind === 'attack' ? 118 : 86}
       role="button"
       aria-label={label}

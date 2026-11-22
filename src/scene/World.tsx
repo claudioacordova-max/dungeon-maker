@@ -6,14 +6,15 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import { PerspectiveCamera, Plane, Raycaster, Vector2, Vector3, type Group, type Mesh, type MeshBasicMaterial } from 'three'
 import { autoAim, feedback, frame as heroFrame, local, resetHero, shots as ownShots, visibleStrikes } from '../game/hero'
 import { setAttackStick, setSpecialStick } from '../game/input'
-import { openRoom, tapCell, useMaster } from '../game/master'
+import { isBuilding, tapCell, useMaster } from '../game/master'
+import { hereRoom, lord, lordFrame, resetLord } from '../game/lord'
 import { ctl, possessFrame, resetPossess } from '../game/possess'
 import { me, SHOW_GHOSTS, useNet } from '../net/connection'
 import { latestEnemy, sampleEnemy, sampleHero, sampleOrb, sampleShot } from '../net/interp'
 import { CHEST_SLOTS, floorCell, SPIKES } from '../shared/layouts'
 import { buildableSlots, DIRS, doorState, isPlaceableCell, overGap, roomAtPoint } from '../shared/map'
 import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, ShotKind, Snapshot, SpikePhase } from '../shared/protocol'
-import { ENEMY, ENEMY_TELEGRAPH, HERO, HERO_HITS, MAX_ROOMS, ROOM_H, ROOM_W, SUMMON } from '../shared/rules'
+import { ENEMY, ENEMY_TELEGRAPH, HERO, HERO_HITS, LORD, MAX_ROOMS, POSSESS, ROOM_H, ROOM_W, SUMMON } from '../shared/rules'
 import { PLAYER_COLORS } from '../ui/screens'
 import { MasterLord } from '../models/Master'
 import { PossessSmoke, PotionFx, SummonFx } from '../models/MagicEffects'
@@ -110,8 +111,6 @@ function fitMaster(b: Bounds, tilt: number, fov: number, w: number, h: number, b
 
 function CameraRig() {
   const { camera, size, gl } = useThree()
-  const mode = useMaster((m) => m.mode)
-  const editRoom = useMaster((m) => m.room)
   useFrame((_, dt) => {
     const cam = camera as PerspectiveCamera
     const net = useNet.getState()
@@ -134,23 +133,28 @@ function CameraRig() {
       cx = local.x
       cy = local.y + 1.6 // look a bit ahead (north): the hero sits lower on the screen
     } else if (isMaster && s) {
-      tilt = 1.15
-      const room = mode !== 'map' && editRoom !== null ? s.rooms.find((r) => r.id === editRoom) : undefined
-      let b: Bounds
-      if (room) b = { minX: room.gx * ROOM_W, maxX: (room.gx + 1) * ROOM_W, minY: room.gy * ROOM_H, maxY: (room.gy + 1) * ROOM_H }
-      else {
-        const cells = [...s.rooms, ...buildableSlots(s.rooms)]
-        b = {
-          minX: Math.min(...cells.map((r) => r.gx)) * ROOM_W,
-          maxX: (Math.max(...cells.map((r) => r.gx)) + 1) * ROOM_W,
-          minY: Math.min(...cells.map((r) => r.gy)) * ROOM_H,
-          maxY: (Math.max(...cells.map((r) => r.gy)) + 1) * ROOM_H,
-        }
+      const held = ctl.id !== null ? s.enemies.find((e) => e.id === ctl.id) : undefined
+      if (held) {
+        // Controlling an enemy: the camera follows it like a hero's (a bit wider for the boss).
+        cx = ctl.x
+        cy = ctl.y + 1.6
+        dist *= held.kind === 'king' ? 1.35 : 1.1
+      } else if (!cine && lord.ready && (lord.moving || performance.now() - lord.stillSince < 600)) {
+        // The Maestro's body moving: follow it, a little wider than a hero.
+        cx = lord.x
+        cy = lord.y + 1.6
+        dist *= 1.15
+      } else {
+        // Standing still (or the boss entrance): the whole room (or free spot) fits the screen, to build with care.
+        tilt = 1.15
+        const gx = cine ? cine.gx : Math.floor(lord.x / ROOM_W)
+        const gy = cine ? cine.gy : Math.floor(lord.y / ROOM_H)
+        const b: Bounds = { minX: gx * ROOM_W, maxX: (gx + 1) * ROOM_W, minY: gy * ROOM_H, maxY: (gy + 1) * ROOM_H }
+        const fit = fitMaster(b, tilt, cam.fov, size.width, size.height, freeBand(gl.domElement, size.height))
+        cx = fit.cx
+        cy = fit.cy
+        dist = fit.dist
       }
-      const fit = fitMaster(b, tilt, cam.fov, size.width, size.height, freeBand(gl.domElement, size.height))
-      cx = fit.cx
-      cy = fit.cy
-      dist = fit.dist
     }
     target.set(cx, 0, -cy)
     wanted.set(cx, Math.sin(tilt) * dist, -cy + Math.cos(tilt) * dist)
@@ -853,8 +857,6 @@ function TrapItem({ phase }: { phase?: SpikePhase }) {
 // ---------- Master building ----------
 
 function Slots({ s }: { s: Snapshot }) {
-  const send = useNet((st) => st.send)
-  const setPending = useMaster((m) => m.setPending)
   const bossPlaced = s.rooms.some((r) => r.kind === 'boss')
   if (bossPlaced) return null
   const bossNext = s.normalRooms >= MAX_ROOMS
@@ -864,15 +866,7 @@ function Slots({ s }: { s: Snapshot }) {
         const active = false
         return (
           <group key={`${slot.gx},${slot.gy}`} position={[(slot.gx + 0.5) * ROOM_W, 0.02, -(slot.gy + 0.5) * ROOM_H]}>
-            <mesh
-              rotation={[-Math.PI / 2, 0, 0]}
-              onPointerDown={(e) => {
-                e.stopPropagation()
-                // A tap on a "+" builds there at once (the room opens for building when the server confirms it).
-                send({ type: 'build', gx: slot.gx, gy: slot.gy, kind: bossNext ? 'boss' : 'normal' })
-                setPending(slot)
-              }}
-            >
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
               <planeGeometry args={[ROOM_W - 0.6, ROOM_H - 0.6]} />
               <meshBasicMaterial color={bossNext ? '#a855f7' : '#ffc533'} transparent opacity={active ? 0.45 : 0.18} depthWrite={false} />
             </mesh>
@@ -961,28 +955,6 @@ function RoomEditor({ room }: { room: RoomView }) {
   )
 }
 
-function MasterPicker({ s }: { s: Snapshot }) {
-  // Tapping a room on the map: build it, or watch it when the heroes are there.
-  return (
-    <>
-      {s.rooms.map((r) => (
-          <mesh
-            key={r.id}
-            rotation={[-Math.PI / 2, 0, 0]}
-            position={[(r.gx + 0.5) * ROOM_W, 0.05, -(r.gy + 0.5) * ROOM_H]}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              openRoom(s, r)
-            }}
-          >
-            <planeGeometry args={[ROOM_W, ROOM_H]} />
-            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-          </mesh>
-        ))}
-    </>
-  )
-}
-
 // A ready room with the Maestro's powers: a tap on (or next to) an enemy takes control of it; after "Invocar", a tap
 // on the floor summons a slime there (never right next to a hero: the tap is ignored).
 function ObserveTapper({ room, s }: { room: RoomView; s: Snapshot }) {
@@ -1024,15 +996,123 @@ function ObserveTapper({ room, s }: { room: RoomView; s: Snapshot }) {
   )
 }
 
-// The Maestro stands in the middle of the room it is building (only it sees itself there).
-function MasterAvatar({ room }: { room: RoomView }) {
-  const pose = useMemo(() => makePose(), [])
-  useFrame((_, dt) => {
-    pose.t += dt
-  })
+// The Maestro's body, only on its own screen: half dissolved while crossing a wall, gone while inside an enemy.
+function LordActor() {
   return (
-    <group position={[(room.gx + 0.5) * ROOM_W, 0, -(room.gy + 0.5) * ROOM_H]}>
-      <MasterLord pose={pose} />
+    <>
+      <Actor
+        at={() => (lord.ready && !lord.hidden ? lord : null)}
+        facing={() => lord.facing}
+        update={(pose) => setAnim(pose, lord.moving ? 'run' : 'idle')}
+      >
+        {(pose) => <MasterLord pose={pose} fade={() => lord.phase * 0.55} />}
+      </Actor>
+      <LordSmoke />
+    </>
+  )
+}
+
+// Puffs where the body vanished or appeared, and the trail when it flies into a possessed enemy.
+function LordSmoke() {
+  const group = useRef<Group>(null)
+  const [, setTick] = useState(0)
+  const seen = useRef(0)
+  useFrame(() => {
+    const now = performance.now()
+    const live = lord.puffs.filter((p) => now - p.at < 900).length + (lord.trail && now - lord.trail.at < 1200 ? 1 : 0)
+    if (live !== seen.current) {
+      seen.current = live
+      setTick((t) => t + 1)
+    }
+    const g = group.current
+    const tr = lord.trail
+    if (g && tr) {
+      const k = Math.min(1, (now - tr.at) / (LORD.smokeSeconds * 1000))
+      g.position.set(tr.fx + (tr.tx - tr.fx) * k, 0.3, -(tr.fy + (tr.ty - tr.fy) * k))
+      g.visible = k < 1
+    }
+  })
+  const now = performance.now()
+  return (
+    <>
+      {lord.puffs
+        .filter((p) => now - p.at < 900)
+        .map((p) => (
+          <group key={p.at} position={[p.x, 0, -p.y]}>
+            <FxProgress get={() => Math.min(1, (performance.now() - p.at) / 900)}>{(v) => <PossessSmoke progress={v} scale={0.6} />}</FxProgress>
+          </group>
+        ))}
+      {lord.trail && (
+        <group ref={group}>
+          <FxProgress get={() => Math.min(1, (performance.now() - (lord.trail?.at ?? 0)) / 1200)}>{(v) => <PossessSmoke progress={v} scale={0.5} />}</FxProgress>
+        </group>
+      )}
+    </>
+  )
+}
+
+function LordLoop() {
+  useEffect(() => resetLord, [])
+  useFrame((_, dt) => lordFrame(dt))
+  return null
+}
+
+// While a button of the possessed enemy is held: where its attack will go (like the heroes' aim on the floor).
+function PossessAim() {
+  const group = useRef<Group>(null)
+  const line = useRef<Mesh>(null)
+  const circle = useRef<Mesh>(null)
+  const fan = useRef<Group>(null)
+  useFrame(() => {
+    const g = group.current
+    const s = useNet.getState().snapshot
+    const e = s && ctl.id !== null ? s.enemies.find((x) => x.id === ctl.id) : undefined
+    if (!g || !line.current || !circle.current || !fan.current) return
+    g.visible = !!e && ctl.aiming && ctl.aim !== null && !e.chicken
+    if (!g.visible || !e) return
+    const dir = ctl.aim ?? ctl.facing
+    g.position.set(ctl.x, 0.06, -ctl.y)
+    g.rotation.y = dir
+    line.current.visible = false
+    circle.current.visible = false
+    fan.current.visible = false
+    const showLine = (length: number, width: number) => {
+      line.current!.visible = true
+      line.current!.scale.set(length, width, 1)
+      line.current!.position.set(length / 2, 0, 0)
+    }
+    const showCircle = (ahead: number, r: number) => {
+      circle.current!.visible = true
+      circle.current!.scale.set(r, r, 1)
+      circle.current!.position.set(ahead, 0, 0)
+    }
+    if (e.kind === 'slime') showLine(POSSESS.dashSeconds * ENEMY.slime.speed * POSSESS.dashSpeed, 0.7)
+    else if (e.kind === 'thrower') showLine(ENEMY.thrower.orbRange, 0.4)
+    else if (e.kind === 'ogre') showCircle(ENEMY.ogre.slamAhead, ENEMY.ogre.slamRadius)
+    else if (ctl.button === 'special') fan.current.visible = true
+    else showCircle(POSSESS.kingJump, ENEMY.king.jumpRadius)
+  })
+  const n = ENEMY.king.fanOrbs
+  return (
+    <group ref={group} visible={false}>
+      <mesh ref={line} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial color="#c084fc" transparent opacity={0.4} depthWrite={false} />
+      </mesh>
+      <mesh ref={circle} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[1, 40]} />
+        <meshBasicMaterial color="#c084fc" transparent opacity={0.35} depthWrite={false} />
+      </mesh>
+      <group ref={fan}>
+        {Array.from({ length: n }, (_, i) => (
+          <group key={i} rotation={[0, (i - (n - 1) / 2) * 0.32, 0]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[ENEMY.thrower.orbRange / 2, 0, 0]}>
+              <planeGeometry args={[ENEMY.thrower.orbRange, 0.3]} />
+              <meshBasicMaterial color="#c084fc" transparent opacity={0.35} depthWrite={false} />
+            </mesh>
+          </group>
+        ))}
+      </group>
     </group>
   )
 }
@@ -1170,15 +1250,16 @@ export default function World() {
   const s = state.snapshot
   const self = me(state)
   const isMaster = self?.role === 'master'
-  const mode = useMaster((m) => m.mode)
-  const editId = useMaster((m) => m.room)
+  const here = useMaster((m) => m.here)
   const dying = useDying(s)
   if (!s) return <LobbyBackdrop />
   const summons = summonList(s)
   const rooms = visibleRooms(s, isMaster)
   const roomIds = new Set(rooms.map((r) => r.id))
-  const editRoom = isMaster && mode === 'room' ? s.rooms.find((r) => r.id === editId) : undefined
-  const watched = isMaster && mode === 'observe' ? s.rooms.find((r) => r.id === editId) : undefined
+  // The Maestro builds or uses its powers in the room where its body is.
+  const hereR = isMaster && here ? hereRoom(s) : undefined
+  const editRoom = hereR && isBuilding(s, hereR) ? hereR : undefined
+  const watched = hereR && !editRoom ? hereR : undefined
 
   return (
     <>
@@ -1188,13 +1269,14 @@ export default function World() {
       {self?.role === 'hero' && <LocalHeroLoop />}
       {self?.role === 'hero' && <MouseAim />}
       {isMaster && <PossessLoop />}
+      {isMaster && <LordLoop />}
+      {isMaster && <LordActor />}
+      {isMaster && <PossessAim />}
       {rooms.map((r) => (
         <RoomTile key={r.id} room={r} doors={doorsOf(s.rooms, r, isMaster)} draft={isMaster && !r.ready} />
       ))}
-      {isMaster && mode === 'map' && <Slots s={s} />}
-      {isMaster && mode === 'map' && <MasterPicker s={s} />}
+      {isMaster && <Slots s={s} />}
       {editRoom && <RoomEditor room={editRoom} />}
-      {editRoom && !editRoom.entered && <MasterAvatar room={editRoom} />}
       {s.cinematic && <Entrance s={s} />}
       {summons.map((c) => (
         <group key={c.at} position={[c.x, 0, -c.y]}>

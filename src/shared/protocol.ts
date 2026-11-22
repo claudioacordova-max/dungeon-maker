@@ -95,6 +95,7 @@ export type Snapshot = {
   introWaiting: string[] // heroes still reading the intro; the heroes' match starts when it is empty
   cinematic: { room: number; t: number; total: number } | null // boss entrance (t: seconds since it began)
   possessed: number | null // enemy the Maestro controls
+  possessedWait: { attack: number; special: number } | null // seconds before its attacks are ready again
   summonIn: number // seconds before the Maestro can summon another slime (0 = ready)
   summonWait: number // the wait that began with the last summon (30 in a fight, 60 elsewhere), for the button
 }

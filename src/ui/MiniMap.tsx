@@ -1,6 +1,6 @@
 // The master's map as touch-friendly buttons: every room and every free slot where a room can be built.
-// Tap "+" to build there; tap a room to build it, or to watch it when heroes are inside. North is up, like the 3D view.
-import { openRoom, useMaster } from '../game/master'
+// Used as the Maestro's teleport: tapping a room or a free spot takes its body there. North is up, like the 3D view.
+import { useMaster } from '../game/master'
 import { useNet } from '../net/connection'
 import { buildableSlots, roomAtPoint } from '../shared/map'
 import type { Snapshot } from '../shared/protocol'
@@ -11,10 +11,9 @@ const MAX_CELL = 46 // design px
 const MAX_WIDTH = 330
 const MAX_HEIGHT = 250
 
-export default function MiniMap({ s }: { s: Snapshot }) {
+export default function MiniMap({ s, onPick }: { s: Snapshot; onPick: (gx: number, gy: number) => void }) {
   const players = useNet((st) => st.players)
-  const send = useNet((st) => st.send)
-  const setPending = useMaster((m) => m.setPending)
+  const here = useMaster((m) => m.here)
   const bossPlaced = s.rooms.some((r) => r.kind === 'boss')
   const slots = bossPlaced ? [] : buildableSlots(s.rooms)
   const bossNext = s.normalRooms >= MAX_ROOMS
@@ -58,7 +57,8 @@ export default function MiniMap({ s }: { s: Snapshot }) {
             className={cls}
             style={{ gridColumn: r.gx - minX + 1, gridRow: maxY - r.gy + 1 }}
             aria-label={`Sala ${state}${r.enemies ? `, ${r.enemies} enemigos` : ''}`}
-            onClick={() => openRoom(s, r)}
+            aria-current={here?.gx === r.gx && here?.gy === r.gy ? 'location' : undefined}
+            onClick={() => onPick(r.gx, r.gy)}
           >
             <span className="mini-label">{r.kind === 'boss' ? '👑' : r.kind === 'start' ? '⌂' : r.ready ? '✓' : '⚒'}</span>
             {r.enemies > 0 && <span className="mini-enemies">{r.enemies}</span>}
@@ -77,12 +77,8 @@ export default function MiniMap({ s }: { s: Snapshot }) {
             type="button"
             className={['mini-slot', bossNext ? 'is-boss' : ''].join(' ')}
             style={{ gridColumn: sl.gx - minX + 1, gridRow: maxY - sl.gy + 1 }}
-            aria-label={bossNext ? 'Construir aquí la sala del jefe' : 'Construir aquí una sala'}
-            onClick={() => {
-              // Builds at once; the room opens for building when the server confirms it.
-              send({ type: 'build', gx: sl.gx, gy: sl.gy, kind: bossNext ? 'boss' : 'normal' })
-              setPending(sl)
-            }}
+            aria-label={bossNext ? 'Ir al lugar de la sala del jefe' : 'Ir a este espacio libre'}
+            onClick={() => onPick(sl.gx, sl.gy)}
           >
             +
           </button>
