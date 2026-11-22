@@ -183,7 +183,14 @@ function BuildControls({ s, room }: { s: Snapshot; room: RoomView }) {
                   type="button"
                   className={room.ready ? 'ui-button round-big is-done' : 'ui-button ui-button-primary round-big'}
                   disabled={awaiting !== null}
-                  onClick={() => (room.ready ? setConfirmEdit(true) : setReady(true))}
+                  onClick={() => {
+                    if (room.ready) setConfirmEdit(true)
+                    else {
+                      // A finished room: back to the map, to go and watch the heroes.
+                      setReady(true)
+                      toMap()
+                    }
+                  }}
                 >
                   {awaiting !== null ? '…' : room.ready ? 'Editar' : 'Sala lista'}
                 </button>

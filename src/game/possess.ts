@@ -100,7 +100,9 @@ export function possessFrame(dt: number) {
       else if (ok(ctl.x, c.y)) ctl.y = c.y
     }
   }
-  if (now - sentAt > 66 && (Math.abs(ctl.x - sent.x) > 0.01 || Math.abs(ctl.y - sent.y) > 0.01)) {
+  // (Written so that a first position, with nothing sent yet, also goes out.)
+  const unchanged = Math.abs(ctl.x - sent.x) <= 0.01 && Math.abs(ctl.y - sent.y) <= 0.01
+  if (now - sentAt > 66 && !unchanged) {
     net.send({ type: 'steer', x: ctl.x, y: ctl.y, facing: ctl.facing })
     sent = { x: ctl.x, y: ctl.y }
     sentAt = now
