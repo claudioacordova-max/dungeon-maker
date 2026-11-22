@@ -17,6 +17,7 @@ import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, ShotKind, Snap
 import { ENEMY, ENEMY_TELEGRAPH, HERO, HERO_HITS, LORD, MAX_ROOMS, POSSESS, ROOM_H, ROOM_W, SUMMON } from '../shared/rules'
 import { PLAYER_COLORS } from '../ui/screens'
 import { MasterLord } from '../models/Master'
+import { Bedrock, UnbuiltLot } from '../models'
 import { PossessSmoke, PotionFx, SummonFx } from '../models/MagicEffects'
 import {
   BurnFx,
@@ -857,33 +858,32 @@ function TrapItem({ phase }: { phase?: SpikePhase }) {
 
 // ---------- Master building ----------
 
+// Free spots where the Maestro can build: rough rock with the glowing outline of the room to come (only the Maestro
+// sees them).
 function Slots({ s }: { s: Snapshot }) {
   const bossPlaced = s.rooms.some((r) => r.kind === 'boss')
   if (bossPlaced) return null
   const bossNext = s.normalRooms >= MAX_ROOMS
   return (
     <>
-      {buildableSlots(s.rooms).map((slot) => {
-        const active = false
-        return (
-          <group key={`${slot.gx},${slot.gy}`} position={[(slot.gx + 0.5) * ROOM_W, 0.02, -(slot.gy + 0.5) * ROOM_H]}>
-            <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <planeGeometry args={[ROOM_W - 0.6, ROOM_H - 0.6]} />
-              <meshBasicMaterial color={bossNext ? '#a855f7' : '#ffc533'} transparent opacity={active ? 0.45 : 0.18} depthWrite={false} />
-            </mesh>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-              <planeGeometry args={[3, 0.6]} />
-              <meshBasicMaterial color="#ffffff" transparent opacity={0.7} depthWrite={false} />
-            </mesh>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-              <planeGeometry args={[0.6, 3]} />
-              <meshBasicMaterial color="#ffffff" transparent opacity={0.7} depthWrite={false} />
-            </mesh>
-          </group>
-        )
-      })}
+      {buildableSlots(s.rooms).map((slot) => (
+        <group key={`${slot.gx},${slot.gy}`} position={[(slot.gx + 0.5) * ROOM_W, 0, -(slot.gy + 0.5) * ROOM_H]}>
+          <UnbuiltLot boss={bossNext} />
+        </group>
+      ))}
     </>
   )
+}
+
+// The rock the dungeon is carved into, under and around the whole map (a few rooms wider), so that outside a room
+// is never an empty void. Rounded to whole rooms so it only changes when the map grows.
+function Rock({ s }: { s: Snapshot }) {
+  const cells = [...s.rooms, ...buildableSlots(s.rooms)]
+  const minX = (Math.min(...cells.map((c) => c.gx)) - 3) * ROOM_W
+  const maxX = (Math.max(...cells.map((c) => c.gx)) + 4) * ROOM_W
+  const minY = (Math.min(...cells.map((c) => c.gy)) - 3) * ROOM_H
+  const maxY = (Math.max(...cells.map((c) => c.gy)) + 4) * ROOM_H
+  return <Bedrock minX={minX} maxX={maxX} minZ={-maxY} maxZ={-minY} />
 }
 
 function PlanGhost({ item }: { item: PlanItem }) {
@@ -1276,6 +1276,7 @@ export default function World() {
       {rooms.map((r) => (
         <RoomTile key={r.id} room={r} doors={doorsOf(s.rooms, r, isMaster)} draft={isMaster && !r.ready} />
       ))}
+      <Rock s={s} />
       {isMaster && <Slots s={s} />}
       {editRoom && <RoomEditor room={editRoom} />}
       {s.cinematic && <Entrance s={s} />}

@@ -11,13 +11,15 @@ import { PreviewMagic, type MagicExhibit } from './MagicEffects'
 import { Slime, SlimeKing, Thrower } from './Enemies'
 import { MasterLord, PreviewMasterFade } from './Master'
 import { Chest, RoomShell, SpikeTrap } from './Dungeon'
+import { Bedrock, UnbuiltLot } from './Ground'
 import { BlobShadow, EnemyOrb, HeroBolt, PreviewStroke } from './Effects'
 import { bake, box, toon } from './kit'
 import { makePose, type Anim, type Pose } from './types'
 import './showcase.css'
 
 type Name = 'Swordsman' | 'Ranger' | 'Priestess' | 'Mage' | 'Ogre' | 'Chicken' | 'Thrower' | 'Slime' |
-  'Slime King' | 'Maestro' | 'Dissolve' | 'Chest' | 'Spikes' | 'Bolts' | 'Orb' | 'Slash' | 'Spin' | MagicExhibit
+  'Slime King' | 'Maestro' | 'Dissolve' | 'Chest' | 'Spikes' | 'Bolts' | 'Orb' | 'Slash' | 'Spin' |
+  'Unbuilt lot' | 'Boss lot' | MagicExhibit
 type Exhibit = { name: Name; x: number; z: number; labelOffset: number; anims?: Anim[]; width?: number; height?: number; possessed?: boolean }
 function pair(entry: Omit<Exhibit,'x'>): Exhibit[] {
   return [{ ...entry, x: .25 }, { ...entry, x: .75, possessed: true }]
@@ -50,7 +52,11 @@ const rooms: Record<Page, Exhibit[]> = {
     { name: 'Summon', x: .76, z: .37, labelOffset: .60, width: 1.86, height: .14 },
     { name: 'Potion', x: .65, z: .12, labelOffset: .47, width: 1.90, height: .52 },
   ],
-  Floors: [{ name: 'Spikes', x: .5, z: .5, labelOffset: .65, width: 2.1, height: .30 }],
+  Floors: [
+    { name: 'Spikes', x: .5, z: .5, labelOffset: .65, width: 2.1, height: .30 },
+    { name: 'Unbuilt lot', x: .5, z: -.5, labelOffset: 2.2 },
+    { name: 'Boss lot', x: .5, z: 1.5, labelOffset: 2.2 },
+  ],
   Combat: [
     { name: 'Bolts', x: .27, z: .74, labelOffset: .48 }, { name: 'Orb', x: .73, z: .74, labelOffset: .48 },
     { name: 'Slash', x: .27, z: .30, labelOffset: .55 }, { name: 'Spin', x: .73, z: .30, labelOffset: .55 },
@@ -61,6 +67,8 @@ const rooms: Record<Page, Exhibit[]> = {
     { name: 'Heal', x: .27, z: .20, labelOffset: .58 }, { name: 'Poof', x: .73, z: .20, labelOffset: .48 },
   ],
 }
+const isLot = (name: Name) => name === 'Unbuilt lot' || name === 'Boss lot'
+const floorsAcross = rooms.Floors.map(e => ({ ...e, x: 1 - e.z, z: .5 }))
 const doors = { n: 'closed', s: 'none', e: 'locked', w: 'open' } as const
 const interval = 1.55
 type Playback = { t: number; paused: boolean; focus: number }
@@ -91,13 +99,19 @@ function FrameScene({ play, labels, w, h, exhibits }: { play: Playback; labels: 
       camera.lookAt(targetX, targetY, targetZ)
       camera.updateMatrixWorld()
     }
-    if (exhibit) {
+    if (exhibit && !isLot(exhibit.name)) {
       if (camera.view?.enabled) camera.clearViewOffset()
       const subjectWidth = exhibit.width ?? 1.8
       place(Math.max(subjectWidth / camera.aspect, subjectWidth * .93) / (2 * Math.tan(MathUtils.degToRad(camera.fov / 2))))
     } else {
       // Fit all eight corners, including the front corners closest to the lens.
-      let near = 3, far = 60
+      const lots = exhibits.filter(e => isLot(e.name))
+      const centers = exhibit ? [exhibit] : [{ x: .5, z: .5 }, ...lots]
+      const x0 = (Math.min(...centers.map(e => e.x)) - .5) * w
+      const x1 = (Math.max(...centers.map(e => e.x)) + .5) * w
+      const z0 = -(Math.max(...centers.map(e => e.z)) + .5) * h
+      const z1 = -(Math.min(...centers.map(e => e.z)) - .5) * h
+      let near = 3, far = lots.length ? 180 : 60
       const heading = size.height < 540 ? 53 : 76
       const controls = size.height < 540 ? 106 : 126
       const top = 1 - 2*heading/size.height, bottom = -1 + 2*controls/size.height
@@ -106,7 +120,7 @@ function FrameScene({ play, labels, w, h, exhibits }: { play: Playback; labels: 
         const distance = (near + far) / 2
         place(distance)
         let fits = true
-        for (const x of [-.67, w + .67]) for (const z of [-h - .59, .60]) for (const y of [-.55, 1.35]) {
+        for (const x of [x0 - .67, x1 + .67]) for (const z of [z0 - .59, z1 + .60]) for (const y of [-.55, 1.35]) {
           project.set(x, y, z).project(camera)
           if (Math.abs(project.x) > .95 || project.y > top || project.y < bottom) fits = false
         }
@@ -146,7 +160,7 @@ function Display({ entry, i, play, w, h, labels, phase }: {
     pose.t = phase ? pose.t + Math.min(dt, .1) : t
     pose.charge = Math.min(1, t / .85)
     pose.flash = anim === 'hurt' ? Math.max(0, 1 - t * 4.6) : 0
-    let label: string = phase ?? (anims ? anim : '')
+    let label: string = (name === 'Spikes' && phase) || (anims ? anim : '')
     if (name === 'Chest') {
       const opened = step % 2 === 1
       shut.current!.visible = !opened
@@ -175,6 +189,8 @@ function Model({ name, possessed, pose, play, shut, open, phase }: {
   name: Name; possessed?: boolean; pose: Pose; play: Playback; shut: RefObject<Group | null>; open: RefObject<Group | null>; phase?: SpikePhase
 }) {
   switch (name) {
+    case 'Unbuilt lot': return <UnbuiltLot />
+    case 'Boss lot': return <UnbuiltLot boss />
     case 'Swordsman': return <group rotation-y={2.72}><MeleeHero pose={pose} tint="#ff6b59" /></group>
     case 'Ranger': return <group rotation-y={3.59}><RangedHero pose={pose} tint="#56e7bf" /></group>
     case 'Priestess': return <group rotation-y={3.48}><PriestHero pose={pose} tint="#45d2bc" /></group>
@@ -209,11 +225,12 @@ function Diorama({ play, labels, page, shape, phase }: {
   const floors = page === 'Floors'
   const w = floors ? ROOM_W : page === 'Dungeon' ? 6 : 4
   const h = floors ? ROOM_H : page === 'Dungeon' ? 14 : wide ? 5 : 6
-  const exhibits = rooms[page]
+  const exhibits = floors && wide ? floorsAcross : rooms[page]
   return <>
     <FrameScene play={play} labels={labels} w={w} h={h} exhibits={exhibits} />
     <ambientLight color="#e8e2ff" intensity={1.08} />
     <directionalLight position={[-5, 8, 4]} color="#fff0d2" intensity={2.55} />
+    {floors && <Bedrock minX={-6*w} maxX={7*w} minZ={-5*h} maxZ={4*h} />}
     {!floors && <>
       <group position={[w / 2 + .13, -.59, -h / 2 + .19]} scale={[w * .82, 1, h * .92]}>
         <BlobShadow radius={1} />
@@ -232,15 +249,13 @@ export default function Showcase() {
   const exhibits = rooms[page]
   const play = useMemo<Playback>(() => ({ t: 0, paused: false, focus: -1 }), [])
   const labels = useRef<(HTMLButtonElement | null)[]>([])
-  const overview = useRef<HTMLButtonElement>(null)
-  const gallery = useRef<HTMLElement>(null)
+  const [focusIndex, setFocusIndex] = useState(-1)
   function focus(i: number) {
     play.focus = i
-    if (overview.current) overview.current.hidden = i === -1
-    if (gallery.current) gallery.current.dataset.focused = String(i !== -1)
+    setFocusIndex(i)
   }
-  return <main ref={gallery} className="dm-gallery" aria-label="Dungeon Maker model showcase">
-    <Canvas dpr={[1, 2]} camera={{ fov: 30, near: .1, far: 100 }} gl={{ antialias: true, alpha: true }}>
+  return <main data-focused={focusIndex !== -1} className="dm-gallery" aria-label="Dungeon Maker model showcase">
+    <Canvas dpr={[1, 2]} camera={{ fov: 30, near: .1, far: 240 }} gl={{ antialias: true, alpha: true }}>
       <Diorama play={play} labels={labels} page={page} shape={shape} phase={phase} />
     </Canvas>
     <header className="dm-gallery-title">
@@ -264,14 +279,14 @@ export default function Showcase() {
         }}>{room}</button>)}
       </div>
       <div className="dm-playback-row">
-        <button type="button" className="dm-back" hidden ref={overview} onClick={() => focus(-1)}>
+        <button type="button" className="dm-back" hidden={focusIndex === -1} onClick={() => focus(-1)}>
           {page === 'Floors' ? 'Room view' : 'All models'}
         </button>
         {page === 'Floors' && <>
           <div className="dm-transport dm-shapes" role="group" aria-label="Floor shape">
             {SHAPES.map(s => <button type="button" key={s} aria-pressed={shape === s} onClick={() => setShape(s)}>{s}</button>)}
           </div>
-          <div className="dm-transport dm-phases" role="group" aria-label="Spike phase">
+          <div className="dm-transport dm-phases" hidden={focusIndex >= 0 && exhibits[focusIndex]?.name !== 'Spikes'} role="group" aria-label="Spike phase">
             {(['down', 'warn', 'up'] as const).map(p =>
               <button type="button" key={p} aria-pressed={phase === p} onClick={() => setPhase(p)}>{p}</button>)}
           </div>

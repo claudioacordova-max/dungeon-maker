@@ -5,5 +5,6 @@ export { LightOrb, FireSpark, PolyBolt, BurnFx, HealFx, PoofFx } from './MagicEf
 export { Slime, Thrower, SlimeKing } from './Enemies'
 export { HeroBolt, EnemyOrb, SlashFx, SpinFx, BlobShadow } from './Effects'
 export { RoomShell, Chest, SpikeTrap, type Door } from './Dungeon'
+export { Bedrock, UnbuiltLot } from './Ground'
 export { makePose, type Pose, type Anim } from './types'
 export { default as Showcase } from './Showcase'
