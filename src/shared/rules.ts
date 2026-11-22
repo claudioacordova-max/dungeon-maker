@@ -101,7 +101,8 @@ export const TICK_HZ = 20
 // The Maestro's own body (designer, 2026-11-22): a bit under twice a hero's speed (-12% after the first playtest), 70% while crossing a wall (`wallBand` cells
 // on each side of it); its smoke trail into a possessed enemy lasts `smokeSeconds`.
 export const LORD = { speed: 7.4, wallSpeed: 0.7, wallBand: 0.6, smokeSeconds: 0.5 } as const
-export const POSSESS = { dashSeconds: 0.3, dashSpeed: 3, dashCooldown: 0.9, kingJump: 4.5, autoAim: 9 } as const
+// `buffer`: an order pressed while the enemy is busy or recharging still goes off if it can within this many seconds.
+export const POSSESS = { dashSeconds: 0.3, dashSpeed: 3, dashCooldown: 0.9, kingJump: 4.5, autoAim: 9, buffer: 0.5 } as const
 
 // Netcode tolerances (server checks on what devices report).
 export const MOVE_TOLERANCE = 1.5

@@ -109,6 +109,9 @@ export type Game = {
   intro: Set<string> // heroes still picking hero and passive at the entrance: nothing moves until it is empty
   cinematic: { room: number; at: number } | null // boss entrance, from game time `at`
   possessed: number | null // enemy the Maestro controls
+  // A Maestro order that arrived while its enemy was playing an attack or recharging: it goes off as soon as it can,
+  // right after the attack's animation or within POSSESS.buffer seconds of recharge (pressing early is not lost).
+  queuedAct: { enemy: number; kind: 'attack' | 'special'; dir: number; until: number } | null
   summonAt: number // game time the Maestro can summon again
   summonWait: number // length of that wait
   kills: number // times a hero fell (the Maestro's counter)
@@ -155,6 +158,7 @@ export function createGame(heroes: { id: string; cls?: HeroClass }[]): Game {
     intro: new Set(heroes.map((h) => h.id)),
     cinematic: null,
     possessed: null,
+    queuedAct: null,
     summonAt: 0,
     summonWait: 0,
     kills: 0,
@@ -465,7 +469,8 @@ function hurtEnemy(game: Game, hero: Hero, enemy: Enemy, damage: number) {
   enemy.hp -= damage
   enemy.lastHero = hero.id
   damageChicken(game, enemy)
-  enemy.stun = R.ENEMY_HIT_STUN
+  // The enemy the Maestro controls is never stunned by hits (the heroes would keep it locked out of its attacks).
+  if (enemy.id !== game.possessed) enemy.stun = R.ENEMY_HIT_STUN
   if (enemy.kind !== 'king' && enemy.kind !== 'ogre' && enemy.id !== game.possessed) {
     const d = dist(enemy.x, enemy.y, hero.x, hero.y) || 1
     moveEnemy(game, enemy, enemy.x + ((enemy.x - hero.x) / d) * R.ENEMY_KNOCKBACK, enemy.y + ((enemy.y - hero.y) / d) * R.ENEMY_KNOCKBACK)
@@ -868,10 +873,32 @@ export function reportRam(game: Game, heroId: string): boolean {
 }
 
 // The Maestro's attack button (and the boss's second one) on the possessed enemy, toward `dir`.
+// Busy (playing an attack) or recharging: the order waits in queuedAct instead of being lost.
 export function enemyAct(game: Game, kind: 'attack' | 'special', dir: number): boolean {
   const enemy = possessedEnemy(game)
-  if (!enemy || game.intro.size > 0 || !Number.isFinite(dir) || enemy.poly > 0 || enemy.stun > 0) return false
-  if (enemy.state === 'windup' || enemy.state === 'jump' || enemy.state === 'recover') return false
+  if (!enemy || game.intro.size > 0 || !Number.isFinite(dir) || enemy.poly > 0) return false
+  if (kind === 'special' && enemy.kind !== 'king') return false
+  game.queuedAct = null
+  if (startAct(game, enemy, kind, dir)) return true
+  game.queuedAct = { enemy: enemy.id, kind, dir, until: game.time + R.POSSESS.buffer }
+  return true
+}
+
+function runQueuedAct(game: Game) {
+  const q = game.queuedAct
+  if (!q) return
+  const enemy = possessedEnemy(game)
+  if (!enemy || enemy.id !== q.enemy || enemy.poly > 0 || game.time > q.until) {
+    game.queuedAct = null
+    return
+  }
+  if (startAct(game, enemy, q.kind, q.dir)) game.queuedAct = null
+  // While it plays an attack the order keeps waiting: it goes off right after (the Maestro sees the animation).
+  else if (enemy.state === 'windup' || enemy.state === 'jump' || enemy.state === 'recover') q.until = game.time + R.POSSESS.buffer
+}
+
+function startAct(game: Game, enemy: Enemy, kind: 'attack' | 'special', dir: number): boolean {
+  if (enemy.stun > 0 || enemy.state === 'windup' || enemy.state === 'jump' || enemy.state === 'recover') return false
   const room = roomOf(game, enemy.room)
   if (!room) return false
   if (kind === 'special') {
@@ -1087,6 +1114,7 @@ export function step(game: Game, dt: number) {
   }
 
   for (const enemy of game.enemies) stepEnemy(game, enemy, alive, dt)
+  runQueuedAct(game)
   game.strikes = game.strikes.filter((s) => game.time <= s.landsAt + R.STRIKE_CLAIM_WINDOW)
 
   for (const orb of game.orbs) {

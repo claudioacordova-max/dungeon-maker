@@ -5,7 +5,7 @@ import { useNet } from '../net/connection'
 import { latestEnemy, sampleHero } from '../net/interp'
 import { clampToRoom, roomOrigin } from '../shared/map'
 import { touchesGap } from '../shared/layouts'
-import type { Snapshot } from '../shared/protocol'
+import type { EnemyView, Snapshot } from '../shared/protocol'
 import { ENEMY, HERO_RADIUS, POLYMORPH, POSSESS } from '../shared/rules'
 import { sfx } from '../audio/sfx'
 import { attackInput, moveInput, specialInput } from './input'
@@ -21,8 +21,26 @@ export const ctl = {
   button: 'attack' as 'attack' | 'special', // which button is held (the preview on the floor shows its attack)
 }
 
+type Button = 'attack' | 'special'
+
+// Full wait of each button after it fires.
+export function fullWait(kind: EnemyView['kind'], button: Button) {
+  if (kind === 'king') return button === 'attack' ? ENEMY.king.jumpEvery : ENEMY.king.fanEvery
+  if (kind === 'slime') return POSSESS.dashCooldown
+  if (kind === 'ogre') return ENEMY.ogre.cooldown
+  return ENEMY.thrower.cooldown
+}
+
+// Recharge of each button counted on this device (performance.now() ms when it is ready again, so it runs without
+// the network delay), corrected by the server's value; `deniedAt` = a press too early. Read by the buttons each frame.
+export const recharge = {
+  attack: { until: 0, full: 1, firedAt: -1e9, deniedAt: -1e9 },
+  special: { until: 0, full: 1, firedAt: -1e9, deniedAt: -1e9 },
+}
+
 let dashUntil = 0
-let dashReadyAt = 0
+let pendingDash: number | null = null // slime: a dash pressed just before it recharged, goes off when it does
+let lastSnap: Snapshot | null = null
 let sentAt = 0
 let sent = { x: NaN, y: NaN }
 let attackHeld = false
@@ -50,6 +68,11 @@ export function resetPossess() {
   ctl.aiming = false
   attackHeld = false
   specialHeld = false
+  pendingDash = null
+  for (const r of Object.values(recharge)) {
+    r.until = 0
+    r.firedAt = -1e9
+  }
 }
 
 export function possessFrame(dt: number) {
@@ -68,6 +91,19 @@ export function possessFrame(dt: number) {
     ctl.x = p.x
     ctl.y = p.y
     ctl.facing = enemy.facing
+  }
+  // The server's recharge, adopted when it drifts apart from the count here (not right after a press, while the
+  // server has not heard of it yet).
+  if (s !== lastSnap) {
+    lastSnap = s
+    const w = s.possessedWait
+    for (const b of ['attack', 'special'] as const) {
+      const r = recharge[b]
+      r.full = fullWait(enemy.kind, b)
+      if (!w || now - r.firedAt < net.latency + 250) continue
+      const until = now + w[b] * 1000 - net.latency / 2
+      if (Math.abs(until - r.until) > 250) r.until = w[b] > 0 ? until : 0
+    }
   }
   const room = s.rooms.find((r) => r.id === enemy.room)
   const step = Math.min(dt, 0.1)
@@ -124,18 +160,41 @@ export function possessFrame(dt: number) {
     }
   }
 
-  // Buttons: fire on release, toward the dragged direction or the nearest hero.
+  // Buttons: fire on release, toward the dragged direction or the nearest hero. A press while busy or a little
+  // before it recharges (POSSESS.buffer) is kept and goes off as soon as it can (the server queues it); earlier
+  // than that it is refused, with a shake of the button.
   const a = attackInput()
   const sp = specialInput()
-  const fire = (kind: 'attack' | 'special', aiming: boolean, dir: number) => {
+  const dash = (d: number) => {
+    dashUntil = now + POSSESS.dashSeconds * 1000
+    recharge.attack.until = now + POSSESS.dashCooldown * 1000
+    recharge.attack.firedAt = now
+    ctl.facing = d
+    net.send({ type: 'enemyAct', kind: 'attack', dir: d })
+  }
+  if (pendingDash !== null && now >= recharge.attack.until && !locked) {
+    dash(pendingDash)
+    pendingDash = null
+  }
+  const fire = (kind: Button, aiming: boolean, dir: number) => {
     const d = aiming ? dir : (nearestHero(s, ctl.x, ctl.y) ?? ctl.facing)
-    if (enemy.chicken || locked) return
+    if (enemy.chicken) return
+    const r = recharge[kind]
+    const left = r.until - now
+    if (left > POSSESS.buffer * 1000) {
+      r.deniedAt = now
+      sfx.noMana()
+      return
+    }
     if (kind === 'attack' && enemy.kind === 'slime') {
-      if (now < dashReadyAt) return
-      dashUntil = now + POSSESS.dashSeconds * 1000
-      dashReadyAt = now + POSSESS.dashCooldown * 1000
+      // The dash runs here at once (its speed is predicted), so it waits here too.
+      if (left > 0 || locked) pendingDash = d
+      else dash(d)
+      return
     }
     ctl.facing = d
+    r.until = Math.max(now, r.until) + r.full * 1000
+    r.firedAt = now
     net.send({ type: 'enemyAct', kind, dir: d })
   }
   if (a.held) {

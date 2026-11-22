@@ -762,13 +762,86 @@
   position: relative;
 }
 
-.master-stick.is-waiting::after {
+/* Recharging: grey button, a bright line filling clockwise around the edge, seconds left in the middle. */
+.master-stick::before {
   content: '';
   position: absolute;
-  inset: 14%;
+  inset: 0;
   border-radius: 50%;
-  background: conic-gradient(rgb(10 5 30 / 0.62) calc(var(--wait) * 360deg), transparent 0);
+  background: conic-gradient(#fde68a calc((1 - var(--wait, 0)) * 360deg), rgb(255 255 255 / 0.14) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 9 * var(--ui-px)), #000 calc(100% - 8 * var(--ui-px)));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 9 * var(--ui-px)), #000 calc(100% - 8 * var(--ui-px)));
+  opacity: 0;
+  transition: opacity 0.12s;
   pointer-events: none;
+}
+
+.master-stick.is-waiting::before {
+  opacity: 1;
+}
+
+.master-stick .master-knob {
+  transition: filter 0.12s;
+}
+
+.master-stick.is-waiting .master-knob {
+  filter: grayscale(0.9) brightness(0.5);
+}
+
+.master-stick.is-waiting .master-label {
+  opacity: 0;
+}
+
+.master-secs {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 1.5em;
+  line-height: 1;
+  text-shadow: 0 0.08em 0 var(--ink), 0 0 0.3em rgb(0 0 0 / 0.6);
+  pointer-events: none;
+}
+
+.master-stick.is-special .master-secs {
+  font-size: 1.15em;
+}
+
+/* Ready again: a quick pop with a golden flash. */
+.master-stick.is-ready {
+  animation: stick-ready 0.42s ease-out;
+}
+
+@keyframes stick-ready {
+  0% {
+    transform: scale(1.16);
+    box-shadow: 0 0 0 calc(6 * var(--ui-px)) rgb(253 230 138 / 0.9);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 calc(18 * var(--ui-px)) rgb(253 230 138 / 0);
+  }
+}
+
+/* Pressed too early: a short shake. */
+.master-stick.is-denied {
+  animation: stick-denied 0.32s ease-in-out;
+}
+
+@keyframes stick-denied {
+  0%,
+  100% {
+    translate: 0;
+  }
+  20%,
+  60% {
+    translate: calc(-6 * var(--ui-px)) 0;
+  }
+  40%,
+  80% {
+    translate: calc(6 * var(--ui-px)) 0;
+  }
 }
 
 .teleport-row {

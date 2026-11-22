@@ -677,7 +677,12 @@ test('possession: an enemy of a room with heroes; moved by the Maestro at its ow
   assert.ok(slime.x > x0)
   slime.cooldown = 0
   assert.ok(enemyAct(g, 'attack', 0), 'the slime dashes')
-  assert.equal(enemyAct(g, 'attack', 0), false, 'cooldown')
+  const dashed = slime.dashUntil
+  assert.ok(enemyAct(g, 'attack', 0), 'pressed while recharging: kept for a moment')
+  assert.ok(g.queuedAct)
+  run(g, R.POSSESS.buffer + 0.1)
+  assert.equal(g.queuedAct, null, 'still recharging after the buffer: dropped')
+  assert.equal(slime.dashUntil, dashed, 'no second dash')
   assert.ok(release(g))
   assert.equal(g.possessed, null)
   // Also in a room the heroes have not reached (to place it by hand and wait for them).
@@ -696,6 +701,41 @@ test('possession: an enemy of a room with heroes; moved by the Maestro at its ow
   thrower.hp = 0
   step(g, 0.05)
   assert.equal(g.possessed, null, 'it ends when the enemy dies')
+})
+
+test('possessed enemy: hits do not stun it; an order pressed while busy goes off as soon as it can', () => {
+  const g = createGame([{ id: 'a', cls: 'ranged' }])
+  g.enemies = []
+  build(g, 0, 1, 'normal')
+  place(g, g.rooms[1].id, 'ogre', 5, 6)
+  setReady(g, g.rooms[1].id, true)
+  const ogre = g.enemies.find((e) => e.kind === 'ogre')!
+  const other = g.enemies.find((e) => e !== ogre)
+  const hero = g.heroes[0]
+  hero.x = ogre.x
+  hero.y = ogre.y - 3
+  assert.ok(possess(g, ogre.id))
+  // Arrows keep landing on it: never stunned, its attack still starts.
+  const hp = ogre.hp
+  for (let i = 0; i < 3; i++) {
+    const seq = attack(g, 'a', 10 + i, 'basic', Math.PI / 2, [], 0)!
+    assert.ok(shotHit(g, 'a', seq, ogre.id, 0), 'the arrow hits')
+    assert.equal(ogre.stun, 0, 'hit, not stunned')
+    run(g, R.HERO.ranged.basic.cooldown + 0.05)
+  }
+  assert.equal(ogre.hp, hp - 3)
+  assert.ok(enemyAct(g, 'attack', 0))
+  assert.equal(ogre.pending, 'slam')
+  // Pressed again during the slam's recovery, just before the wait ends: it goes off by itself.
+  run(g, R.ENEMY_TELEGRAPH + 0.1)
+  assert.equal(ogre.state, 'recover')
+  ogre.cooldown = 0.3
+  assert.ok(enemyAct(g, 'attack', Math.PI))
+  assert.ok(g.queuedAct)
+  run(g, R.ENEMY.ogre.recover + 0.1)
+  assert.equal(g.queuedAct, null)
+  assert.ok(ogre.state === 'windup' && ogre.pending === 'slam', 'the queued slam started')
+  assert.equal(other, undefined)
 })
 
 test('summon: where the Maestro taps, never next to a hero; 30 s wait after a fight, 60 s otherwise', () => {

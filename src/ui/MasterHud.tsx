@@ -10,12 +10,14 @@
 import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent } from 'react'
 import { setAttackStick, setSpecialStick } from '../game/input'
 import { hereRoom, teleportLord } from '../game/lord'
+import { recharge } from '../game/possess'
+import { sfx } from '../audio/sfx'
 import { heroesInside, isBuilding, useMaster } from '../game/master'
 import { useNet } from '../net/connection'
 import { layoutCost, SHAPE_NAME, SHAPES, type Layout } from '../shared/layouts'
 import { buildableSlots, canAdd, difficulty } from '../shared/map'
 import type { EnemyView, Placeable, RoomView, Snapshot } from '../shared/protocol'
-import { DIFFICULTY, ENEMY, MAX_ROOMS, POSSESS } from '../shared/rules'
+import { DIFFICULTY, MAX_ROOMS } from '../shared/rules'
 import { MoveStick } from './Controls'
 import MiniMap from './MiniMap'
 import { usePortraits } from './portraits'
@@ -64,7 +66,7 @@ export default function MasterHud({ s }: { s: Snapshot }) {
 
   let body
   if (s.cinematic) body = <div className="cinema-bars" aria-hidden="true" />
-  else if (held) body = <PossessControls s={s} held={held} />
+  else if (held) body = <PossessControls held={held} />
   else if (mapOpen) body = <TeleportMap s={s} />
   else if (room) body = isBuilding(s, room) ? <BuildControls s={s} room={room} /> : <PowerControls s={s} room={room} />
   else body = <FreeSpot s={s} />
@@ -371,19 +373,9 @@ function PowerControls({ s, room }: { s: Snapshot; room: RoomView }) {
 
 // ---------- Controlling an enemy ----------
 
-// Full wait of each attack, for the ring on its button.
-function fullWait(kind: EnemyView['kind'], button: 'attack' | 'special') {
-  if (kind === 'king') return button === 'attack' ? ENEMY.king.jumpEvery : ENEMY.king.fanEvery
-  if (kind === 'slime') return POSSESS.dashCooldown
-  if (kind === 'ogre') return ENEMY.ogre.cooldown
-  return ENEMY.thrower.cooldown
-}
-
-function PossessControls({ s, held }: { s: Snapshot; held: EnemyView }) {
+function PossessControls({ held }: { held: EnemyView }) {
   const send = useNet((st) => st.send)
   const boss = held.kind === 'king'
-  const wait = s.possessedWait ?? { attack: 0, special: 0 }
-  const ring = (button: 'attack' | 'special') => Math.max(0, Math.min(1, (button === 'attack' ? wait.attack : wait.special) / fullWait(held.kind, button)))
   return (
     <>
       <div className="master-top possess-tag">
@@ -401,11 +393,10 @@ function PossessControls({ s, held }: { s: Snapshot; held: EnemyView }) {
             </div>
           )}
           <div className="possess-buttons">
-            {boss && <MasterStick kind="special" label="Orbes" wait={ring('special')} />}
+            {boss && <MasterStick kind="special" label="Orbes" />}
             <MasterStick
               kind="attack"
               label={held.kind === 'king' ? 'Salto' : held.kind === 'slime' ? 'Embestir' : held.kind === 'ogre' ? 'Garrote' : 'Lanzar'}
-              wait={ring('attack')}
             />
           </div>
         </div>
@@ -414,11 +405,41 @@ function PossessControls({ s, held }: { s: Snapshot; held: EnemyView }) {
   )
 }
 
-// The possessed enemy's buttons: tap = toward the nearest hero, drag = aim by hand, fired on release. A dark ring
-// shows how long until the attack is ready again.
-function MasterStick({ kind, label, wait }: { kind: 'attack' | 'special'; label: string; wait: number }) {
+// The possessed enemy's buttons: tap = toward the nearest hero, drag = aim by hand, fired on release. While it
+// recharges the button goes grey, a bright line fills around its edge and the seconds left show in the middle
+// (counted on this device, no network delay); when ready it pops (with a chime for the long waits). A press
+// too early shakes it.
+function MasterStick({ kind, label }: { kind: 'attack' | 'special'; label: string }) {
   const base = useRef<HTMLDivElement>(null)
   const knob = useRef<HTMLDivElement>(null)
+  const secs = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    let raf = 0
+    let wasWaiting = false
+    const loop = () => {
+      const el = base.current
+      if (el) {
+        const r = recharge[kind]
+        const now = performance.now()
+        const left = Math.max(0, r.until - now)
+        const waiting = left > 0
+        el.style.setProperty('--wait', Math.min(1, left / (r.full * 1000)).toFixed(3))
+        el.classList.toggle('is-waiting', waiting)
+        el.classList.toggle('is-denied', now - r.deniedAt < 320)
+        if (secs.current) secs.current.textContent = waiting && r.full >= 1.5 ? String(Math.ceil(left / 1000)) : ''
+        if (wasWaiting && !waiting) {
+          el.classList.remove('is-ready')
+          void el.offsetWidth // restart the pop
+          el.classList.add('is-ready')
+          if (r.full >= 2) sfx.chargeFull()
+        }
+        wasWaiting = waiting
+      }
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [kind])
   const pointer = useRef<number | null>(null)
   const set = kind === 'attack' ? setAttackStick : setSpecialStick
   const last = useRef({ aiming: false, dir: 0 })
@@ -445,8 +466,7 @@ function MasterStick({ kind, label, wait }: { kind: 'attack' | 'special'; label:
   return (
     <div
       ref={base}
-      className={wait > 0 ? `master-stick is-${kind} is-waiting` : `master-stick is-${kind}`}
-      style={{ ['--wait' as string]: String(wait) }}
+      className={`master-stick is-${kind}`}
       data-width={kind === 'attack' ? 118 : 86}
       role="button"
       aria-label={label}
@@ -460,8 +480,9 @@ function MasterStick({ kind, label, wait }: { kind: 'attack' | 'special'; label:
       onPointerCancel={release}
     >
       <div ref={knob} className="master-knob">
-        {label}
+        <span className="master-label">{label}</span>
       </div>
+      <span ref={secs} className="master-secs" />
     </div>
   )
 }
