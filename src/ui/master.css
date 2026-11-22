@@ -384,11 +384,6 @@
   bottom: 0;
 }
 
-.chip.potions .icon {
-  width: 1.2em;
-  height: 1.2em;
-}
-
 /* The heroes' story at the start. */
 .intro {
   position: absolute;
@@ -441,4 +436,39 @@
     max-width: calc(460 * var(--ui-px));
     margin-inline: auto;
   }
+}
+
+/* The HUD's top row with the potions counter: tighter so it fits 360 px phones. */
+.hud-top {
+  gap: 0.35em;
+}
+
+.hud-top-right {
+  gap: 0.35em;
+}
+
+.chip.rooms:has(.boss-tag) .chip-label {
+  display: none;
+}
+
+.lives .potions {
+  display: flex;
+  align-items: center;
+  gap: 0.15em;
+  margin-left: 0.2em;
+  padding-left: 0.45em;
+  border-left: 0.1em solid rgb(255 255 255 / 0.25);
+}
+
+.lives .potions .icon {
+  width: 1.15em;
+  height: 1.15em;
+}
+
+.hud-top .latency {
+  font-size: 0.55em;
+}
+
+.hud-top .chip {
+  padding-inline: 0.55em;
 }

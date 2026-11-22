@@ -19,14 +19,14 @@ export default function Hud() {
   return (
     <div className="hud">
       <div className="hud-top">
-        <div className="chip lives" role="group" aria-label={`Vidas del equipo: ${s.lives}`}>
+        <div className="chip lives" role="group" aria-label={`Vidas del equipo: ${s.lives}. Pociones: ${s.potions}`}>
           {Array.from({ length: s.maxLives }, (_, i) => (
             <HeartIcon key={i} empty={i >= s.lives} />
           ))}
-        </div>
-        <div className="chip potions" aria-label={`Pociones del equipo: ${s.potions}`}>
-          <PotionIcon />
-          <b>{s.potions}</b>
+          <span className="potions" aria-label={`Pociones del equipo: ${s.potions}`}>
+            <PotionIcon />
+            <b>{s.potions}</b>
+          </span>
         </div>
         <div className="chip rooms" aria-label={`Habitaciones ${s.normalRooms} de ${MAX_ROOMS}`}>
           <span className="chip-label">Salas</span>
