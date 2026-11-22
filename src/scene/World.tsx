@@ -18,6 +18,7 @@ import { ENEMY, ENEMY_TELEGRAPH, ENTRANCE_DEPTH, HERO, HERO_HITS, LORD, MAX_ROOM
 import { PASSIVE_INFO, PLAYER_COLORS } from '../ui/screens'
 import { MasterLord } from '../models/Master'
 import { Bedrock, UnbuiltLot } from '../models'
+import { DungeonEntrance } from '../models/Entrance'
 import { PossessSmoke, PotionFx, SummonFx } from '../models/MagicEffects'
 import {
   BurnFx,
@@ -1310,6 +1311,7 @@ export default function World() {
         <RoomTile key={r.id} room={r} doors={doorsOf(s.rooms, r, isMaster)} draft={isMaster && !r.ready} />
       ))}
       <Rock s={s} />
+      <DungeonEntrance />
       {isMaster && <Slots s={s} />}
       {editRoom && <RoomEditor room={editRoom} />}
       {s.cinematic && <Entrance s={s} />}

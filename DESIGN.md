@@ -118,7 +118,7 @@ Anterior, prueba de concepto multijugador, sin dependencias nuevas (el servidor 
 1. [x] Sala solo con Maestro o Héroes (fotos de los modelos en vez de las tarjetas pintadas, que se conservan en `public/ui/card-*.webp`).
 2. [x] Héroes fuera, en el claro del bosque; elección de héroe distinto y de pasiva sobre esa vista (servidor y pruebas).
 3. [x] Pasivas, su icono y su efecto; poción más visible.
-4. [ ] Arte de Codex (GPT-6.2-Astra, xhigh): bosque, camino y puerta de la mazmorra.
+4. [x] Arte de Codex (GPT-6.2-Astra, xhigh): bosque, camino y puerta de la mazmorra (6 llamadas de dibujo, ~11.500 triángulos).
 5. [ ] Probarlo jugando.
 
 ## Plan anterior (2026-11-21, validar al maestro)
@@ -175,6 +175,8 @@ Versión 2 desplegada (2026-11-20):
 - 2026-11-22: **el maestro tiene cuerpo.** Se mueve con el joystick (solo él se ve), atraviesa paredes medio disuelto y la sala donde está decide si construye, usa poderes o «Construir aquí». El mapa es un teletransporte. Al poseer se vuelve humo y entra en el enemigo, con vista previa del ataque, anillo de espera y cámara que lo sigue.
 
 - 2026-11-22: arreglos tras la primera prueba del cuerpo del maestro: un solo joystick (antes se quedaba pegado avanzando en línea recta al cambiar de sala), cámara que siempre lo sigue (sin el encuadre automático al detenerse), paredes que solo se cruzan, 12 % más lento, calavera con los héroes derrotados y terreno de roca fuera de las salas (arte de Codex, GPT-6.2-Astra, xhigh).
+
+- 2026-11-22: **entrada de la mazmorra.** En la sala solo se elige Maestro o Héroes (tarjetas con fotos de los modelos 3D, tomadas con `?photos`; las tarjetas pintadas siguen en `public/ui/card-*.webp`). Los héroes empiezan fuera, en un claro del bosque frente a la puerta de la mazmorra (arte de Codex, GPT-6.2-Astra, xhigh), y ahí eligen héroe (distinto cada uno, con su foto) y una de dos pasivas; entran cuando todos están listos. Pasivas: icono junto a las pociones que salta al activarse y su nombre sobre el héroe. Poción más visible: brillo más largo y grande, «+2», barra que parpadea y bordes rosados en la pantalla propia.
 
 Problemas conocidos:
 - Los slimes son muy letales contra un héroe que no se mueve: en la prueba automática el héroe perdió 2 vidas en la primera sala. Para balancear jugando.

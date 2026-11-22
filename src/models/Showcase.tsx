@@ -12,6 +12,7 @@ import { Slime, SlimeKing, Thrower } from './Enemies'
 import { MasterLord, PreviewMasterFade } from './Master'
 import { Chest, RoomShell, SpikeTrap } from './Dungeon'
 import { Bedrock, UnbuiltLot } from './Ground'
+import { DungeonEntrance } from './Entrance'
 import { BlobShadow, EnemyOrb, HeroBolt, PreviewStroke } from './Effects'
 import { bake, box, toon } from './kit'
 import { makePose, type Anim, type Pose } from './types'
@@ -19,7 +20,7 @@ import './showcase.css'
 
 type Name = 'Swordsman' | 'Ranger' | 'Priestess' | 'Mage' | 'Ogre' | 'Chicken' | 'Thrower' | 'Slime' |
   'Slime King' | 'Maestro' | 'Dissolve' | 'Chest' | 'Spikes' | 'Bolts' | 'Orb' | 'Slash' | 'Spin' |
-  'Unbuilt lot' | 'Boss lot' | MagicExhibit
+  'Unbuilt lot' | 'Boss lot' | 'Gate' | MagicExhibit
 type Exhibit = { name: Name; x: number; z: number; labelOffset: number; anims?: Anim[]; width?: number; height?: number; possessed?: boolean }
 function pair(entry: Omit<Exhibit,'x'>): Exhibit[] {
   return [{ ...entry, x: .25 }, { ...entry, x: .75, possessed: true }]
@@ -27,9 +28,10 @@ function pair(entry: Omit<Exhibit,'x'>): Exhibit[] {
 const exhibitTitle = (entry: Exhibit) => entry.possessed ? 'Possessed ' + entry.name : entry.name
 const heroClips: Anim[] = ['idle', 'run', 'attack', 'charge', 'special', 'hurt', 'die']
 const smallClips: Anim[] = ['idle','run','hurt','die']
-const pages = ['Heroes','Dungeon','Maestro','Floors','Combat','Magic'] as const
+const pages = ['Heroes','Dungeon','Maestro','Floors','Combat','Magic','Entrance'] as const
 type Page = typeof pages[number]
 const rooms: Record<Page, Exhibit[]> = {
+  Entrance: [{ name: 'Gate', x: .5, z: .73, labelOffset: 1.3, width: 5.7, height: 1.15 }],
   Heroes: [
     { name: 'Swordsman', x: .27, z: .74, labelOffset: .40, anims: heroClips },
     { name: 'Ranger', x: .73, z: .74, labelOffset: .40, anims: heroClips },
@@ -111,7 +113,7 @@ function FrameScene({ play, labels, w, h, exhibits }: { play: Playback; labels: 
       const x1 = (Math.max(...centers.map(e => e.x)) + .5) * w
       const z0 = -(Math.max(...centers.map(e => e.z)) + .5) * h
       const z1 = -(Math.min(...centers.map(e => e.z)) - .5) * h
-      let near = 3, far = lots.length ? 180 : 60
+      let near = 3, far = lots.length || w > ROOM_W ? 180 : 60
       const heading = size.height < 540 ? 53 : 76
       const controls = size.height < 540 ? 106 : 126
       const top = 1 - 2*heading/size.height, bottom = -1 + 2*controls/size.height
@@ -189,6 +191,11 @@ function Model({ name, possessed, pose, play, shut, open, phase }: {
   name: Name; possessed?: boolean; pose: Pose; play: Playback; shut: RefObject<Group | null>; open: RefObject<Group | null>; phase?: SpikePhase
 }) {
   switch (name) {
+    case 'Gate': return <group position={[-5.5,0,-.45]}>
+      <Bedrock minX={-50} maxX={60} minZ={-50} maxZ={55} />
+      <RoomShell w={11} h={13} doors={{ ...doors, s: 'open' }} />
+      <DungeonEntrance />
+    </group>
     case 'Unbuilt lot': return <UnbuiltLot />
     case 'Boss lot': return <UnbuiltLot boss />
     case 'Swordsman': return <group rotation-y={2.72}><MeleeHero pose={pose} tint="#ff6b59" /></group>
@@ -223,21 +230,22 @@ function Diorama({ play, labels, page, shape, phase }: {
   const size = useThree(s => s.size)
   const wide = size.width > size.height
   const floors = page === 'Floors'
-  const w = floors ? ROOM_W : page === 'Dungeon' ? 6 : 4
-  const h = floors ? ROOM_H : page === 'Dungeon' ? 14 : wide ? 5 : 6
+  const entrance = page === 'Entrance'
+  const w = entrance ? 21 : floors ? ROOM_W : page === 'Dungeon' ? 6 : 4
+  const h = entrance ? 19 : floors ? ROOM_H : page === 'Dungeon' ? 14 : wide ? 5 : 6
   const exhibits = floors && wide ? floorsAcross : rooms[page]
   return <>
     <FrameScene play={play} labels={labels} w={w} h={h} exhibits={exhibits} />
     <ambientLight color="#e8e2ff" intensity={1.08} />
     <directionalLight position={[-5, 8, 4]} color="#fff0d2" intensity={2.55} />
     {floors && <Bedrock minX={-6*w} maxX={7*w} minZ={-5*h} maxZ={4*h} />}
-    {!floors && <>
+    {!floors && !entrance && <>
       <group position={[w / 2 + .13, -.59, -h / 2 + .19]} scale={[w * .82, 1, h * .92]}>
         <BlobShadow radius={1} />
       </group>
       <mesh geometry={plinth} material={toon} position={[w / 2, -.028, -h / 2]} scale={[w + .85, 1, h + .85]} dispose={null} />
     </>}
-    <RoomShell w={w} h={h} doors={doors} shape={floors ? shape : 'full'} />
+    {!entrance && <RoomShell w={w} h={h} doors={doors} shape={floors ? shape : 'full'} />}
     {exhibits.map((e, i) => <Display key={exhibitTitle(e)} entry={e} i={i} w={w} h={h} play={play} labels={labels} phase={floors ? phase : undefined} />)}
   </>
 }
@@ -270,7 +278,7 @@ export default function Showcase() {
       </button>)}
     </div>
     <div className="dm-playback">
-      <div className="dm-transport dm-rooms" role="group" aria-label="Exhibit rooms">
+      <div className="dm-transport dm-rooms" role="group" aria-label="Exhibit rooms" style={{ maxWidth: '96vw', overflowX: 'auto' }}>
         {pages.map(room => <button type="button" key={room} style={{ paddingInline: 'clamp(5px, 1.6vw, 16px)' }} aria-pressed={page === room} onClick={() => {
           if (page === room) return
           focus(-1)
@@ -291,7 +299,7 @@ export default function Showcase() {
               <button type="button" key={p} aria-pressed={phase === p} onClick={() => setPhase(p)}>{p}</button>)}
           </div>
         </>}
-        <div className="dm-transport" hidden={page === 'Floors'}>
+        <div className="dm-transport" hidden={page === 'Floors' || page === 'Entrance'}>
           <button type="button" aria-pressed="false" onClick={e => {
             play.paused = !play.paused
             e.currentTarget.setAttribute('aria-pressed', String(play.paused))
