@@ -2,18 +2,21 @@
 // - Map: the minimap at the bottom; "+" builds at once, a room opens for building or, with heroes, for watching.
 // - Building a room: the difficulty meter on top, the terrain rail on the right edge (floor, spikes, chests), the
 //   chosen enemy bottom-left (its list opens beside it) and a big "Sala lista" bottom-right, with Mapa above it.
-// - Observar: the same places become the Maestro's powers: tap an enemy to control it (movement stick left,
-//   attack right), "Invocar" summons a slime.
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+// - A ready room: the Maestro's powers. Tap an enemy to control it (movement stick left, attack right), also before
+//   the heroes arrive; "Invocar" and then a tap on the floor summons a slime there.
+import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent } from 'react'
 import { setAttackStick, setSpecialStick } from '../game/input'
-import { useMaster } from '../game/master'
+import { heroesInside, useMaster } from '../game/master'
 import { useNet } from '../net/connection'
 import { layoutCost, SHAPE_NAME, SHAPES, type Layout } from '../shared/layouts'
-import { canAdd, difficulty, roomAtPoint } from '../shared/map'
+import { canAdd, difficulty } from '../shared/map'
 import type { EnemyView, Placeable, RoomView, Snapshot } from '../shared/protocol'
 import { DIFFICULTY, MAX_ROOMS } from '../shared/rules'
 import { MoveStick } from './Controls'
 import MiniMap from './MiniMap'
+import { usePortraits } from './portraits'
+
+const EnemyPortraits = lazy(() => import('./EnemyPortraits'))
 
 const ENEMIES: { kind: Placeable; label: string }[] = [
   { kind: 'slime', label: 'Slime' },
@@ -25,8 +28,10 @@ const NAME: Record<EnemyView['kind'], string> = { slime: 'Slime', thrower: 'Lanz
 const cost = (n: number) => (n > 0 ? `+${n}` : String(n))
 const layoutOf = (room: RoomView): Layout => ({ shape: room.shape, spikes: room.spikes, chests: room.chests })
 
-// A small drawn portrait of each enemy for the buttons (same colors as the models).
+// A small picture of each enemy for the buttons, taken from its 3D model (a colored blob until it is ready).
 export function EnemyThumb({ kind }: { kind: Placeable | 'king' }) {
+  const url = usePortraits((p) => (kind === 'king' ? undefined : p.urls[kind]))
+  if (url) return <img className="enemy-thumb-img" src={url} alt="" aria-hidden="true" />
   return <i className={`enemy-thumb is-${kind}`} aria-hidden="true" />
 }
 
@@ -65,8 +70,14 @@ export default function MasterHud({ s }: { s: Snapshot }) {
 
   const room = s.rooms.find((r) => r.id === roomId)
   const waiting = s.introWaiting.length
+  const portraitsDone = usePortraits((p) => p.done)
   return (
     <>
+      {!portraitsDone && (
+        <Suspense fallback={null}>
+          <EnemyPortraits />
+        </Suspense>
+      )}
       {waiting > 0 && (
         <div className="master-top intro-status">
           Los héroes leen la historia · listos {s.heroes.length - waiting}/{s.heroes.length}
@@ -85,10 +96,10 @@ function MapPanel({ s }: { s: Snapshot }) {
       <MiniMap s={s} />
       <p className="master-note">
         {bossPlaced
-          ? 'Mapa completo. Toca una sala con héroes para observarla.'
+          ? 'Mapa completo. Toca una sala para usar tus poderes.'
           : bossNext
             ? `Ya tienes ${MAX_ROOMS} salas: el + morado pone la sala del jefe.`
-            : 'Toca un + para construir. Toca una sala para editarla, o una con héroes para observarla.'}
+            : 'Toca un + para construir. Toca una sala en obra para editarla, o una lista para usar tus poderes.'}
       </p>
     </div>
   )
@@ -325,16 +336,17 @@ function EnemyPicker({ room, cap }: { room: RoomView; cap: number }) {
   )
 }
 
-// ---------- Observar ----------
+// ---------- Powers (a ready room) ----------
 
 function ObserveControls({ s, room }: { s: Snapshot; room: RoomView }) {
   const send = useNet((st) => st.send)
   const toMap = useMaster((m) => m.toMap)
   const editRoom = useMaster((m) => m.editRoom)
+  const summoning = useMaster((m) => m.summoning)
+  const setSummoning = useMaster((m) => m.setSummoning)
   const held = s.enemies.find((e) => e.id === s.possessed)
-  const heroesInside = s.heroes.some((h) => !h.dead && roomAtPoint(s.rooms, h.x, h.y)?.id === room.id)
-  const fighting = heroesInside && room.enemies > 0
-  const canBuild = room.kind === 'normal' && !room.entered && !heroesInside
+  const inside = heroesInside(s, room)
+  const canEdit = room.kind === 'normal' && !room.entered && !inside
 
   if (s.cinematic) return <div className="cinema-bars" aria-hidden="true" />
 
@@ -367,18 +379,31 @@ function ObserveControls({ s, room }: { s: Snapshot; room: RoomView }) {
     )
   }
 
-  const summonReady = s.summonIn <= 0
+  const ready = s.summonIn <= 0
+  const hint =
+    room.kind === 'boss'
+      ? 'Sala del jefe: lo controlarás cuando entren los héroes'
+      : summoning
+        ? 'Toca el suelo donde aparecerá el slime (lejos de los héroes)'
+        : room.enemies > 0
+          ? 'Toca un enemigo para controlarlo'
+          : 'Sala sin enemigos'
   return (
     <>
-      <div className="master-top observe-tag">
-        Observando · {fighting ? 'toca un enemigo para controlarlo' : heroesInside ? 'sin enemigos' : 'no hay héroes aquí'}
-      </div>
+      <div className={summoning ? 'master-top observe-tag is-armed' : 'master-top observe-tag'}>{hint}</div>
       <div className="master-panel master-dock">
-        <p className="master-note dock-note">{room.kind === 'boss' ? 'Sala del jefe' : fighting ? 'Los héroes pelean aquí.' : ''}</p>
+        <span />
         <div className="dock-right">
           <div className="dock-small">
-            {canBuild && (
-              <button type="button" className="ui-button small" onClick={() => editRoom(room.id)}>
+            {canEdit && (
+              <button
+                type="button"
+                className="ui-button small"
+                onClick={() => {
+                  if (room.ready) send({ type: 'ready', room: room.id, ready: false })
+                  editRoom(room.id)
+                }}
+              >
                 Editar
               </button>
             )}
@@ -386,16 +411,16 @@ function ObserveControls({ s, room }: { s: Snapshot; room: RoomView }) {
               Mapa
             </button>
           </div>
-          {room.kind !== 'boss' && (
+          {room.kind !== 'boss' && room.ready && (
             <button
               type="button"
-              className="ui-button ui-button-boss round-big summon"
-              disabled={!fighting || !summonReady}
-              onClick={() => send({ type: 'summon', room: room.id })}
+              className={summoning ? 'ui-button round-big summon is-armed' : 'ui-button ui-button-boss round-big summon'}
+              disabled={!ready && !summoning}
+              onClick={() => setSummoning(!summoning)}
               aria-label="Invocar un slime"
             >
-              <span>Invocar</span>
-              <small>{summonReady ? 'slime' : `${Math.ceil(s.summonIn)} s`}</small>
+              <span>{summoning ? 'Cancelar' : 'Invocar'}</span>
+              <small>{summoning ? 'toca el suelo' : ready ? 'slime' : `${Math.ceil(s.summonIn)} s`}</small>
             </button>
           )}
         </div>

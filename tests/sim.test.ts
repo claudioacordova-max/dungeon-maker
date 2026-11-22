@@ -583,13 +583,13 @@ test('possession: an enemy of a room with heroes; moved by the Maestro at its ow
   assert.equal(enemyAct(g, 'attack', 0), false, 'cooldown')
   assert.ok(release(g))
   assert.equal(g.possessed, null)
-  // Rooms without heroes: no possession.
+  // Also in a room the heroes have not reached (to place it by hand and wait for them).
   g.enemies = []
   build(g, 0, 1, 'normal')
   place(g, g.rooms[1].id, 'thrower', 5, 5)
   setReady(g, g.rooms[1].id, true)
   const thrower = g.enemies.find((e) => e.kind === 'thrower')!
-  assert.equal(possess(g, thrower.id), false)
+  assert.ok(possess(g, thrower.id))
   hero.x = thrower.x
   hero.y = thrower.y - 4
   assert.ok(possess(g, thrower.id))
@@ -601,22 +601,30 @@ test('possession: an enemy of a room with heroes; moved by the Maestro at its ow
   assert.equal(g.possessed, null, 'it ends when the enemy dies')
 })
 
-test('summon: one slime at the doorway farthest from the heroes, only while they fight, then a long wait', () => {
+test('summon: where the Maestro taps, never next to a hero; 30 s wait after a fight, 60 s otherwise', () => {
   const g = createGame([{ id: 'a', cls: 'melee' }])
   const room = start(g)
   const hero = g.heroes[0]
   hero.x = R.ROOM_W / 2
   hero.y = 2
+  assert.equal(summon(g, room.id, hero.x + 1, hero.y), false, 'too close to a hero')
   const before = g.enemies.length
-  assert.ok(summon(g, room.id))
+  assert.ok(summon(g, room.id, 3, 10))
   assert.equal(g.enemies.length, before + 1)
   const slime = g.enemies.at(-1)!
   assert.equal(slime.kind, 'slime')
-  assert.ok(slime.y > R.ROOM_H - 2, 'far from the hero (north doorway)')
-  assert.equal(summon(g, room.id), false, 'cooldown')
-  run(g, R.SUMMON_COOLDOWN)
-  g.enemies = []
-  assert.equal(summon(g, room.id), false, 'no fight, no summon')
+  assert.ok(Math.abs(slime.x - 3) < 0.01 && Math.abs(slime.y - 10) < 0.01, 'where it was tapped')
+  assert.equal(g.summonAt - g.time, R.SUMMON.fightCooldown, 'a fight: 30 s')
+  assert.equal(summon(g, room.id, 3, 9), false, 'waiting')
+  // A ready room ahead, without heroes: allowed, with the longer wait; never in the boss room.
+  g.summonAt = 0
+  build(g, 0, 1, 'normal')
+  setReady(g, g.rooms[1].id, true)
+  assert.ok(summon(g, g.rooms[1].id, 5.5, R.ROOM_H + 6))
+  assert.equal(g.summonAt - g.time, R.SUMMON.calmCooldown, 'no fight: 60 s')
+  g.summonAt = 0
+  build(g, 0, 2, 'normal')
+  assert.equal(summon(g, g.rooms[2].id, 5.5, 2 * R.ROOM_H + 6), false, 'a room still being built')
 })
 
 test('possessed slime: its rams are reported by the Maestro (checked for distance and cooldown), not by the hero', () => {

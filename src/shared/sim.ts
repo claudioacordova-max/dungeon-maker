@@ -105,6 +105,7 @@ export type Game = {
   cinematic: { room: number; at: number } | null // boss entrance, from game time `at`
   possessed: number | null // enemy the Maestro controls
   summonAt: number // game time the Maestro can summon again
+  summonWait: number // length of that wait
 }
 
 const usesMana = (cls: HeroClass): cls is 'priest' | 'mage' => cls === 'priest' || cls === 'mage'
@@ -148,6 +149,7 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
     cinematic: null,
     possessed: null,
     summonAt: 0,
+    summonWait: 0,
   }
   const start: Room = { id: game.nextId++, gx: 0, gy: 0, kind: 'start', ready: true, entered: true, enemies: 0, plan: [], layout: EMPTY_LAYOUT }
   start.plan = [
@@ -732,13 +734,13 @@ function heroesIn(game: Game, room: Room) {
 
 const busy = (game: Game) => game.result !== 'playing' || game.intro.size > 0 || game.cinematic !== null
 
-// The Maestro takes an enemy of a room with heroes inside (the boss is taken only by its entrance).
+// The Maestro takes any enemy (also in a room the heroes have not reached: to place it by hand and wait for them).
+// The boss is taken only by its entrance, and is never dropped.
 export function possess(game: Game, enemyId: number): boolean {
   const enemy = game.enemies.find((e) => e.id === enemyId && e.hp > 0)
   if (busy(game) || !enemy || enemy.kind === 'king') return false
   if (game.enemies.some((e) => e.id === game.possessed && e.kind === 'king')) return false
-  const room = roomOf(game, enemy.room)
-  if (!room || heroesIn(game, room).length === 0) return false
+  if (!roomOf(game, enemy.room)) return false
   game.possessed = enemy.id
   enemy.steerAt = game.time
   return true
@@ -819,30 +821,26 @@ export function enemyAct(game: Game, kind: 'attack' | 'special', dir: number): b
   return true
 }
 
-// Doorway spots of a room (just inside each wall's middle), on solid floor.
-function doorSpots(room: Room) {
-  const o = roomOrigin(room)
-  const spots = [
-    { x: R.ROOM_W / 2, y: 1.2 },
-    { x: R.ROOM_W / 2, y: R.ROOM_H - 1.2 },
-    { x: 1.2, y: R.ROOM_H / 2 },
-    { x: R.ROOM_W - 1.2, y: R.ROOM_H / 2 },
-  ]
-  return spots.filter((p) => !touchesGap(room.layout.shape, p.x, p.y, R.ENEMY.slime.radius)).map((p) => ({ x: o.x + p.x, y: o.y + p.y }))
+// True when a slime summoned at (x, y) would be a fight: heroes and enemies in that room.
+export function summonIsFight(game: Game, room: Room) {
+  return heroesIn(game, room).length > 0 && game.enemies.some((e) => e.room === room.id)
 }
 
-// The Maestro summons one slime into a room where the heroes are fighting, at the doorway farthest from them.
-export function summon(game: Game, roomId: number): boolean {
+// The Maestro summons one slime where it taps, in any ready room but the boss's: on solid floor, never right next to
+// a hero. A longer wait follows when it was not summoned into a fight.
+export function summon(game: Game, roomId: number, x: number, y: number): boolean {
   const room = roomOf(game, roomId)
-  if (busy(game) || !room || room.kind === 'boss' || game.time < game.summonAt) return false
-  const heroes = heroesIn(game, room)
-  if (heroes.length === 0 || !game.enemies.some((e) => e.room === room.id)) return false
-  const spots = doorSpots(room)
-  if (spots.length === 0) return false
-  const away = (p: { x: number; y: number }) => Math.min(...heroes.map((h) => dist(h.x, h.y, p.x, p.y)))
-  const spot = spots.reduce((a, b) => (away(b) > away(a) ? b : a))
-  spawnEnemy(game, room, 'slime', spot.x, spot.y)
-  game.summonAt = game.time + R.SUMMON_COOLDOWN
+  if (busy(game) || !room || room.kind === 'boss' || !room.ready || game.time < game.summonAt) return false
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false
+  const r = R.ENEMY.slime.radius
+  const c = clampToRoom(room, x, y, r + 0.3)
+  const o = roomOrigin(room)
+  if (dist(c.x, c.y, x, y) > 1 || touchesGap(room.layout.shape, c.x - o.x, c.y - o.y, r)) return false
+  if (game.heroes.some((h) => !h.dead && dist(h.x, h.y, c.x, c.y) < R.SUMMON.minHeroDistance)) return false
+  const fight = summonIsFight(game, room)
+  spawnEnemy(game, room, 'slime', c.x, c.y)
+  game.summonWait = fight ? R.SUMMON.fightCooldown : R.SUMMON.calmCooldown
+  game.summonAt = game.time + game.summonWait
   countEnemies(game)
   return true
 }
@@ -1131,6 +1129,7 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
     cinematic: game.cinematic ? { room: game.cinematic.room, t: r2(game.time - game.cinematic.at), total: R.CINEMATIC_SECONDS } : null,
     possessed: game.possessed,
     summonIn: r2(Math.max(0, game.summonAt - game.time)),
+    summonWait: game.summonWait,
   }
 }
 

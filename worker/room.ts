@@ -237,7 +237,7 @@ export class Room {
           enemyAct(game, message.kind === 'special' ? 'special' : 'attack', Number(message.dir))
           return
         case 'summon':
-          summon(game, Number(message.room))
+          summon(game, Number(message.room), Number(message.x), Number(message.y))
           return
         case 'ram':
           reportRam(game, String(message.hero))

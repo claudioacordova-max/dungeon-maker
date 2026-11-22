@@ -13,7 +13,7 @@ import { latestEnemy, sampleEnemy, sampleHero, sampleOrb, sampleShot } from '../
 import { CHEST_SLOTS, floorCell, SPIKES } from '../shared/layouts'
 import { buildableSlots, DIRS, doorState, isPlaceableCell, overGap, roomAtPoint } from '../shared/map'
 import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, ShotKind, Snapshot, SpikePhase } from '../shared/protocol'
-import { ENEMY, ENEMY_TELEGRAPH, HERO, HERO_HITS, MAX_ROOMS, ROOM_H, ROOM_W } from '../shared/rules'
+import { ENEMY, ENEMY_TELEGRAPH, HERO, HERO_HITS, MAX_ROOMS, ROOM_H, ROOM_W, SUMMON } from '../shared/rules'
 import { PLAYER_COLORS } from '../ui/screens'
 import { MasterLord } from '../models/Master'
 import { PossessSmoke, PotionFx, SummonFx } from '../models/MagicEffects'
@@ -983,7 +983,8 @@ function MasterPicker({ s }: { s: Snapshot }) {
   )
 }
 
-// Observar: a tap on (or next to) an enemy of the watched room takes control of it.
+// A ready room with the Maestro's powers: a tap on (or next to) an enemy takes control of it; after "Invocar", a tap
+// on the floor summons a slime there (never right next to a hero: the tap is ignored).
 function ObserveTapper({ room, s }: { room: RoomView; s: Snapshot }) {
   const send = useNet((st) => st.send)
   function onTap(e: ThreeEvent<PointerEvent>) {
@@ -991,6 +992,17 @@ function ObserveTapper({ room, s }: { room: RoomView; s: Snapshot }) {
     if (s.possessed !== null || s.cinematic) return
     const x = e.point.x
     const y = -e.point.z
+    const m = useMaster.getState()
+    if (m.summoning) {
+      const near = s.heroes.some((h) => {
+        const p = sampleHero(h.id) ?? h
+        return !h.dead && Math.hypot(p.x - x, p.y - y) < SUMMON.minHeroDistance
+      })
+      if (near || overGap(s.rooms, x, y, 0.3)) return
+      send({ type: 'summon', room: room.id, x, y })
+      m.setSummoning(false)
+      return
+    }
     let best = 1.4
     let id: number | null = null
     for (const enemy of s.enemies) {

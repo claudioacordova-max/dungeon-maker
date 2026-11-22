@@ -26,7 +26,9 @@ export const BOSS_HP = 30
 // +5% boss life per hero after the first (designer 2026-11-21).
 export const bossHp = (heroes: number) => BOSS_HP * (1 + 0.05 * Math.max(0, heroes - 1))
 export const CINEMATIC_SECONDS = 4 // boss entrance: the Maestro possesses the boss (proposal)
-export const SUMMON_COOLDOWN = 30 // seconds between the Maestro's summoned slimes (proposal)
+// Seconds before the Maestro can summon again: after a slime summoned into a fight, or anywhere else (designer,
+// 2026-11-22). It never lands closer than `minHeroDistance` cells to a hero, and does not count toward the room's cap.
+export const SUMMON = { fightCooldown: 30, calmCooldown: 60, minHeroDistance: 2.5 } as const
 
 // Feel and tuning values chosen by the agent (not in DESIGN.md).
 export const MAX_HEROES = 4

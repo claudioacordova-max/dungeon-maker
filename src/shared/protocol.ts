@@ -96,6 +96,7 @@ export type Snapshot = {
   cinematic: { room: number; t: number; total: number } | null // boss entrance (t: seconds since it began)
   possessed: number | null // enemy the Maestro controls
   summonIn: number // seconds before the Maestro can summon another slime (0 = ready)
+  summonWait: number // the wait that began with the last summon (30 in a fight, 60 elsewhere), for the button
 }
 
 export type ServerMessage =
@@ -140,7 +141,7 @@ export type ClientMessage =
   | { type: 'release' }
   | { type: 'steer'; x: number; y: number; facing: number }
   | { type: 'enemyAct'; kind: 'attack' | 'special'; dir: number }
-  | { type: 'summon'; room: number }
+  | { type: 'summon'; room: number; x: number; y: number }
   // The possessed slime (or boss) touched this hero on the Maestro's screen.
   | { type: 'ram'; hero: string }
   | { type: 'lobby' }

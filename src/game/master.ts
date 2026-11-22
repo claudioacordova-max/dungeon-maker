@@ -2,8 +2,8 @@ import { create } from 'zustand'
 import { roomAtPoint } from '../shared/map'
 import type { ClientMessage, Placeable, RoomView, Snapshot } from '../shared/protocol'
 
-// Local UI state of the Maestro: the whole map, one room being built, or a room with heroes being watched
-// ("Observar", where it possesses enemies and summons slimes).
+// Local UI state of the Maestro: the whole map, one room being built, or a ready room with its powers ('observe':
+// tap an enemy to control it, "Invocar" then a tap on the floor to summon a slime there).
 // Building: `tool` is the enemy each tap on the floor places (null = none chosen yet); the enemy list opens beside
 // the enemy button (`picker`), and opens by itself when the floor is tapped with no enemy chosen: the enemy then
 // goes on that tapped cell (`cell`).
@@ -14,6 +14,8 @@ type MasterState = {
   picker: boolean
   shapes: boolean // floor shapes list open
   cell: { cx: number; cy: number } | null
+  summoning: boolean // "Invocar" pressed: the next tap on the floor places the slime
+  setSummoning: (on: boolean) => void
   pending: { gx: number; gy: number } | null // just built: open it for editing when it appears
   editRoom: (room: number) => void
   observe: (room: number) => void
@@ -24,7 +26,7 @@ type MasterState = {
   setPending: (pending: { gx: number; gy: number } | null) => void
 }
 
-const closed = { picker: false, shapes: false, cell: null }
+const closed = { picker: false, shapes: false, cell: null, summoning: false }
 
 export const useMaster = create<MasterState>()((set) => ({
   mode: 'map',
@@ -33,6 +35,8 @@ export const useMaster = create<MasterState>()((set) => ({
   picker: false,
   shapes: false,
   cell: null,
+  summoning: false,
+  setSummoning: (summoning) => set({ summoning }),
   pending: null,
   setPending: (pending) => set({ pending }),
   editRoom: (room) => set({ mode: 'room', room, pending: null, ...closed }),
@@ -43,12 +47,14 @@ export const useMaster = create<MasterState>()((set) => ({
   setShapes: (shapes) => set({ shapes, picker: false, cell: null }),
 }))
 
-// Tapping a room on the map: watch it when heroes are inside (or it was already played), build it otherwise.
+export const heroesInside = (s: Snapshot, room: RoomView) => s.heroes.some((h) => !h.dead && roomAtPoint(s.rooms, h.x, h.y)?.id === room.id)
+
+// Tapping a room on the map: a room still being built opens for building; a ready one (or one the heroes reached)
+// opens with the Maestro's powers.
 export function openRoom(s: Snapshot, room: RoomView) {
   const m = useMaster.getState()
-  const heroesInside = s.heroes.some((h) => !h.dead && roomAtPoint(s.rooms, h.x, h.y)?.id === room.id)
-  if (heroesInside || room.entered || room.kind !== 'normal') m.observe(room.id)
-  else m.editRoom(room.id)
+  if (room.kind === 'normal' && !room.ready && !room.entered && !heroesInside(s, room)) m.editRoom(room.id)
+  else m.observe(room.id)
 }
 
 // Places the chosen enemy (or removes the one there) on a cell of the room being built; with no enemy chosen, the

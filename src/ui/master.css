@@ -472,3 +472,32 @@
 .hud-top .chip {
   padding-inline: 0.55em;
 }
+
+/* "Invocar" armed: the next tap on the floor summons the slime. */
+.master-top.is-armed {
+  color: var(--ink);
+  background: linear-gradient(180deg, #ffe680, #ffce2e);
+}
+
+.ui-button.round-big.summon.is-armed {
+  color: var(--ink);
+  background: linear-gradient(180deg, #ffe680, #ffce2e 55%, #ffad0a);
+}
+
+.ui-button.round-big.summon.is-armed small {
+  color: #7c2d12;
+}
+
+.enemy-thumb-img {
+  display: block;
+  width: 3.6em;
+  height: 3.6em;
+  object-fit: contain;
+  filter: drop-shadow(0 0.12em 0 rgb(26 15 46 / 0.6));
+}
+
+.enemy-current .enemy-thumb-img {
+  width: 4.2em;
+  height: 4.2em;
+  margin-top: -0.6em;
+}
