@@ -22,7 +22,7 @@ export const lord = {
   phase: 0, // 0..1: dissolved while crossing a wall
   hidden: false, // inside a possessed enemy (or the boss entrance)
   // Smoke: a puff where it vanished or appeared, and the trail when it flies into an enemy.
-  puffs: [] as { x: number; y: number; at: number }[],
+  puffs: [] as { id: number; x: number; y: number; at: number }[],
   trail: null as { fx: number; fy: number; tx: number; ty: number; at: number } | null,
 }
 
@@ -38,8 +38,9 @@ function openCells(s: Snapshot) {
   return cells
 }
 
+let puffId = 0
 function puff(x: number, y: number) {
-  lord.puffs.push({ x, y, at: performance.now() })
+  lord.puffs.push({ id: ++puffId, x, y, at: performance.now() })
   if (lord.puffs.length > 6) lord.puffs.shift()
 }
 

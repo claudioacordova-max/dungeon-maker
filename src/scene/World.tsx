@@ -1038,7 +1038,7 @@ function LordSmoke() {
       {lord.puffs
         .filter((p) => now - p.at < 900)
         .map((p) => (
-          <group key={p.at} position={[p.x, 0, -p.y]}>
+          <group key={p.id} position={[p.x, 0, -p.y]}>
             <FxProgress get={() => Math.min(1, (performance.now() - p.at) / 900)}>{(v) => <PossessSmoke progress={v} scale={0.6} />}</FxProgress>
           </group>
         ))}
