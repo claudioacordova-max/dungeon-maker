@@ -157,6 +157,15 @@ function CameraRig() {
     const k = 1 - Math.exp(-dt * (isMaster ? 6 : 10))
     cam.position.lerp(wanted, k)
     cam.lookAt(cam.position.x, 0, cam.position.z - Math.cos(tilt) * dist)
+    // Development only: lets the visual tests find a world point on the screen.
+    if (import.meta.env.DEV) {
+      ;(window as unknown as { __dmProject?: (x: number, y: number) => [number, number] }).__dmProject = (x, y) => {
+        const v = new Vector3(x, 0.3, -y).project(cam)
+        const r = gl.domElement.getBoundingClientRect()
+        return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height]
+      }
+      ;(window as unknown as { __dmNet?: typeof useNet }).__dmNet = useNet
+    }
   })
   return null
 }
@@ -191,7 +200,10 @@ function visibleRooms(s: Snapshot, isMaster: boolean): RoomView[] {
   if (isMaster) return s.rooms
   const here = roomAtPoint(s.rooms, local.x, local.y)
   if (!here) return s.rooms.filter((r) => r.ready)
-  return s.rooms.filter((r) => r.ready && Math.abs(r.gx - here.gx) <= 1 && Math.abs(r.gy - here.gy) <= 1)
+  // During the boss entrance every hero watches the boss room, wherever it is.
+  const cine = s.cinematic ? s.rooms.find((r) => r.id === s.cinematic!.room) : undefined
+  const near = (r: RoomView, c: RoomView) => Math.abs(r.gx - c.gx) <= 1 && Math.abs(r.gy - c.gy) <= 1
+  return s.rooms.filter((r) => r.ready && (near(r, here) || (cine && near(r, cine))))
 }
 
 // ---------- Actors ----------

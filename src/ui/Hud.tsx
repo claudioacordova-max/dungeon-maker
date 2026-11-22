@@ -44,6 +44,7 @@ export default function Hud() {
         </div>
       </div>
 
+      {!isMaster && (
       <ul className="party" aria-label="Héroes">
         {s.heroes.map((h) => {
           const player = state.players.find((p) => p.id === h.id)
@@ -56,6 +57,7 @@ export default function Hud() {
           )
         })}
       </ul>
+      )}
 
       {isMaster ? (
         <MasterHud s={s} />

@@ -1,7 +1,7 @@
 /* ---------- Maestro, design "C": controls where the thumbs fall (MasterHud.tsx) ---------- */
 .master-top {
   position: absolute;
-  top: calc(var(--edge) + 2.75em);
+  top: calc(var(--edge) + 3.9em); /* below the HUD's top row (in this element's smaller em) */
   left: var(--edge);
   right: var(--edge);
   display: flex;
@@ -15,6 +15,11 @@
   background: rgb(26 15 46 / 0.75);
   border: 0.14em solid var(--ink);
   border-radius: 999px;
+}
+
+.master-top.intro-status {
+  top: calc(var(--edge) + 7.3em);
+  color: #fcd34d;
 }
 
 .master-top b {
@@ -143,6 +148,9 @@
 
 .master-panel.master-dock {
   height: calc(150 * var(--ui-px));
+  background: none;
+  border: 0;
+  box-shadow: none;
   flex-direction: row;
   justify-content: space-between;
   align-items: flex-end;

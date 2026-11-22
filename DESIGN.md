@@ -18,7 +18,7 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
   - **A distancia:** ataque básico con un disparo. Manteniendo presionado se carga un disparo certero, que es crítico.
   - **Sacerdotisa elfa** (2026-11-20): usa maná, que se recarga con el tiempo. Básico: un orbe de luz que daña al enemigo que toca y cura al aliado que toca (atraviesa aliados). Potenciado: una oración que cura a todos los aliados cercanos, ella incluida.
   - **Mago anciano** (2026-11-20): usa maná, que se recarga con el tiempo. Básico: una chispa que daña y deja al enemigo quemado (un poco de daño durante unos segundos). Potenciado: polimorfia, que convierte a un enemigo en una gallina indefensa durante unos segundos; el jefe también se transforma, pero mucho menos tiempo. El daño no deshace la transformación.
-- **Mapa por habitaciones (v2):** el máster construye habitaciones hacia el frente y hacia los costados, y puede ir adelantando varias en paralelo mientras los héroes avanzan. Hasta 6 habitaciones y después una habitación de jefe, que siempre es la última en colocarse.
+- **Mapa por habitaciones (v2):** el máster construye habitaciones hacia el frente y hacia los costados, y puede ir adelantando varias en paralelo mientras los héroes avanzan. Hasta 5 habitaciones (antes 6; diseñador, 2026-11-21) y después una habitación de jefe, que siempre es la última en colocarse.
 - **Puerta a una habitación sin terminar (v2):** queda cerrada hasta que el máster la marque como lista; si el máster se atrasa, los héroes esperan.
 - **Dificultad por habitación (v2):** cada habitación tiene un tope de dificultad. Los elementos negativos suman (enemigos, trampas) y los positivos restan (cofres); el total no puede pasar el tope. Valor estático por ahora; se balanceará según la fuerza de los héroes. El máster ya no gana puntos cuando los héroes reciben daño.
 - **Enemigos (v2):** un **slime** que hace daño al tocar a los héroes, y un enemigo **a distancia** que lanza proyectiles. Jefe: **slime gigante**.
@@ -28,12 +28,19 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
   - **Suelo roto:** la sala puede tener tramos de suelo que ya no están (no hoyos sueltos), elegidos de una lista de formas: Entera, Orillas, Cruz y Puente. Un héroe que camina más allá del borde se cae y cuenta como derrotado (el equipo pierde una vida). Es más caro que los pinchos.
   - **Pinchos:** ya no se colocan uno por uno; se compra un paquete que pone varias trampas en lugares fijos pensados para la forma del suelo.
   - **Cofres:** se elige cuántos (máximo 3) y aparecen en lugares fijos de esa forma, siempre sobre suelo y alcanzables.
-- **Sala del jefe por fases** (2026-11-20, solución temporal): primero aparecen los enemigos que el máster puso en la sala; al derrotarlos aparece el jefe.
+- **Sala del jefe prediseñada** (2026-11-21, reemplaza la sala por fases): sin enemigos, trampas ni hoyos; el maestro solo la ubica y no la edita. Al entrar el primer héroe, una cinemática breve que no se puede saltar y que ven todos: héroes y enemigos quietos, el maestro aparece junto al jefe (verde), mira a los héroes, se vuelve, se deshace en humo morado y lo posee; el jefe se vuelve morado con los ojos del maestro. Después el maestro controla al jefe con sus ataques (salto con zona roja y abanico de orbes) hasta el final.
+- **Introducción** (2026-11-21): al empezar, los héroes leen un texto fijo y breve que termina en «Entrar a la mazmorra»; la partida de los héroes empieza cuando todos lo presionan, sin límite de tiempo. Mientras tanto el maestro ya construye y ve cuántos están listos.
+- **Vista Observar** (2026-11-21): además de Mapa y Construir, el maestro toca una sala con héroes y la cámara la encuadra; ahí usa sus poderes, que solo funcionan en esa sala. Si los héroes se separan, él elige cuál mirar.
+- **Poseer un enemigo** (2026-11-21, habilidad principal del maestro): toca un enemigo de la sala que observa y lo controla con joystick y botón de ataque, con la misma fuerza que tiene. Sin costo, sin tiempo límite y sin espera; termina cuando lo suelta o el enemigo muere. Mientras posee, no construye.
+- **Invocar un slime** (2026-11-21, secundaria): solo en una sala con héroes peleando; aparece en la puerta más lejos de los héroes; con tiempo de espera largo. Sin recurso aparte para los poderes y sin activar trampas.
+- **Modelo del maestro** (2026-11-21): al construir aparece en el centro de la sala que edita y solo él lo ve; los héroes lo ven solo en la cinemática del jefe.
+- **Pociones** (2026-11-21): los cofres dan pociones a un inventario compartido del equipo, como las vidas. Se usan solas, sin botón: después de un golpe, si al héroe le quedan 1 o 0 golpes y hay pociones, se gasta una y le cura (con 0 no cae). Caer al vacío no se salva con pociones. Tienen su propio sonido y un brillo de curación alrededor del héroe.
+- **Panel del maestro «Mando del Maestro»** (2026-11-21, diseño C elegido entre tres bocetos): los controles van donde caen los pulgares. Construyendo: el enemigo elegido abajo a la izquierda (su lista se abre al costado, con miniatura y costo, y se abre sola al tocar el suelo sin enemigo elegido), «Sala lista» grande abajo a la derecha con Mapa encima, el terreno (suelo, pinchos, cofres) en un riel en el borde derecho y la dificultad arriba. Tocar el suelo pone el enemigo elegido; tocar un enemigo lo quita. El «+» del mapa construye la sala al instante. En Observar, los mismos lugares pasan a ser joystick y ataque o Invocar.
 - **Ataques enemigos anunciados** (2026-11-20): antes de golpear, el enemigo se detiene y marca en el suelo una zona roja que se llena; al llenarse, golpea a quien esté dentro. Golpear a un enemigo lo deja aturdido un instante.
 - **Controles (v2):** sobre la pantalla de juego, como en los juegos móviles: joystick de movimiento abajo a la izquierda y ataque abajo a la derecha.
 - **Controles de la sacerdotisa y el mago** (2026-11-21): tienen un segundo botón, más pequeño, para su habilidad especial (oración, polimorfia); su botón de ataque solo hace el básico y no se carga. El espadachín y la arquera siguen cargando al mantener presionado.
-- **Daño y vidas:** cada héroe tiene su propia barra de golpes. Al vaciarse, el héroe cae, el equipo pierde una **vida grupal** y el héroe reaparece tras unos segundos con la barra llena. Las heridas se mantienen de habitación en habitación; los cofres curan.
-- **Cofres** (diseñador, 2026-11-20): se abren al golpearlos (corte o disparo) y dan su beneficio al héroe que los golpeó; pasar por encima no hace nada.
+- **Daño y vidas:** cada héroe tiene su propia barra de golpes. Al vaciarse, el héroe cae, el equipo pierde una **vida grupal** y el héroe reaparece tras unos segundos con la barra llena. Las heridas se mantienen de habitación en habitación; los cofres dan pociones.
+- **Cofres** (diseñador, 2026-11-20): se abren al golpearlos (corte o disparo); pasar por encima no hace nada. Dan pociones al equipo (2026-11-21).
 - **Final (v2):** ganan los héroes al derrotar al jefe. Gana el máster si el equipo se queda sin vidas grupales.
 - Fuera de esta versión: subir de nivel, equipamiento, acertijos, pistas.
 
@@ -42,41 +49,19 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 <!-- Del diseñador. Los marcados como propuesta los eligió el agente y se ajustan jugando. -->
 - Vidas grupales del equipo: 3; 4 con cuatro héroes (diseñador, 2026-11-21).
 - Golpes que aguanta un héroe: 4.
-- Habitaciones del máster: hasta 6, más la del jefe (diseñador, v2).
+- Habitaciones del maestro: hasta 5, más la del jefe (diseñador, 2026-11-21).
 - Tope de dificultad por habitación: 10 (diseñador dijo «10 o 6»; se empieza con 10), +5 por cada héroe después del primero (diseñador): 10, 15, 20, 25.
 - Dificultad: enemigo +2 (diseñador), enemigo a distancia +3 (propuesta), ogro +5 (propuesta), suelo roto +4 (propuesta), paquete de pinchos +3 (propuesta), cofre −5 (diseñador). Cofres por sala según los héroes: 1, 2, 2 y 3 (diseñador, 2026-11-21).
 - Pinchos (propuesta): 8 por sala, en dos grupos que se alternan: abajo 1,5 s, aviso 0,5 s, arriba 1 s.
 - Ogro (propuesta): 10 de vida, lento, no daña al tocar; golpe de garrote anunciado con zona roja frente a él que quita 2 golpes; queda expuesto un momento tras golpear.
 - Sacerdotisa (aprobado): maná 4, recupera 1 cada 1,5 s. Orbe de luz: 1 de maná, quita 1 a un enemigo o cura 1 golpe a un aliado. Oración: 3 de maná, cura 1 golpe a los aliados en 3,5 m.
 - Mago (aprobado): maná 5, recupera 1 cada 1,2 s. Chispa: 1 de maná, quita 1 y quema 0,5 por segundo durante 2 s (la quemadura se reinicia, no se acumula, y no aturde). Polimorfia: 3 de maná, gallina durante 4 s; el jefe 1,5 s y después no puede volver a transformarse durante 8 s. Si la gallina no recibe daño dura un 50 % más (6 s; jefe 2,25 s); el primer daño, quemadura incluida, la deja en la duración corta contada desde que empezó (diseñador, 2026-11-21). La gallina no ataca, no daña al tocar, cancela el ataque que estaba anunciando y huye de los héroes.
-- Cofre: cura 2 golpes al héroe que lo toca (propuesta).
+- Poción (diseñador, 2026-11-21): cura 2 golpes, sin pasar de 4; el cofre da 1, o 2 con probabilidad del 20 %; sin máximo en el inventario.
+- Invocar slime: espera de 30 s (propuesta). Cinemática del jefe: 4 s (propuesta).
 - Reaparición tras caer: 1 s (diseñador).
 - Aviso de ataque enemigo: 0,5 s (diseñador). Aturdimiento del enemigo golpeado: 0,25 s (propuesta).
 - La habitación inicial trae 2 slimes de serie (propuesta).
-- Carga del ataque potenciado: 0,6 s manteniendo presionado (propuesta). Vida del jefe: 30 golpes básicos (propuesta).
-
-## Próxima versión: validar al maestro (aprobada el 2026-11-21, sin implementar)
-
-<!-- Del diseñador. Al implementarse, cada punto pasa a Reglas y Números y reemplaza lo que contradiga. -->
-Objetivo: que el maestro se sienta dentro de la misma partida que los héroes, no construyendo aparte.
-
-- **5 habitaciones** más la del jefe (antes 6).
-- **Introducción narrativa:** al empezar, los héroes leen un texto fijo y breve que termina en un botón «Entrar a la mazmorra»; la partida de los héroes empieza cuando todos lo presionan, sin límite de tiempo. Mientras tanto el maestro ya construye y ve cuántos héroes están listos.
-- **Vista Observar:** además de Mapa y Construir, el maestro toca una sala con héroes y la cámara la encuadra. Ahí usa sus poderes, que solo funcionan en la sala que observa. Si los héroes se separan, él elige cuál mirar.
-- **Poseer un enemigo** (habilidad principal del maestro): toca un enemigo de la sala que observa y lo controla con joystick y botón de ataque, con la misma fuerza que tiene. Sin costo, sin tiempo límite y sin espera; termina cuando el maestro lo suelta o el enemigo muere. Mientras posee, no construye.
-- **Invocar un slime** (secundaria): solo en una sala activa con combate; aparece en una puerta, lejos de los héroes; tiempo de espera largo.
-- **Sin recurso aparte** para los poderes y **sin activar trampas**.
-- **Jefe final:** la sala del jefe viene prediseñada, sin enemigos, trampas ni hoyos, y el maestro no la edita. Al entrar, una cinemática breve que no se puede saltar y que ven todos: héroes y enemigos quietos, el maestro aparece junto al jefe (ahora verde), mira a los héroes, se vuelve, se deshace en humo morado y lo posee; el jefe se vuelve morado con los ojos del maestro. Después el maestro controla al jefe con los ataques que ya tiene (salto con zona roja y abanico de orbes). Reemplaza la sala del jefe por fases.
-- **Modelo del maestro:** un modelo propio. Al construir aparece en el centro de la sala que edita, y solo lo ve él; los héroes lo ven solo en la cinemática.
-- **Pociones en vez de curación en los cofres:** el cofre da pociones a un inventario compartido del equipo, como las vidas. Se usan solas, sin botón: después de un golpe, si al héroe le quedan 1 o 0 golpes y hay pociones, se gasta una y le cura. Con 0 no cae. Caer al vacío no se salva con pociones. Tiene su propio sonido y un brillo de curación alrededor del héroe.
-- **Panel del maestro rediseñado:** la interfaz de construcción se rehace entera (jerarquía, menos espacio, acciones rápidas), con propuesta revisada antes de implementar. Ideas del diseñador: los enemigos en un desplegable al costado con miniatura y costo; si no hay ninguno elegido, se despliega solo al tocar el suelo; con uno elegido, tocar coloca y se puede quitar; sin pestaña Enemigos aparte; cofres y pinchos más simples; el «+» del mapa empieza a construir la sala de inmediato, sin preguntar.
-- Fuera de esta versión: temáticas, tienda, puzles y plantillas de sala.
-
-Números (los marcados como propuesta los eligió el agente):
-- Poción: cura 2 golpes, sin pasar de 4; el cofre da 1, o 2 con probabilidad del 20 %; sin máximo en el inventario.
-- Vida del jefe: 30, +5 % por cada héroe extra (30; 31,5; 33; 34,5).
-- Cinemática del jefe: unos 4 s (propuesta).
-- Invocar slime: espera de 30 s (propuesta).
+- Carga del ataque potenciado: 0,6 s manteniendo presionado (propuesta). Vida del jefe: 30 golpes básicos (propuesta), +5 % por cada héroe extra (diseñador, 2026-11-21): 30; 31,5; 33; 34,5.
 
 ## Preguntas abiertas
 
@@ -87,11 +72,12 @@ Números (los marcados como propuesta los eligió el agente):
 ## Decisiones del agente (v2, por confirmar jugando)
 
 <!-- Del agente: huecos que la petición no cubría. -->
-- La habitación inicial existe desde el principio y no cuenta entre las 6. El máster solo puede añadir habitaciones contiguas a una existente (arriba, izquierda o derecha); no puede editar una habitación donde ya entró un héroe.
+- La habitación inicial existe desde el principio y no cuenta entre las 5. El máster solo puede añadir habitaciones contiguas a una existente (arriba, izquierda o derecha); no puede editar una habitación donde ya entró un héroe.
 - Una puerta entre dos habitaciones se abre cuando ambas están listas y al menos una ya no tiene enemigos. Así los héroes entran a pelear y pueden volver atrás por donde vinieron.
 - Los enemigos solo actúan cuando hay un héroe en su habitación y no salen de ella.
 - Un héroe caído reaparece junto a un compañero vivo, o en la habitación inicial si no queda ninguno.
 - Cámara inclinada que sigue a cada héroe; el máster ve el mapa completo desde arriba y puede acercarse a una habitación para editarla.
+- Maestro (2026-11-21): tocar en el mapa una sala con héroes (o ya jugada) la abre en Observar; una sin héroes, para construir. Al poseer, el slime ataca con una embestida corta (0,3 s al triple de velocidad, espera 0,9 s); el lanzador lanza, el ogro golpea con el garrote y el jefe salta hasta 4,5 casillas hacia donde apunta (Salto) o lanza el abanico (Orbes). Tocar el botón apunta solo al héroe más cercano; arrastrarlo apunta a mano. El enemigo poseído no retrocede al ser golpeado. El jefe no se puede soltar ni se invoca en su sala. La cinemática y el enemigo poseído llevan al maestro a esa sala.
 - Apuntar como en los juegos de acción móviles: tocar el botón de ataque apunta solo al enemigo más cercano (a 9 casillas o menos, aunque esté fuera del alcance del ataque); arrastrarlo apunta a mano. Mientras se mantiene un botón, el suelo muestra el área del ataque: cono (corte), línea (disparos y hechizos) o círculo (giro del espadachín, oración).
 
 ## Red
@@ -121,7 +107,14 @@ Anterior, prueba de concepto multijugador, sin dependencias nuevas (el servidor 
 3. [x] Máster: colocar enemigos, trampas y cofres en la siguiente sala con sus puntos; puertas.
 4. [x] Combate: enemigos que persiguen, ataque automático, golpes, vidas grupales, cofres y final para cada bando.
 
-## Plan actual (2026-11-21, máster en dos partes)
+## Plan actual (2026-11-21, validar al maestro)
+
+1. [x] Servidor: 5 salas, pociones, introducción, posesión, invocación, jefe prediseñado con cinemática y controlado por el maestro (pruebas).
+2. [x] Panel del maestro C (Mando del Maestro), vista Observar y controles de posesión.
+3. [x] Arte de Codex (GPT-6.2-Astra, xhigh): maestro, enemigos poseídos, jefe verde, humo, círculo de invocación y efecto de poción.
+4. [ ] Probarlo jugando con amigos (a 2 y a 3 jugadores).
+
+## Plan anterior (2026-11-21, máster en dos partes)
 
 1. [x] Formas de suelo, caídas, paquete de pinchos y cofres por cantidad (servidor y pruebas).
 2. [x] Panel del máster con pestañas Sala y Enemigos.
@@ -160,6 +153,8 @@ Versión 2 desplegada (2026-11-20):
 - 2026-11-21: botón especial de la sacerdotisa y el mago junto al de ataque (probado en pantallas de 360 a 412 px de ancho); «Maestro» en vez de «Máster»; sin coronas en los menús (banderín liso); textos de las tarjetas siempre dentro de la tarjeta. Espadachín rediseñado por Codex (GPT-6.2-Astra): sin casco, túnica y capa azules, armadura media y espada de acero, igual en el modelo y en la tarjeta; colores de la Arquera iguales a su tarjeta.
 
 - 2026-11-21: jugable en escritorio (el foco sigue siendo el móvil). Con ratón y ventana apaisada el juego ocupa toda la ventana: menús en una columna centrada, panel del maestro centrado abajo y cámara del héroe que muestra más hacia los lados. Héroe: WASD o flechas para moverse, clic izquierdo ataca hacia el cursor (mantener carga), clic derecho es la habilidad especial; Espacio y E también sirven. Los botones táctiles siguen visibles y funcionan con el ratón.
+
+- 2026-11-21: **el maestro dentro de la partida.** Los héroes empiezan leyendo una introducción mientras el maestro construye. Panel del maestro nuevo («Mando del Maestro»): el «+» construye al instante, enemigo elegido abajo a la izquierda con su lista al costado, terreno en un riel a la derecha, «Sala lista» grande abajo a la derecha. Vista Observar: tocar un enemigo lo posee (joystick y botón de ataque), «Invocar» pone un slime cada 30 s. La sala del jefe viene prediseñada: al entrar, cinemática del maestro poseyendo al jefe, que pasa de verde a morado, y el maestro lo controla (Salto y Orbes). Cofres con pociones compartidas que se usan solas (contador en la barra de arriba). 5 salas. Arte nuevo de Codex (GPT-6.2-Astra, xhigh).
 
 Problemas conocidos:
 - Los slimes son muy letales contra un héroe que no se mueve: en la prueba automática el héroe perdió 2 vidas en la primera sala. Para balancear jugando.
