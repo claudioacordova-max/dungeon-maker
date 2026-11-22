@@ -6,7 +6,8 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import { PerspectiveCamera, Plane, Raycaster, Vector2, Vector3, type Group, type Mesh, type MeshBasicMaterial } from 'three'
 import { autoAim, feedback, frame as heroFrame, local, resetHero, shots as ownShots, visibleStrikes } from '../game/hero'
 import { setAttackStick, setSpecialStick } from '../game/input'
-import { useMaster } from '../game/master'
+import { openRoom, tapCell, useMaster } from '../game/master'
+import { ctl, possessFrame, resetPossess } from '../game/possess'
 import { me, SHOW_GHOSTS, useNet } from '../net/connection'
 import { latestEnemy, sampleEnemy, sampleHero, sampleOrb, sampleShot } from '../net/interp'
 import { CHEST_SLOTS, floorCell, SPIKES } from '../shared/layouts'
@@ -14,6 +15,8 @@ import { buildableSlots, DIRS, doorState, isPlaceableCell, overGap, roomAtPoint 
 import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, ShotKind, Snapshot, SpikePhase } from '../shared/protocol'
 import { ENEMY, ENEMY_TELEGRAPH, HERO, HERO_HITS, MAX_ROOMS, ROOM_H, ROOM_W } from '../shared/rules'
 import { PLAYER_COLORS } from '../ui/screens'
+import { MasterLord } from '../models/Master'
+import { PossessSmoke, PotionFx, SummonFx } from '../models/MagicEffects'
 import {
   BurnFx,
   Chest,
@@ -63,13 +66,18 @@ type Bounds = { minX: number; maxX: number; minY: number; maxY: number }
 // Screen band (px, relative to the canvas) not covered by the HUD's top bar and the master's panel.
 function freeBand(canvas: HTMLCanvasElement, height: number) {
   const c = canvas.getBoundingClientRect()
-  const top = document.querySelector('.hud-top')?.getBoundingClientRect().bottom ?? c.top
+  const top = Math.max(
+    document.querySelector('.hud-top')?.getBoundingClientRect().bottom ?? c.top,
+    document.querySelector('.master-top')?.getBoundingClientRect().bottom ?? c.top,
+  )
   const bottom = document.querySelector('.master-panel')?.getBoundingClientRect().top ?? c.bottom
-  return { top: Math.max(0, top - c.top + 6), bottom: Math.min(height, bottom - c.top - 6) }
+  // The Maestro's terrain rail (building) sits on the right edge: keep the room clear of it.
+  const right = document.querySelector('.master-rail')?.getBoundingClientRect().left ?? c.right
+  return { top: Math.max(0, top - c.top + 6), bottom: Math.min(height, bottom - c.top - 6), left: 0, right: Math.min(c.width, right - c.left - 4) }
 }
 
 // Master camera: distance and center so that `b` (walls included) fits the free band, solved on a probe camera.
-function fitMaster(b: Bounds, tilt: number, fov: number, w: number, h: number, band: { top: number; bottom: number }) {
+function fitMaster(b: Bounds, tilt: number, fov: number, w: number, h: number, band: { top: number; bottom: number; left: number; right: number }) {
   probe.fov = fov
   probe.aspect = w / h
   probe.updateProjectionMatrix()
@@ -90,11 +98,11 @@ function fitMaster(b: Bounds, tilt: number, fov: number, w: number, h: number, b
           const py = ((1 - corner.y) / 2) * h
           x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py)
         }
-    const k = Math.max((x1 - x0) / (w * 0.96), (y1 - y0) / (freeH * 0.94))
+    const k = Math.max((x1 - x0) / ((band.right - band.left) * 0.96), (y1 - y0) / (freeH * 0.94))
     const pxPerUnit = h / (2 * dist * Math.tan((fov * Math.PI) / 360))
     // Content below the band's middle: look further south so it rises on the screen (and vice versa).
     cy -= ((y0 + y1) / 2 - (band.top + band.bottom) / 2) / pxPerUnit / Math.sin(tilt)
-    cx += ((x0 + x1) / 2 - w / 2) / pxPerUnit
+    cx += ((x0 + x1) / 2 - (band.left + band.right) / 2) / pxPerUnit
     dist *= k
   }
   return { cx, cy, dist }
@@ -116,12 +124,18 @@ function CameraRig() {
     let tilt = 0.96 // radians above the horizon
     // 11.5 cells across a phone; on a wide (desktop) window, keep about the phone's depth and show more sideways.
     let dist = Math.max(11.5 / 2 / (half * aspect), 10 / half)
-    if (!isMaster && local.ready) {
+    const cine = s?.cinematic ? s.rooms.find((r) => r.id === s.cinematic!.room) : undefined
+    if (!isMaster && cine) {
+      // Boss entrance: every hero looks at the boss room.
+      cx = (cine.gx + 0.5) * ROOM_W
+      cy = (cine.gy + 0.5) * ROOM_H - 1
+      dist *= 1.15
+    } else if (!isMaster && local.ready) {
       cx = local.x
       cy = local.y + 1.6 // look a bit ahead (north): the hero sits lower on the screen
     } else if (isMaster && s) {
       tilt = 1.15
-      const room = mode === 'room' && editRoom !== null ? s.rooms.find((r) => r.id === editRoom) : undefined
+      const room = mode !== 'map' && editRoom !== null ? s.rooms.find((r) => r.id === editRoom) : undefined
       let b: Bounds
       if (room) b = { minX: room.gx * ROOM_W, maxX: (room.gx + 1) * ROOM_W, minY: room.gy * ROOM_H, maxY: (room.gy + 1) * ROOM_H }
       else {
@@ -230,12 +244,40 @@ function ShotModel({ kind, crit }: { kind: ShotKind; crit: boolean }) {
   return <HeroBolt crit={crit} />
 }
 
-function EnemyModel({ kind, pose }: { kind: EnemyView['kind']; pose: Pose }) {
-  if (kind === 'slime') return <Slime pose={pose} />
-  if (kind === 'thrower') return <Thrower pose={pose} />
-  if (kind === 'ogre') return <Ogre pose={pose} />
-  return <SlimeKing pose={pose} />
+function EnemyModel({ kind, pose, possessed = false }: { kind: EnemyView['kind']; pose: Pose; possessed?: boolean }) {
+  if (kind === 'slime') return <Slime pose={pose} possessed={possessed} />
+  if (kind === 'thrower') return <Thrower pose={pose} possessed={possessed} />
+  if (kind === 'ogre') return <Ogre pose={pose} possessed={possessed} />
+  return <SlimeKing pose={pose} possessed={possessed} />
 }
+
+// A potion drunk by a hero: a red-pink glow around it.
+function PotionBurst({ at }: { at: () => number }) {
+  return <FxProgress get={() => Math.min(1, (performance.now() - at()) / 900)}>{(p) => <PotionFx progress={p} />}</FxProgress>
+}
+
+function useDrinkClock(hero: HeroView) {
+  const seen = useRef({ drinks: hero.drinks, at: -1e9 })
+  if (hero.drinks !== seen.current.drinks) {
+    seen.current.drinks = hero.drinks
+    seen.current.at = performance.now()
+  }
+  return () => seen.current.at
+}
+
+// Seconds since the boss entrance began, smooth between snapshots (null when there is none).
+const cinema = { room: -1, start: 0 }
+function cinemaTime(s: Snapshot | null): number | null {
+  if (!s?.cinematic) return null
+  const now = performance.now()
+  if (cinema.room !== s.cinematic.room) {
+    cinema.room = s.cinematic.room
+    cinema.start = now - s.cinematic.t * 1000
+  }
+  return (now - cinema.start) / 1000
+}
+// The boss turns purple (possessed) this far into the entrance.
+const POSSESS_AT = 3.2
 
 // Heal burst on a hero (radius ~0.6) or around the praying priestess (her prayer's reach).
 function HealBurst({ at, radius }: { at: () => number; radius: number }) {
@@ -295,6 +337,7 @@ function useHealClock(hero: HeroView) {
 
 function OwnHero({ hero, color }: { hero: HeroView; color: string }) {
   const healAt = useHealClock(hero)
+  const drinkAt = useDrinkClock(hero)
   const prayAt = () => (local.cls === 'priest' && feedback.attackKind === 'charged' ? feedback.attackAt : -1e9)
   return (
     <>
@@ -322,6 +365,7 @@ function OwnHero({ hero, color }: { hero: HeroView; color: string }) {
             </mesh>
             <AttackFx cls={hero.cls} at={() => feedback.attackAt} kind={() => feedback.attackKind} dir={() => feedback.attackDir - local.facing + Math.PI / 2} />
             <HealBurst at={healAt} radius={0.6} />
+            <PotionBurst at={drinkAt} />
             <HealBurst at={prayAt} radius={HERO.priest.charged.range} />
           </>
         )}
@@ -389,6 +433,7 @@ function AimIndicator() {
 
 function OtherHero({ hero, color }: { hero: HeroView; color: string }) {
   const healAt = useHealClock(hero)
+  const drinkAt = useDrinkClock(hero)
   const last = useRef({ x: 0, y: 0, seq: hero.act?.seq ?? 0, at: -1e9, kind: 'basic' as 'basic' | 'charged', hp: hero.hp, hurtAt: -1e9 })
   const view = useRef(hero)
   view.current = hero
@@ -434,6 +479,7 @@ function OtherHero({ hero, color }: { hero: HeroView; color: string }) {
           <HeroModel cls={hero.cls} pose={pose} tint={color} />
           <AttackFx cls={hero.cls} at={() => last.current.at} kind={() => last.current.kind} dir={() => Math.PI / 2} />
           <HealBurst at={healAt} radius={0.6} />
+          <PotionBurst at={drinkAt} />
           {hero.cls === 'priest' && <HealBurst at={() => (last.current.kind === 'charged' ? last.current.at : -1e9)} radius={HERO.priest.charged.range} />}
         </>
       )}
@@ -521,15 +567,29 @@ function HeroLabels() {
 function EnemyActor({ enemy }: { enemy: EnemyView }) {
   const view = useRef(enemy)
   view.current = enemy
-  const track = useRef({ state: enemy.state, since: performance.now(), x: enemy.x, y: enemy.y, chicken: enemy.chicken, poofAt: -1e9 })
+  const track = useRef({ state: enemy.state, since: performance.now(), x: enemy.x, y: enemy.y, chicken: enemy.chicken, poofAt: -1e9, possessed: enemy.possessed, smokeAt: -1e9 })
   if (enemy.chicken !== track.current.chicken) {
     track.current.chicken = enemy.chicken
     track.current.poofAt = performance.now()
   }
+  // The boss is taken during its entrance (the smoke plays there); other enemies smoke when taken or dropped.
+  if (enemy.possessed !== track.current.possessed) {
+    track.current.possessed = enemy.possessed
+    if (enemy.kind !== 'king') track.current.smokeAt = performance.now()
+  }
+  const [cinePossessed, setCinePossessed] = useState(false)
+  useFrame(() => {
+    if (enemy.kind !== 'king') return
+    const t = cinemaTime(useNet.getState().snapshot)
+    const v = t !== null && t >= POSSESS_AT
+    if (v !== cinePossessed) setCinePossessed(v)
+  })
+  const looksPossessed = enemy.possessed || cinePossessed
+  const own = () => ctl.id === enemy.id
   return (
     <Actor
-      at={() => sampleEnemy(enemy.id)}
-      facing={() => view.current.facing}
+      at={() => (own() ? ctl : sampleEnemy(enemy.id))}
+      facing={() => (own() ? ctl.facing : view.current.facing)}
       lift={() => {
         const e = view.current
         if (e.state !== 'jump') return 0
@@ -559,12 +619,19 @@ function EnemyActor({ enemy }: { enemy: EnemyView }) {
         } else if ((pose.anim === 'throw' || pose.anim === 'land') && pose.t < 0.4) {
           // let the one-shot finish
         } else if (flashing) setAnim(pose, 'hurt')
-        else setAnim(pose, e.state === 'move' ? 'run' : 'idle')
+        else setAnim(pose, (own() ? ctl.moving : e.state === 'move') ? 'run' : 'idle')
       }}
     >
       {(pose) => (
         <>
-          {enemy.chicken ? <Chicken pose={pose} scale={enemy.kind === 'king' ? 2.4 : enemy.kind === 'ogre' ? 1.5 : 1} /> : <EnemyModel kind={enemy.kind} pose={pose} />}
+          {enemy.chicken ? (
+            <Chicken pose={pose} scale={enemy.kind === 'king' ? 2.4 : enemy.kind === 'ogre' ? 1.5 : 1} />
+          ) : (
+            <EnemyModel kind={enemy.kind} pose={pose} possessed={looksPossessed} />
+          )}
+          <FxProgress get={() => Math.min(1, (performance.now() - track.current.smokeAt) / 1200)}>
+            {(p) => <PossessSmoke progress={p} scale={enemy.kind === 'ogre' ? 1.5 : 0.9} />}
+          </FxProgress>
           {enemy.burning && <Burning radius={ENEMY[enemy.kind].radius} />}
           <FxProgress get={() => Math.min(1, (performance.now() - track.current.poofAt) / 450)}>
             {(p) => <PoofFx progress={p} scale={enemy.kind === 'king' ? 2.4 : enemy.kind === 'ogre' ? 1.6 : 1} />}
@@ -641,7 +708,7 @@ function useDying(s: Snapshot | null) {
 function DyingActor({ d }: { d: Dying }) {
   return (
     <Actor at={() => (performance.now() - d.at < 700 ? d : null)} facing={() => d.facing} update={(pose) => setAnim(pose, 'die')}>
-      {(pose) => (d.chicken ? <Chicken pose={pose} scale={d.kind === 'king' ? 2.4 : 1} /> : <EnemyModel kind={d.kind} pose={pose} />)}
+      {(pose) => (d.chicken ? <Chicken pose={pose} scale={d.kind === 'king' ? 2.4 : 1} /> : <EnemyModel kind={d.kind} pose={pose} possessed={d.kind === 'king'} />)}
     </Actor>
   )
 }
@@ -774,22 +841,24 @@ function TrapItem({ phase }: { phase?: SpikePhase }) {
 // ---------- Master building ----------
 
 function Slots({ s }: { s: Snapshot }) {
-  const setSlot = useMaster((m) => m.setSlot)
-  const chosen = useMaster((m) => m.slot)
+  const send = useNet((st) => st.send)
+  const setPending = useMaster((m) => m.setPending)
   const bossPlaced = s.rooms.some((r) => r.kind === 'boss')
   if (bossPlaced) return null
   const bossNext = s.normalRooms >= MAX_ROOMS
   return (
     <>
       {buildableSlots(s.rooms).map((slot) => {
-        const active = chosen?.gx === slot.gx && chosen?.gy === slot.gy
+        const active = false
         return (
           <group key={`${slot.gx},${slot.gy}`} position={[(slot.gx + 0.5) * ROOM_W, 0.02, -(slot.gy + 0.5) * ROOM_H]}>
             <mesh
               rotation={[-Math.PI / 2, 0, 0]}
               onPointerDown={(e) => {
                 e.stopPropagation()
-                setSlot(slot)
+                // A tap on a "+" builds there at once (the room opens for building when the server confirms it).
+                send({ type: 'build', gx: slot.gx, gy: slot.gy, kind: bossNext ? 'boss' : 'normal' })
+                setPending(slot)
               }}
             >
               <planeGeometry args={[ROOM_W - 0.6, ROOM_H - 0.6]} />
@@ -844,19 +913,17 @@ function LayoutGhosts({ room }: { room: RoomView }) {
 
 function RoomEditor({ room }: { room: RoomView }) {
   const send = useNet((st) => st.send)
-  const tool = useMaster((m) => m.tool)
-  const tab = useMaster((m) => m.tab)
+  const cell = useMaster((m) => m.cell)
   const plan = room.plan ?? []
-  const editable = !room.entered && room.kind !== 'start'
+  const editable = !room.entered && room.kind === 'normal'
   function onTap(e: ThreeEvent<PointerEvent>) {
     e.stopPropagation()
-    if (!editable || tab !== 'enemies') return
+    if (!editable) return
     const cx = Math.floor(e.point.x - room.gx * ROOM_W)
     const cy = Math.floor(-e.point.z - room.gy * ROOM_H)
     if (!isPlaceableCell(cx, cy) || !floorCell(room.shape, cx, cy)) return
-    const occupied = plan.some((p) => p.cx === cx && p.cy === cy)
-    if (tool === 'erase' || occupied) send({ type: 'remove', room: room.id, cx, cy })
-    else send({ type: 'place', room: room.id, kind: tool, cx, cy })
+    if (room.ready) return // a ready room is changed only after "Editar"
+    tapCell(room, cx, cy, send)
   }
   return (
     <group position={[room.gx * ROOM_W, 0, -room.gy * ROOM_H]}>
@@ -864,10 +931,16 @@ function RoomEditor({ room }: { room: RoomView }) {
         <planeGeometry args={[ROOM_W, ROOM_H]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {editable && tab === 'enemies' && (
+      {editable && !room.ready && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[ROOM_W / 2, 0.035, -ROOM_H / 2]}>
           <planeGeometry args={[ROOM_W - 2, ROOM_H - 2]} />
-          <meshBasicMaterial color="#6ee7b7" transparent opacity={0.1} depthWrite={false} />
+          <meshBasicMaterial color="#6ee7b7" transparent opacity={0.08} depthWrite={false} />
+        </mesh>
+      )}
+      {cell && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cell.cx + 0.5, 0.05, -(cell.cy + 0.5)]}>
+          <ringGeometry args={[0.32, 0.48, 24]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.9} depthWrite={false} />
         </mesh>
       )}
       {!room.ready && plan.map((item) => <PlanGhost key={`${item.cx},${item.cy}`} item={item} />)}
@@ -877,20 +950,17 @@ function RoomEditor({ room }: { room: RoomView }) {
 }
 
 function MasterPicker({ s }: { s: Snapshot }) {
-  const editRoom = useMaster((m) => m.editRoom)
-  // Tapping a room on the map opens it for editing.
+  // Tapping a room on the map: build it, or watch it when the heroes are there.
   return (
     <>
-      {s.rooms
-        .filter((r) => r.kind !== 'start')
-        .map((r) => (
+      {s.rooms.map((r) => (
           <mesh
             key={r.id}
             rotation={[-Math.PI / 2, 0, 0]}
             position={[(r.gx + 0.5) * ROOM_W, 0.05, -(r.gy + 0.5) * ROOM_H]}
             onPointerDown={(e) => {
               e.stopPropagation()
-              editRoom(r.id)
+              openRoom(s, r)
             }}
           >
             <planeGeometry args={[ROOM_W, ROOM_H]} />
@@ -899,6 +969,121 @@ function MasterPicker({ s }: { s: Snapshot }) {
         ))}
     </>
   )
+}
+
+// Observar: a tap on (or next to) an enemy of the watched room takes control of it.
+function ObserveTapper({ room, s }: { room: RoomView; s: Snapshot }) {
+  const send = useNet((st) => st.send)
+  function onTap(e: ThreeEvent<PointerEvent>) {
+    e.stopPropagation()
+    if (s.possessed !== null || s.cinematic) return
+    const x = e.point.x
+    const y = -e.point.z
+    let best = 1.4
+    let id: number | null = null
+    for (const enemy of s.enemies) {
+      if (enemy.room !== room.id || enemy.kind === 'king') continue
+      const p = sampleEnemy(enemy.id) ?? enemy
+      const d = Math.hypot(p.x - x, p.y - y) - ENEMY[enemy.kind].radius
+      if (d < best) {
+        best = d
+        id = enemy.id
+      }
+    }
+    if (id !== null) send({ type: 'possess', enemy: id })
+  }
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[(room.gx + 0.5) * ROOM_W, 0.05, -(room.gy + 0.5) * ROOM_H]} onPointerDown={onTap}>
+      <planeGeometry args={[ROOM_W, ROOM_H]} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+    </mesh>
+  )
+}
+
+// The Maestro stands in the middle of the room it is building (only it sees itself there).
+function MasterAvatar({ room }: { room: RoomView }) {
+  const pose = useMemo(() => makePose(), [])
+  useFrame((_, dt) => {
+    pose.t += dt
+  })
+  return (
+    <group position={[(room.gx + 0.5) * ROOM_W, 0, -(room.gy + 0.5) * ROOM_H]}>
+      <MasterLord pose={pose} />
+    </group>
+  )
+}
+
+// A magic circle where the Maestro's summoned slime appears.
+const summonState = { summonIn: 0, ids: new Set<number>(), list: [] as { x: number; y: number; at: number }[] }
+function summonList(s: Snapshot) {
+  const r = summonState
+  if (s.summonIn > r.summonIn + 1) {
+    const fresh = s.enemies.find((e) => !r.ids.has(e.id) && e.kind === 'slime')
+    if (fresh) r.list.push({ x: fresh.x, y: fresh.y, at: performance.now() })
+  }
+  r.summonIn = s.summonIn
+  r.ids = new Set(s.enemies.map((e) => e.id))
+  r.list = r.list.filter((c) => performance.now() - c.at < 900)
+  return r.list
+}
+
+// Boss entrance, seen by everyone: the Maestro appears beside the green boss, looks at the heroes, turns to the boss,
+// dissolves into purple smoke and takes it (the boss turns purple at POSSESS_AT).
+function Entrance({ s }: { s: Snapshot }) {
+  const pose = useMemo(() => makePose(), [])
+  const group = useRef<Group>(null)
+  const boss = s.cinematic ? s.enemies.find((e) => e.kind === 'king' && e.room === s.cinematic!.room) : undefined
+  const fade = useRef(1)
+  useFrame((_, dt) => {
+    const g = group.current
+    const t = cinemaTime(useNet.getState().snapshot)
+    if (!g || t === null || !boss) return
+    pose.t += dt
+    const bx = boss.x + 1.9
+    const by = boss.y - 0.4
+    // Appear (0-0.6), look at the heroes (0.6-2.1), turn to the boss (2.1-2.6), dissolve into it (2.6-3.3).
+    const toBoss = Math.atan2(boss.y - by, boss.x - bx)
+    let facing = -Math.PI / 2
+    if (t < 0.6) fade.current = 1 - t / 0.6
+    else fade.current = 0
+    if (t >= 0.6 && t < 2.1) setAnim(pose, 'special')
+    else if (t >= 2.1 && t < 2.6) {
+      setAnim(pose, 'idle')
+      facing = -Math.PI / 2 + (toBoss + Math.PI / 2) * ((t - 2.1) / 0.5)
+    } else if (t >= 2.6) {
+      setAnim(pose, 'attack')
+      facing = toBoss
+      fade.current = Math.min(1, (t - 2.6) / 0.7)
+    } else setAnim(pose, 'idle')
+    const k = t >= 2.6 ? Math.min(1, (t - 2.6) / 0.7) * 0.6 : 0
+    g.position.set(bx + (boss.x - bx) * k, 0, -(by + (boss.y - by) * k))
+    g.rotation.y = facing - Math.PI / 2
+  })
+  if (!boss) return null
+  return (
+    <>
+      <group ref={group}>
+        <MasterLord pose={pose} fade={() => fade.current} />
+      </group>
+      <group position={[boss.x + 1.9, 0, -(boss.y - 0.4)]}>
+        <FxProgress get={() => Math.min(1, (cinemaTime(useNet.getState().snapshot) ?? 9) / 1.0)}>{(p) => <PossessSmoke progress={p} scale={0.8} />}</FxProgress>
+      </group>
+      <group position={[boss.x, 0, -boss.y]}>
+        <FxProgress get={() => {
+          const t = cinemaTime(useNet.getState().snapshot)
+          return t === null || t < 2.8 ? 1 : Math.min(1, (t - 2.8) / 1.2)
+        }}>
+          {(p) => <PossessSmoke progress={p} scale={1.8} />}
+        </FxProgress>
+      </group>
+    </>
+  )
+}
+
+function PossessLoop() {
+  useEffect(() => resetPossess, [])
+  useFrame((_, dt) => possessFrame(dt))
+  return null
 }
 
 // ---------- Scene ----------
@@ -965,9 +1150,11 @@ export default function World() {
   const editId = useMaster((m) => m.room)
   const dying = useDying(s)
   if (!s) return <LobbyBackdrop />
+  const summons = summonList(s)
   const rooms = visibleRooms(s, isMaster)
   const roomIds = new Set(rooms.map((r) => r.id))
   const editRoom = isMaster && mode === 'room' ? s.rooms.find((r) => r.id === editId) : undefined
+  const watched = isMaster && mode === 'observe' ? s.rooms.find((r) => r.id === editId) : undefined
 
   return (
     <>
@@ -976,12 +1163,21 @@ export default function World() {
       <directionalLight position={[6, 14, 4]} intensity={1.8} />
       {self?.role === 'hero' && <LocalHeroLoop />}
       {self?.role === 'hero' && <MouseAim />}
+      {isMaster && <PossessLoop />}
       {rooms.map((r) => (
         <RoomTile key={r.id} room={r} doors={doorsOf(s.rooms, r, isMaster)} draft={isMaster && !r.ready} />
       ))}
       {isMaster && mode === 'map' && <Slots s={s} />}
       {isMaster && mode === 'map' && <MasterPicker s={s} />}
       {editRoom && <RoomEditor room={editRoom} />}
+      {editRoom && !editRoom.entered && <MasterAvatar room={editRoom} />}
+      {s.cinematic && <Entrance s={s} />}
+      {summons.map((c) => (
+        <group key={c.at} position={[c.x, 0, -c.y]}>
+          <FxProgress get={() => Math.min(1, (performance.now() - c.at) / 800)}>{(p) => <SummonFx progress={p} />}</FxProgress>
+        </group>
+      ))}
+      {watched && <ObserveTapper room={watched} s={s} />}
       {s.items
         .filter((i) => roomIds.has(i.room))
         .map((i) => (

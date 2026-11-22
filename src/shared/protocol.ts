@@ -51,6 +51,7 @@ export type HeroView = {
   act: HeroAct | null // last attack, for others to animate
   mana: number // priestess and mage (0 for the others)
   heals: number // times this hero was healed: a change shows the heal effect
+  drinks: number // potions this hero drank: a change shows the potion effect
 }
 export type EnemyView = {
   id: number
@@ -65,6 +66,7 @@ export type EnemyView = {
   stunned: boolean
   burning: boolean
   chicken: boolean // polymorphed
+  possessed: boolean // controlled by the Maestro
 }
 export type StrikeView = { id: number; x: number; y: number; r: number; remaining: number }
 export type AimView = { enemy: number; dir: number; remaining: number } // thrower / boss aim before throwing
@@ -89,6 +91,11 @@ export type Snapshot = {
   orbs: OrbView[]
   shots: ShotView[]
   items: ItemView[]
+  potions: number // the team's shared potions
+  introWaiting: string[] // heroes still reading the intro; the heroes' match starts when it is empty
+  cinematic: { room: number; t: number; total: number } | null // boss entrance (t: seconds since it began)
+  possessed: number | null // enemy the Maestro controls
+  summonIn: number // seconds before the Maestro can summon another slime (0 = ready)
 }
 
 export type ServerMessage =
@@ -118,6 +125,8 @@ export type ClientMessage =
   // A chest the device saw this hero's attack reach: it opens and heals that hero.
   | { type: 'openChest'; item: number }
   | { type: 'ping'; t: number }
+  // The hero finished reading the intro ("Entrar a la mazmorra").
+  | { type: 'introReady' }
   // Master
   | { type: 'build'; gx: number; gy: number; kind: 'normal' | 'boss' }
   | { type: 'demolish'; room: number }
@@ -125,6 +134,13 @@ export type ClientMessage =
   | { type: 'remove'; room: number; cx: number; cy: number }
   | { type: 'layout'; room: number; shape: RoomShape; spikes: boolean; chests: number }
   | { type: 'ready'; room: number; ready: boolean }
+  // The Maestro takes or drops an enemy of a room with heroes; while it holds one, its device moves it (like a hero:
+  // the server limits the speed) and starts its attacks.
+  | { type: 'possess'; enemy: number }
+  | { type: 'release' }
+  | { type: 'steer'; x: number; y: number; facing: number }
+  | { type: 'enemyAct'; kind: 'attack' | 'special'; dir: number }
+  | { type: 'summon'; room: number }
   | { type: 'lobby' }
   | { type: 'leave' } // leaving on purpose (no grace period)
 

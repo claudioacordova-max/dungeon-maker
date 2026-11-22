@@ -156,6 +156,34 @@ export const sfx = {
     play('heal', v, (s) => {
       ;[784, 1175].forEach((f, i) => tone({ type: 'sine', f0: f, f1: f * 1.06, dur: 0.18, vol: 0.18, at: i * 0.07 }, s))
     }, 90),
+  // A potion drunk by itself: a cork pop and a bubbly rising chime.
+  potion: (v = 1) =>
+    play('potion', v, (s) => {
+      tone({ type: 'square', f0: 1400, f1: 500, dur: 0.05, vol: 0.12 }, s)
+      ;[0, 1, 2, 3].forEach((i) => tone({ type: 'sine', f0: 500 + i * 180, f1: 620 + i * 200, dur: 0.07, vol: 0.13, at: 0.06 + i * 0.05 }, s))
+      ;[659, 988].forEach((f, i) => tone({ type: 'triangle', f0: f, f1: f * 1.04, dur: 0.3, vol: 0.14, at: 0.26 + i * 0.07, attack: 0.03 }, s))
+    }, 120),
+  // The Maestro takes or drops an enemy: a dark whoosh.
+  possess: (v = 1) =>
+    play('possess', v, (s) => {
+      noise({ dur: 0.45, vol: 0.32, filter: 'bandpass', f0: 300, f1: 1400, q: 0.9 }, s)
+      tone({ type: 'sawtooth', f0: 110, f1: 70, dur: 0.5, vol: 0.14, attack: 0.05 }, s)
+      tone({ type: 'sine', f0: 880, f1: 1320, dur: 0.25, vol: 0.08, at: 0.2 }, s)
+    }, 200),
+  // A summoned slime: a magic circle and a wet plop.
+  summon: (v = 1) =>
+    play('summon', v, (s) => {
+      tone({ type: 'triangle', f0: 220, f1: 660, dur: 0.4, vol: 0.16, attack: 0.05 }, s)
+      noise({ dur: 0.2, vol: 0.22, filter: 'lowpass', f0: 900, f1: 200, at: 0.35 }, s)
+    }, 200),
+  // The boss entrance: a low, rising drone with a final sting.
+  entrance: (v = 1) =>
+    play('entrance', v, (s) => {
+      tone({ type: 'sawtooth', f0: 55, f1: 82, dur: 3.2, vol: 0.12, attack: 0.6 }, s)
+      tone({ type: 'sine', f0: 110, f1: 165, dur: 3.2, vol: 0.12, attack: 0.6 }, s)
+      noise({ dur: 1.2, vol: 0.28, filter: 'bandpass', f0: 200, f1: 1600, q: 0.7, at: 2.4 }, s)
+      ;[220, 262, 311].forEach((f) => tone({ type: 'square', f0: f, dur: 0.7, vol: 0.07, at: 3.3 }, s))
+    }, 3000),
   spark: (v = 1) =>
     play('spark', v, (s) => {
       noise({ dur: 0.16, vol: 0.3, filter: 'bandpass', f0: 1800, f1: 600, q: 1.2 }, s)

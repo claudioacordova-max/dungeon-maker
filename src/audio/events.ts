@@ -38,9 +38,17 @@ export function playSnapshotSounds(prev: Snapshot | null, next: Snapshot, you: s
     if (e.state === 'jump' && n.state !== 'jump') sfx.bossLand(v)
   }
 
-  // The boss appearing after the boss room's first enemies fall.
+  // The Maestro: a summoned slime, taking or dropping an enemy, the boss entrance.
   const prevIds = new Set(prev.enemies.map((e) => e.id))
-  for (const e of next.enemies) if (e.kind === 'king' && !prevIds.has(e.id) && prev.rooms.some((r) => r.id === e.room && r.ready)) sfx.bossLand(1)
+  if (next.summonIn > prev.summonIn + 1) {
+    const slime = next.enemies.find((e) => !prevIds.has(e.id) && e.kind === 'slime')
+    sfx.summon(slime ? volumeAt(slime.x, slime.y, isHero) : 1)
+  }
+  if (next.possessed !== prev.possessed && (next.possessed !== null || !isHero)) {
+    const e = next.enemies.find((x) => x.id === (next.possessed ?? prev.possessed))
+    sfx.possess(e ? volumeAt(e.x, e.y, isHero) : 1)
+  }
+  if (next.cinematic && !prev.cinematic) sfx.entrance(1)
 
   // Enemy orbs thrown.
   const prevOrbs = new Set(prev.orbs.map((o) => o.id))
@@ -56,8 +64,8 @@ export function playSnapshotSounds(prev: Snapshot | null, next: Snapshot, you: s
     if (h.dead && !p.dead) sfx.heroDie(v)
     else if (!h.dead && p.dead) sfx.respawn(v)
     else if (h.hp < p.hp && !own) sfx.heroHurt(v)
+    else if (h.drinks > p.drinks) sfx.potion(own ? 1 : v)
     else if (h.heals > p.heals) sfx.heal(v)
-    else if (h.hp > p.hp) sfx.chest(v)
     if (!own && h.act && h.act.seq !== p.act?.seq) {
       const charged = h.act.kind === 'charged'
       if (h.cls === 'melee') (charged ? sfx.spin : sfx.swing)(v * 0.6)

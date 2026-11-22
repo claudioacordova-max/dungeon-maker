@@ -5,6 +5,7 @@ import { isMobileTarget, target } from './game/target'
 import './ui/tokens.css'
 import './ui/shell.css'
 import './ui/game.css' // after the shell, so game rules win
+import './ui/master.css'
 import './ui/menus.css' // menus styled after the designer's references
 
 // shell.css styles each target profile from this attribute.

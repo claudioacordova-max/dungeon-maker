@@ -257,7 +257,9 @@ export function frame(dt: number) {
     if (hit || shot.left <= 0) shots.splice(i, 1)
   }
 
-  if (me.dead) {
+  // Dead, still reading the intro, or the boss entrance: no control (the server ignores moves meanwhile).
+  if (me.dead || s.introWaiting.length > 0 || s.cinematic) {
+    local.moving = false
     local.charge = 0
     local.aim = null
     local.aiming = false

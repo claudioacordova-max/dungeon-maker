@@ -7,6 +7,12 @@ import {
   createGame,
   demolish,
   openChest,
+  introReady,
+  possess,
+  release,
+  steer,
+  enemyAct,
+  summon,
   place,
   removeHero,
   removeItem,
@@ -193,6 +199,9 @@ export class Room {
         case 'openChest':
           openChest(game, player.id, Number(message.item))
           return
+        case 'introReady':
+          introReady(game, player.id)
+          return
       }
     } else {
       switch (message.type) {
@@ -213,6 +222,21 @@ export class Room {
           return
         case 'ready':
           setReady(game, Number(message.room), message.ready === true)
+          return
+        case 'possess':
+          possess(game, Number(message.enemy))
+          return
+        case 'release':
+          release(game)
+          return
+        case 'steer':
+          steer(game, Number(message.x), Number(message.y), Number(message.facing))
+          return
+        case 'enemyAct':
+          enemyAct(game, message.kind === 'special' ? 'special' : 'attack', Number(message.dir))
+          return
+        case 'summon':
+          summon(game, Number(message.room))
           return
       }
     }

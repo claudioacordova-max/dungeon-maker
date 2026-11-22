@@ -9,6 +9,7 @@ import { PriestHero, MageHero } from './Spellcasters'
 import { Ogre, Chicken } from './Creatures'
 import { PreviewMagic, type MagicExhibit } from './MagicEffects'
 import { Slime, SlimeKing, Thrower } from './Enemies'
+import { MasterLord, PreviewMasterFade } from './Master'
 import { Chest, RoomShell, SpikeTrap } from './Dungeon'
 import { BlobShadow, EnemyOrb, HeroBolt, PreviewStroke } from './Effects'
 import { bake, box, toon } from './kit'
@@ -16,11 +17,15 @@ import { makePose, type Anim, type Pose } from './types'
 import './showcase.css'
 
 type Name = 'Swordsman' | 'Ranger' | 'Priestess' | 'Mage' | 'Ogre' | 'Chicken' | 'Thrower' | 'Slime' |
-  'Slime King' | 'Chest' | 'Spikes' | 'Bolts' | 'Orb' | 'Slash' | 'Spin' | MagicExhibit
-type Exhibit = { name: Name; x: number; z: number; labelOffset: number; anims?: Anim[]; width?: number; height?: number }
+  'Slime King' | 'Maestro' | 'Dissolve' | 'Chest' | 'Spikes' | 'Bolts' | 'Orb' | 'Slash' | 'Spin' | MagicExhibit
+type Exhibit = { name: Name; x: number; z: number; labelOffset: number; anims?: Anim[]; width?: number; height?: number; possessed?: boolean }
+function pair(entry: Omit<Exhibit,'x'>): Exhibit[] {
+  return [{ ...entry, x: .25 }, { ...entry, x: .75, possessed: true }]
+}
+const exhibitTitle = (entry: Exhibit) => entry.possessed ? 'Possessed ' + entry.name : entry.name
 const heroClips: Anim[] = ['idle', 'run', 'attack', 'charge', 'special', 'hurt', 'die']
 const smallClips: Anim[] = ['idle','run','hurt','die']
-const pages = ['Heroes','Dungeon','Floors','Combat','Magic'] as const
+const pages = ['Heroes','Dungeon','Maestro','Floors','Combat','Magic'] as const
 type Page = typeof pages[number]
 const rooms: Record<Page, Exhibit[]> = {
   Heroes: [
@@ -30,13 +35,20 @@ const rooms: Record<Page, Exhibit[]> = {
     { name: 'Mage', x: .73, z: .30, labelOffset: .42, anims: heroClips },
   ],
   Dungeon: [
-    { name: 'Slime King', x: .26, z: .78, labelOffset: 1.04, anims: ['idle','run','windup','jump','land','throw','hurt','die'], width: 3.45, height: .72 },
-    { name: 'Ogre', x: .74, z: .78, labelOffset: .85, anims: ['idle','run','windup','land','hurt','die'], width: 2.85, height: .86 },
-    { name: 'Thrower', x: .19, z: .45, labelOffset: .41, anims: ['idle','run','windup','throw','hurt','die'] },
-    { name: 'Chicken', x: .50, z: .45, labelOffset: .27, anims: smallClips, width: 1.12, height: .23 },
-    { name: 'Slime', x: .81, z: .45, labelOffset: .46, anims: smallClips },
-    { name: 'Chest', x: .27, z: .18, labelOffset: .53 },
-    { name: 'Spikes', x: .73, z: .18, labelOffset: .50, anims: ['idle','trigger'] },
+    ...pair({ name: 'Slime King', z: .87, labelOffset: .98, anims: ['idle','run','windup','jump','land','throw','hurt','die'], width: 3.45, height: .72 }),
+    ...pair({ name: 'Ogre', z: .60, labelOffset: .77, anims: ['idle','run','windup','land','hurt','die'], width: 2.85, height: .86 }),
+    ...pair({ name: 'Thrower', z: .39, labelOffset: .39, anims: ['idle','run','windup','throw','hurt','die'] }),
+    ...pair({ name: 'Slime', z: .23, labelOffset: .40, anims: smallClips }),
+    { name: 'Chest', x: .19, z: .085, labelOffset: .53 },
+    { name: 'Chicken', x: .50, z: .085, labelOffset: .27, anims: smallClips, width: 1.12, height: .23 },
+    { name: 'Spikes', x: .81, z: .085, labelOffset: .50, anims: ['idle','trigger'] },
+  ],
+  Maestro: [
+    { name: 'Maestro', x: .26, z: .73, labelOffset: .65, anims: ['idle','special','attack'], width: 2.34, height: .77 },
+    { name: 'Dissolve', x: .74, z: .73, labelOffset: .65, width: 2.34, height: .77 },
+    { name: 'Possess smoke', x: .28, z: .34, labelOffset: .86, width: 3.18, height: .82 },
+    { name: 'Summon', x: .76, z: .37, labelOffset: .60, width: 1.86, height: .14 },
+    { name: 'Potion', x: .65, z: .12, labelOffset: .47, width: 1.90, height: .52 },
   ],
   Floors: [{ name: 'Spikes', x: .5, z: .5, labelOffset: .65, width: 2.1, height: .30 }],
   Combat: [
@@ -80,19 +92,23 @@ function FrameScene({ play, labels, w, h, exhibits }: { play: Playback; labels: 
       camera.updateMatrixWorld()
     }
     if (exhibit) {
+      if (camera.view?.enabled) camera.clearViewOffset()
       const subjectWidth = exhibit.width ?? 1.8
       place(Math.max(subjectWidth / camera.aspect, subjectWidth * .93) / (2 * Math.tan(MathUtils.degToRad(camera.fov / 2))))
     } else {
       // Fit all eight corners, including the front corners closest to the lens.
       let near = 3, far = 60
-      const top = 1 - Math.min(.45, 2 * (size.height < 540 ? 53 : 86) / size.height)
+      const heading = size.height < 540 ? 53 : 76
+      const controls = size.height < 540 ? 106 : 126
+      const top = 1 - 2*heading/size.height, bottom = -1 + 2*controls/size.height
+      camera.setViewOffset(size.width,size.height,0,(controls-heading)/2,size.width,size.height)
       for (let i = 0; i < 14; i++) {
         const distance = (near + far) / 2
         place(distance)
         let fits = true
         for (const x of [-.67, w + .67]) for (const z of [-h - .59, .60]) for (const y of [-.55, 1.35]) {
           project.set(x, y, z).project(camera)
-          if (Math.abs(project.x) > .95 || Math.abs(project.y) > top) fits = false
+          if (Math.abs(project.x) > .95 || project.y > top || project.y < bottom) fits = false
         }
         if (fits) far = distance
         else near = distance
@@ -147,27 +163,29 @@ function Display({ entry, i, play, w, h, labels, phase }: {
       motion.current.rotation.y = name === 'Orb' ? play.t * 2 : -.61
     }
   }, -2)
-  return <group ref={exhibit} name={name} position={[x * w, 0, -z * h]}
+  return <group ref={exhibit} name={exhibitTitle(entry)} position={[x * w, 0, -z * h]}
     onClick={e => { e.stopPropagation(); labels.current[i]?.click() }}>
     <group ref={motion}>
-      <Model name={name} pose={pose} play={play} shut={shut} open={open} phase={phase} />
+      <Model name={name} possessed={entry.possessed} pose={pose} play={play} shut={shut} open={open} phase={phase} />
     </group>
   </group>
 }
 
-function Model({ name, pose, play, shut, open, phase }: {
-  name: Name; pose: Pose; play: Playback; shut: RefObject<Group | null>; open: RefObject<Group | null>; phase?: SpikePhase
+function Model({ name, possessed, pose, play, shut, open, phase }: {
+  name: Name; possessed?: boolean; pose: Pose; play: Playback; shut: RefObject<Group | null>; open: RefObject<Group | null>; phase?: SpikePhase
 }) {
   switch (name) {
     case 'Swordsman': return <group rotation-y={2.72}><MeleeHero pose={pose} tint="#ff6b59" /></group>
     case 'Ranger': return <group rotation-y={3.59}><RangedHero pose={pose} tint="#56e7bf" /></group>
     case 'Priestess': return <group rotation-y={3.48}><PriestHero pose={pose} tint="#45d2bc" /></group>
     case 'Mage': return <group rotation-y={3.43}><MageHero pose={pose} tint="#db68af" /></group>
-    case 'Ogre': return <group rotation-y={3.58}><Ogre pose={pose} /></group>
+    case 'Maestro': return <group rotation-y={3.31}><MasterLord pose={pose} /></group>
+    case 'Dissolve': return <group rotation-y={3.04}><PreviewMasterFade pose={pose} /></group>
+    case 'Ogre': return <group rotation-y={3.58}><Ogre pose={pose} possessed={possessed} /></group>
     case 'Chicken': return <group rotation-y={2.59}><Chicken pose={pose} /></group>
-    case 'Thrower': return <group rotation-y={3.46}><Thrower pose={pose} /></group>
-    case 'Slime': return <group rotation-y={2.92}><Slime pose={pose} /></group>
-    case 'Slime King': return <group rotation-y={3.38}><SlimeKing pose={pose} /></group>
+    case 'Thrower': return <group rotation-y={3.46}><Thrower pose={pose} possessed={possessed} /></group>
+    case 'Slime': return <group rotation-y={2.92}><Slime pose={pose} possessed={possessed} /></group>
+    case 'Slime King': return <group rotation-y={3.38}><SlimeKing pose={pose} possessed={possessed} /></group>
     case 'Chest': return <group rotation-y={3.44}>
       <group ref={shut}><Chest opened={false} /></group>
       <group ref={open} visible={false}><Chest opened /></group>
@@ -190,7 +208,7 @@ function Diorama({ play, labels, page, shape, phase }: {
   const wide = size.width > size.height
   const floors = page === 'Floors'
   const w = floors ? ROOM_W : page === 'Dungeon' ? 6 : 4
-  const h = floors ? ROOM_H : wide ? 5 : page === 'Dungeon' ? 8 : 6
+  const h = floors ? ROOM_H : page === 'Dungeon' ? 14 : wide ? 5 : 6
   const exhibits = rooms[page]
   return <>
     <FrameScene play={play} labels={labels} w={w} h={h} exhibits={exhibits} />
@@ -203,7 +221,7 @@ function Diorama({ play, labels, page, shape, phase }: {
       <mesh geometry={plinth} material={toon} position={[w / 2, -.028, -h / 2]} scale={[w + .85, 1, h + .85]} dispose={null} />
     </>}
     <RoomShell w={w} h={h} doors={doors} shape={floors ? shape : 'full'} />
-    {exhibits.map((e, i) => <Display key={e.name} entry={e} i={i} w={w} h={h} play={play} labels={labels} phase={floors ? phase : undefined} />)}
+    {exhibits.map((e, i) => <Display key={exhibitTitle(e)} entry={e} i={i} w={w} h={h} play={play} labels={labels} phase={floors ? phase : undefined} />)}
   </>
 }
 
@@ -230,15 +248,15 @@ export default function Showcase() {
       <div><div className="dm-wordmark">Dungeon Maker</div><h1>Model showcase</h1></div>
     </header>
     <div className="dm-marker-layer">
-      {exhibits.map((e, i) => <button type="button" className="dm-marker" key={e.name}
-        ref={el => { labels.current[i] = el }} aria-label={'Inspect ' + e.name}
+      {exhibits.map((e, i) => <button type="button" className="dm-marker" key={exhibitTitle(e)}
+        ref={el => { labels.current[i] = el }} aria-label={'Inspect ' + exhibitTitle(e)}
         onClick={() => focus(play.focus === i ? -1 : i)}>
-        <strong>{e.name}</strong><small>{e.anims ? 'idle' : e.name === 'Chest' ? 'closed' : ''}</small>
+        <strong>{exhibitTitle(e)}</strong><small>{e.anims ? 'idle' : e.name === 'Chest' ? 'closed' : ''}</small>
       </button>)}
     </div>
     <div className="dm-playback">
       <div className="dm-transport dm-rooms" role="group" aria-label="Exhibit rooms">
-        {pages.map(room => <button type="button" key={room} aria-pressed={page === room} onClick={() => {
+        {pages.map(room => <button type="button" key={room} style={{ paddingInline: 'clamp(5px, 1.6vw, 16px)' }} aria-pressed={page === room} onClick={() => {
           if (page === room) return
           focus(-1)
           play.t = .17

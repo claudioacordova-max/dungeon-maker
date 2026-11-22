@@ -98,3 +98,13 @@ export function ShareIcon() {
     </svg>
   )
 }
+
+export function PotionIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M6 1.5h4M6.5 1.5v3.2L3 10.5a3.6 3.6 0 0 0 3 4.5h4a3.6 3.6 0 0 0 3-4.5L9.5 4.7V1.5" fill="none" stroke="#fde2e4" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M4 10.2h8a3 3 0 0 1-2.3 3.8H6.3A3 3 0 0 1 4 10.2z" fill="#f43f5e" />
+      <circle cx="7" cy="11.6" r="0.7" fill="#fecdd3" />
+    </svg>
+  )
+}

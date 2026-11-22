@@ -39,6 +39,7 @@ export type Hero = {
   act: HeroAct | null
   mana: number
   heals: number
+  drinks: number
   shots: Map<number, { charged: boolean; at: number; used: boolean; healed: Set<string> }>
 }
 
@@ -68,9 +69,12 @@ type Enemy = {
   polyAt: number // game time it became a chicken
   polyShort: number // duration if it takes damage (seconds from polyAt); 0 once it took damage
   polyImmuneUntil: number // boss: game time before which it cannot be polymorphed again
+  dashUntil: number // possessed slime: game time its dash ends
+  steerAt: number // possessed: game time of the last position from the Maestro's device
+  movedAt: number // possessed: game time it last moved (walk animation)
 }
 
-type Room = MapRoom & { kind: RoomKind; entered: boolean; plan: PlanItem[]; layout: Layout; bossSpawned: boolean }
+type Room = MapRoom & { kind: RoomKind; entered: boolean; plan: PlanItem[]; layout: Layout }
 type Strike = { id: number; owner: number; x: number; y: number; r: number; hits: number; landsAt: number; claimed: Set<string> }
 type Orb = { id: number; room: number; x: number; y: number; vx: number; vy: number; left: number; hitBy: Set<string> }
 type Shot = { id: number; owner: string; seq: number; x: number; y: number; dir: number; speed: number; left: number; crit: boolean; kind: ShotKind }
@@ -94,6 +98,13 @@ export type Game = {
   cap: number // difficulty cap of each room (grows with the number of heroes)
   maxLives: number
   maxChests: number
+  bossHp: number
+  potions: number // the team's shared potions
+  rand: () => number // chance (tests replace it)
+  intro: Set<string> // heroes still reading the intro: nothing moves until it is empty
+  cinematic: { room: number; at: number } | null // boss entrance, from game time `at`
+  possessed: number | null // enemy the Maestro controls
+  summonAt: number // game time the Maestro can summon again
 }
 
 const usesMana = (cls: HeroClass): cls is 'priest' | 'mage' => cls === 'priest' || cls === 'mage'
@@ -130,8 +141,15 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
     result: 'playing',
     nextId: 1,
     cap: R.roomCap(heroes.length),
+    bossHp: R.bossHp(heroes.length),
+    potions: 0,
+    rand: Math.random,
+    intro: new Set(heroes.map((h) => h.id)),
+    cinematic: null,
+    possessed: null,
+    summonAt: 0,
   }
-  const start: Room = { id: game.nextId++, gx: 0, gy: 0, kind: 'start', ready: true, entered: true, enemies: 0, plan: [], layout: EMPTY_LAYOUT, bossSpawned: false }
+  const start: Room = { id: game.nextId++, gx: 0, gy: 0, kind: 'start', ready: true, entered: true, enemies: 0, plan: [], layout: EMPTY_LAYOUT }
   start.plan = [
     { kind: 'slime' as const, cx: 3, cy: 9 },
     { kind: 'slime' as const, cx: 7, cy: 10 },
@@ -156,13 +174,14 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
     act: null,
     mana: usesMana(h.cls) ? R.MANA[h.cls].max : 0,
     heals: 0,
+    drinks: 0,
     shots: new Map(),
   }))
   return game
 }
 
 function spawnEnemy(game: Game, room: Room, kind: EnemyKind, x: number, y: number) {
-  const hp = R.ENEMY[kind].hp
+  const hp = kind === 'king' ? game.bossHp : R.ENEMY[kind].hp
   game.enemies.push({
     id: game.nextId++,
     kind,
@@ -188,6 +207,9 @@ function spawnEnemy(game: Game, room: Room, kind: EnemyKind, x: number, y: numbe
     polyAt: 0,
     polyShort: 0,
     polyImmuneUntil: 0,
+    dashUntil: 0,
+    steerAt: 0,
+    movedAt: -99,
   })
 }
 
@@ -206,16 +228,12 @@ function spawnRoom(game: Game, room: Room) {
   for (const [cx, cy] of CHEST_SLOTS[shape].slice(0, chests)) {
     game.items.push({ id: game.nextId++, room: room.id, kind: 'chest', x: o.x + cx + 0.5, y: o.y + cy + 0.5, openedAt: null, group: 0 })
   }
-  room.bossSpawned = false
-  // Boss room in phases: the boss appears once the enemies the master placed there are defeated.
-  if (room.kind === 'boss' && !game.enemies.some((e) => e.room === room.id)) spawnBoss(game, room)
+  // The boss room is predesigned: only the boss, waiting for the heroes (and for the Maestro to possess it).
+  if (room.kind === 'boss') {
+    const c = roomCenter(room)
+    spawnEnemy(game, room, 'king', c.x, c.y + 2)
+  }
   countEnemies(game)
-}
-
-function spawnBoss(game: Game, room: Room) {
-  const c = roomCenter(room)
-  spawnEnemy(game, room, 'king', c.x, c.y + 2)
-  room.bossSpawned = true
 }
 
 function countEnemies(game: Game) {
@@ -238,14 +256,16 @@ export function build(game: Game, gx: number, gy: number, kind: 'normal' | 'boss
   if (game.rooms.some((r) => r.kind === 'boss')) return false // the boss room is always the last one
   if (kind === 'normal' && normalRooms(game) >= R.MAX_ROOMS) return false
   if (kind === 'boss' && normalRooms(game) < R.MAX_ROOMS) return false
-  game.rooms.push({ id: game.nextId++, gx, gy, kind, ready: false, entered: false, enemies: 0, plan: [], layout: EMPTY_LAYOUT, bossSpawned: false })
+  const room: Room = { id: game.nextId++, gx, gy, kind, ready: kind === 'boss', entered: false, enemies: 0, plan: [], layout: EMPTY_LAYOUT }
+  game.rooms.push(room)
+  if (kind === 'boss') spawnRoom(game, room) // predesigned and ready at once
   return true
 }
 
 // Removes a room still being built, if no other room depends on it (only leaves of the map).
 export function demolish(game: Game, roomId: number): boolean {
   const room = game.rooms.find((r) => r.id === roomId)
-  if (!room || room.kind === 'start' || room.ready || room.entered) return false
+  if (!room || room.kind === 'start' || (room.ready && room.kind !== 'boss') || room.entered) return false
   const others = game.rooms.filter((r) => r !== room)
   const reachable = new Set<Room>([others.find((r) => r.kind === 'start')!])
   let grew = true
@@ -268,7 +288,7 @@ export function demolish(game: Game, roomId: number): boolean {
 
 function editable(game: Game, roomId: number): Room | null {
   const room = game.rooms.find((r) => r.id === roomId)
-  return room && room.kind !== 'start' && !room.entered && game.result === 'playing' ? room : null
+  return room && room.kind === 'normal' && !room.entered && game.result === 'playing' ? room : null
 }
 
 export function place(game: Game, roomId: number, kind: Placeable, cx: number, cy: number): boolean {
@@ -276,7 +296,6 @@ export function place(game: Game, roomId: number, kind: Placeable, cx: number, c
   if (!room || !(['slime', 'thrower', 'ogre'] as string[]).includes(kind) || !isPlaceableCell(cx, cy)) return false
   if (!floorCell(room.layout.shape, cx, cy)) return false
   if (room.plan.some((p) => p.cx === cx && p.cy === cy)) return false
-  if (room.kind === 'boss' && Math.abs(cx + 0.5 - R.ROOM_W / 2) < 2 && Math.abs(cy + 0.5 - (R.ROOM_H / 2 + 2)) < 2) return false
   if (!canAdd(room.plan, room.layout, kind, game.cap)) return false
   room.plan.push({ kind, cx, cy })
   if (room.ready) spawnRoom(game, room)
@@ -358,6 +377,7 @@ function heroOf(game: Game, id: string) {
 export function reportPosition(game: Game, heroId: string, x: number, y: number, facing: number, epoch: number) {
   const hero = heroOf(game, heroId)
   if (!hero || epoch !== hero.epoch || !Number.isFinite(x) || !Number.isFinite(y)) return
+  if (game.intro.size > 0 || game.cinematic) return // everyone stands still
   if (Number.isFinite(facing)) hero.facing = facing
   const elapsed = Math.max(game.time - hero.lastPosTime, 0.1)
   const allowed = R.HERO_SPEED * elapsed * R.MOVE_TOLERANCE + 0.25
@@ -369,8 +389,19 @@ export function reportPosition(game: Game, heroId: string, x: number, y: number,
   hero.x = nx
   hero.y = ny
   hero.lastPosTime = game.time
-  const room = roomAtPoint(game.rooms, nx, ny)
-  if (room) (room as Room).entered = true
+  const room = roomAtPoint(game.rooms, nx, ny) as Room | undefined
+  if (room && !room.entered) {
+    room.entered = true
+    // The first hero inside the boss room starts the entrance: the Maestro appears and possesses the boss.
+    if (room.kind === 'boss') {
+      game.cinematic = { room: room.id, at: game.time }
+      game.possessed = null
+    }
+  }
+}
+
+export function introReady(game: Game, heroId: string) {
+  game.intro.delete(heroId)
 }
 
 function enemyPositionAt(game: Game, enemyId: number, time: number) {
@@ -393,7 +424,7 @@ function hurtEnemy(game: Game, hero: Hero, enemy: Enemy, damage: number) {
   enemy.hp -= damage
   damageChicken(game, enemy)
   enemy.stun = R.ENEMY_HIT_STUN
-  if (enemy.kind !== 'king' && enemy.kind !== 'ogre') {
+  if (enemy.kind !== 'king' && enemy.kind !== 'ogre' && enemy.id !== game.possessed) {
     const d = dist(enemy.x, enemy.y, hero.x, hero.y) || 1
     moveEnemy(game, enemy, enemy.x + ((enemy.x - hero.x) / d) * R.ENEMY_KNOCKBACK, enemy.y + ((enemy.y - hero.y) / d) * R.ENEMY_KNOCKBACK)
   }
@@ -540,6 +571,12 @@ function damageHero(game: Game, hero: Hero, hits = 1) {
   if (hero.dead || hero.invulnerable > 0 || game.result !== 'playing') return false
   hero.hp -= hits
   hero.invulnerable = R.HIT_INVULNERABLE
+  // A shared potion is drunk by itself when the hit leaves the hero about to fall (it saves even a fatal hit).
+  if (hero.hp <= R.POTION.drinkAt && game.potions > 0) {
+    game.potions -= 1
+    hero.hp = Math.min(R.HERO_HITS, Math.max(0, hero.hp) + R.POTION.heal)
+    hero.drinks += 1
+  }
   if (hero.hp <= 0) downHero(game, hero)
   return true
 }
@@ -579,7 +616,7 @@ export function reportOrb(game: Game, heroId: string, orbId: number): boolean {
   return damageHero(game, hero)
 }
 
-// A chest opens when a hero's attack reaches it (seen on that hero's device): it heals that hero.
+// A chest opens when a hero's attack reaches it (seen on that hero's device): potions for the team.
 export function openChest(game: Game, heroId: string, itemId: number): boolean {
   const hero = heroOf(game, heroId)
   const chest = game.items.find((i) => i.id === itemId && i.kind === 'chest' && i.openedAt === null)
@@ -587,7 +624,7 @@ export function openChest(game: Game, heroId: string, itemId: number): boolean {
   const reach = (hero.cls === 'melee' ? R.HERO.melee.charged.range : R.HERO.ranged.charged.range) + R.HIT_RANGE_TOLERANCE + 0.5
   if (dist(chest.x, chest.y, hero.x, hero.y) > reach) return false
   chest.openedAt = game.time
-  hero.hp = Math.min(R.HERO_HITS, hero.hp + R.CHEST_HEAL)
+  game.potions += game.rand() < R.POTION.doubleChance ? 2 : 1
   return true
 }
 
@@ -605,6 +642,7 @@ export function reportTouched(game: Game, heroId: string, enemyId: number): bool
 
 export function removeHero(game: Game, heroId: string) {
   game.heroes = game.heroes.filter((h) => h.id !== heroId)
+  game.intro.delete(heroId)
 }
 
 // ---------- Simulation ----------
@@ -613,10 +651,7 @@ function finishEnemies(game: Game) {
   const killedBoss = game.enemies.some((e) => e.kind === 'king' && e.hp <= 0)
   game.enemies = game.enemies.filter((e) => e.hp > 0)
   if (killedBoss && game.result === 'playing') game.result = 'heroes-won'
-  for (const room of game.rooms) {
-    // Same tick as the last placed enemy falls, so the doors never open in between.
-    if (room.kind === 'boss' && room.ready && !room.bossSpawned && !game.enemies.some((e) => e.room === room.id)) spawnBoss(game, room)
-  }
+  if (game.possessed !== null && !game.enemies.some((e) => e.id === game.possessed)) game.possessed = null
   countEnemies(game)
 }
 
@@ -632,6 +667,168 @@ function throwOrb(game: Game, enemy: Enemy, dir: number) {
     left: spec.orbRange,
     hitBy: new Set(),
   })
+}
+
+// ---------- Enemy attacks (started by the AI or by the Maestro controlling the enemy) ----------
+
+function windup(enemy: Enemy, pending: Enemy['pending'], dir: number) {
+  enemy.state = 'windup'
+  enemy.stateTime = R.ENEMY_TELEGRAPH
+  enemy.pending = pending
+  enemy.aim = dir
+  enemy.facing = dir
+}
+
+function startThrow(enemy: Enemy, dir: number) {
+  windup(enemy, 'throw', dir)
+  enemy.cooldown = R.ENEMY.thrower.cooldown
+}
+
+function startFan(enemy: Enemy, dir: number) {
+  windup(enemy, 'fan', dir)
+  enemy.cooldown2 = R.ENEMY.king.fanEvery
+}
+
+// Club slam: a red zone in front of the ogre, announced like every enemy attack.
+function startSlam(game: Game, enemy: Enemy, dir: number) {
+  const spec = R.ENEMY.ogre
+  game.strikes.push({
+    id: game.nextId++,
+    owner: enemy.id,
+    x: enemy.x + Math.cos(dir) * spec.slamAhead,
+    y: enemy.y + Math.sin(dir) * spec.slamAhead,
+    r: spec.slamRadius,
+    hits: spec.slamHits,
+    landsAt: game.time + R.ENEMY_TELEGRAPH,
+    claimed: new Set(),
+  })
+  windup(enemy, 'slam', dir)
+  enemy.cooldown = spec.cooldown
+}
+
+// Boss jump onto (x, y): a red zone where it will land. False when that spot is over the abyss.
+function startJump(game: Game, enemy: Enemy, room: Room, x: number, y: number): boolean {
+  const spec = R.ENEMY.king
+  const to = clampToRoom(room, x, y, spec.radius)
+  const o = roomOrigin(room)
+  if (touchesGap(room.layout.shape, to.x - o.x, to.y - o.y, spec.radius * 0.8)) return false
+  game.strikes.push({ id: game.nextId++, owner: enemy.id, x: to.x, y: to.y, r: spec.jumpRadius, hits: 1, landsAt: game.time + R.ENEMY_TELEGRAPH, claimed: new Set() })
+  enemy.state = 'jump'
+  enemy.stateTime = R.ENEMY_TELEGRAPH
+  enemy.pending = 'jump'
+  enemy.jumpFrom = { x: enemy.x, y: enemy.y }
+  enemy.jumpTo = to
+  enemy.facing = Math.atan2(to.y - enemy.y, to.x - enemy.x)
+  enemy.cooldown = spec.jumpEvery
+  return true
+}
+
+// ---------- The Maestro in the match: possession and summoning ----------
+
+function heroesIn(game: Game, room: Room) {
+  return game.heroes.filter((h) => !h.dead && roomAtPoint(game.rooms, h.x, h.y) === room)
+}
+
+const busy = (game: Game) => game.result !== 'playing' || game.intro.size > 0 || game.cinematic !== null
+
+// The Maestro takes an enemy of a room with heroes inside (the boss is taken only by its entrance).
+export function possess(game: Game, enemyId: number): boolean {
+  const enemy = game.enemies.find((e) => e.id === enemyId && e.hp > 0)
+  if (busy(game) || !enemy || enemy.kind === 'king') return false
+  if (game.enemies.some((e) => e.id === game.possessed && e.kind === 'king')) return false
+  const room = roomOf(game, enemy.room)
+  if (!room || heroesIn(game, room).length === 0) return false
+  game.possessed = enemy.id
+  enemy.steerAt = game.time
+  return true
+}
+
+export function release(game: Game): boolean {
+  const enemy = game.enemies.find((e) => e.id === game.possessed)
+  if (!enemy || enemy.kind === 'king') return false
+  game.possessed = null
+  return true
+}
+
+function possessedEnemy(game: Game) {
+  return game.result === 'playing' && !game.cinematic ? game.enemies.find((e) => e.id === game.possessed) : undefined
+}
+
+// Position of the possessed enemy from the Maestro's device, limited to its speed like a hero's.
+export function steer(game: Game, x: number, y: number, facing: number) {
+  const enemy = possessedEnemy(game)
+  if (!enemy || !Number.isFinite(x) || !Number.isFinite(y)) return
+  if (enemy.state === 'windup' || enemy.state === 'jump' || enemy.state === 'recover' || enemy.stun > 0) return
+  if (Number.isFinite(facing)) enemy.facing = facing
+  const base = enemy.poly > 0 ? R.POLYMORPH.fleeSpeed : R.ENEMY[enemy.kind].speed
+  const speed = game.time < enemy.dashUntil + 0.2 ? base * R.POSSESS.dashSpeed : base
+  const elapsed = Math.max(game.time - enemy.steerAt, 0.1)
+  enemy.steerAt = game.time
+  const allowed = speed * elapsed * R.MOVE_TOLERANCE + 0.25
+  const d = dist(x, y, enemy.x, enemy.y)
+  if (d < 0.01) return
+  const k = d > allowed ? allowed / d : 1
+  moveEnemy(game, enemy, enemy.x + (x - enemy.x) * k, enemy.y + (y - enemy.y) * k)
+  enemy.movedAt = game.time
+}
+
+// The Maestro's attack button (and the boss's second one) on the possessed enemy, toward `dir`.
+export function enemyAct(game: Game, kind: 'attack' | 'special', dir: number): boolean {
+  const enemy = possessedEnemy(game)
+  if (!enemy || !Number.isFinite(dir) || enemy.poly > 0 || enemy.stun > 0) return false
+  if (enemy.state === 'windup' || enemy.state === 'jump' || enemy.state === 'recover') return false
+  const room = roomOf(game, enemy.room)
+  if (!room) return false
+  if (kind === 'special') {
+    if (enemy.kind !== 'king' || enemy.cooldown2 > 0) return false
+    startFan(enemy, dir)
+    return true
+  }
+  if (enemy.cooldown > 0) return false
+  if (enemy.kind === 'slime') {
+    enemy.dashUntil = game.time + R.POSSESS.dashSeconds
+    enemy.cooldown = R.POSSESS.dashCooldown
+    enemy.facing = dir
+    return true
+  }
+  if (enemy.kind === 'thrower') startThrow(enemy, dir)
+  else if (enemy.kind === 'ogre') startSlam(game, enemy, dir)
+  else {
+    // The boss jumps toward the aimed direction, shorter if that spot is over the abyss.
+    for (const reach of [R.POSSESS.kingJump, 3, 1.5]) {
+      if (startJump(game, enemy, room, enemy.x + Math.cos(dir) * reach, enemy.y + Math.sin(dir) * reach)) return true
+    }
+    return false
+  }
+  return true
+}
+
+// Doorway spots of a room (just inside each wall's middle), on solid floor.
+function doorSpots(room: Room) {
+  const o = roomOrigin(room)
+  const spots = [
+    { x: R.ROOM_W / 2, y: 1.2 },
+    { x: R.ROOM_W / 2, y: R.ROOM_H - 1.2 },
+    { x: 1.2, y: R.ROOM_H / 2 },
+    { x: R.ROOM_W - 1.2, y: R.ROOM_H / 2 },
+  ]
+  return spots.filter((p) => !touchesGap(room.layout.shape, p.x, p.y, R.ENEMY.slime.radius)).map((p) => ({ x: o.x + p.x, y: o.y + p.y }))
+}
+
+// The Maestro summons one slime into a room where the heroes are fighting, at the doorway farthest from them.
+export function summon(game: Game, roomId: number): boolean {
+  const room = roomOf(game, roomId)
+  if (busy(game) || !room || room.kind === 'boss' || game.time < game.summonAt) return false
+  const heroes = heroesIn(game, room)
+  if (heroes.length === 0 || !game.enemies.some((e) => e.room === room.id)) return false
+  const spots = doorSpots(room)
+  if (spots.length === 0) return false
+  const away = (p: { x: number; y: number }) => Math.min(...heroes.map((h) => dist(h.x, h.y, p.x, p.y)))
+  const spot = spots.reduce((a, b) => (away(b) > away(a) ? b : a))
+  spawnEnemy(game, room, 'slime', spot.x, spot.y)
+  game.summonAt = game.time + R.SUMMON_COOLDOWN
+  countEnemies(game)
+  return true
 }
 
 function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
@@ -661,9 +858,17 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
     }
   }
 
+  // Controlled by the Maestro: its device moves it (steer) and starts its attacks (enemyAct); no AI here.
+  const possessed = enemy.id === game.possessed
+  const walking = () => (enemy.state = game.time - enemy.movedAt < 0.2 ? 'move' : 'idle')
+
   if (enemy.poly > 0) {
     // A chicken: no attacks, it just runs away from the nearest hero.
     enemy.poly = Math.max(0, enemy.poly - dt)
+    if (possessed) {
+      walking()
+      return
+    }
     if (!target || enemy.stun > 0) {
       enemy.state = 'idle'
       return
@@ -700,6 +905,10 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
     if (enemy.stateTime <= 0) enemy.state = 'idle'
     return
   }
+  if (possessed) {
+    walking()
+    return
+  }
   if (!target) {
     enemy.state = 'idle'
     return
@@ -710,11 +919,7 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
   if (enemy.kind === 'thrower') {
     const spec = R.ENEMY.thrower
     if (enemy.cooldown <= 0) {
-      enemy.state = 'windup'
-      enemy.stateTime = R.ENEMY_TELEGRAPH
-      enemy.pending = 'throw'
-      enemy.aim = toward
-      enemy.cooldown = spec.cooldown
+      startThrow(enemy, toward)
       return
     }
     let move = 0
@@ -732,53 +937,19 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
   if (enemy.kind === 'ogre') {
     const spec = R.ENEMY.ogre
     if (enemy.cooldown <= 0 && best <= spec.reach) {
-      // Club slam: a red zone in front of it, announced like every enemy attack.
-      game.strikes.push({
-        id: game.nextId++,
-        owner: enemy.id,
-        x: enemy.x + Math.cos(toward) * spec.slamAhead,
-        y: enemy.y + Math.sin(toward) * spec.slamAhead,
-        r: spec.slamRadius,
-        hits: spec.slamHits,
-        landsAt: game.time + R.ENEMY_TELEGRAPH,
-        claimed: new Set(),
-      })
-      enemy.state = 'windup'
-      enemy.stateTime = R.ENEMY_TELEGRAPH
-      enemy.pending = 'slam'
-      enemy.aim = toward
-      enemy.cooldown = spec.cooldown
+      startSlam(game, enemy, toward)
       return
     }
   }
 
   if (enemy.kind === 'king') {
-    const spec = R.ENEMY.king
     if (enemy.cooldown <= 0) {
-      // Jump onto the target: a red zone where it will land.
-      const to = clampToRoom(room, target.x, target.y, spec.radius)
-      const o = roomOrigin(room)
-      if (touchesGap(room.layout.shape, to.x - o.x, to.y - o.y, spec.radius * 0.8)) {
-        // Never lands over the abyss: tries again a moment later.
-        enemy.cooldown = 0.6
-        return
-      }
-      const id = game.nextId++
-      game.strikes.push({ id, owner: enemy.id, x: to.x, y: to.y, r: spec.jumpRadius, hits: 1, landsAt: game.time + R.ENEMY_TELEGRAPH, claimed: new Set() })
-      enemy.state = 'jump'
-      enemy.stateTime = R.ENEMY_TELEGRAPH
-      enemy.pending = 'jump'
-      enemy.jumpFrom = { x: enemy.x, y: enemy.y }
-      enemy.jumpTo = to
-      enemy.cooldown = spec.jumpEvery
+      // Jump onto the target; never lands over the abyss (tries again a moment later).
+      if (!startJump(game, enemy, room, target.x, target.y)) enemy.cooldown = 0.6
       return
     }
     if (enemy.cooldown2 <= 0) {
-      enemy.state = 'windup'
-      enemy.stateTime = R.ENEMY_TELEGRAPH
-      enemy.pending = 'fan'
-      enemy.aim = toward
-      enemy.cooldown2 = spec.fanEvery
+      startFan(enemy, toward)
       return
     }
   }
@@ -794,7 +965,17 @@ function stepEnemy(game: Game, enemy: Enemy, heroes: Hero[], dt: number) {
 
 export function step(game: Game, dt: number) {
   if (game.result !== 'playing') return
+  // While the heroes read the intro nothing moves (the Maestro can already build).
+  if (game.intro.size > 0) return
   game.time += dt
+  if (game.cinematic) {
+    // Boss entrance: everyone waits; at its end the Maestro controls the boss until the fight is over.
+    if (game.time - game.cinematic.at < R.CINEMATIC_SECONDS) return
+    const boss = game.enemies.find((e) => e.kind === 'king' && e.room === game.cinematic!.room)
+    game.cinematic = null
+    game.possessed = boss ? boss.id : null
+    if (boss) boss.steerAt = game.time
+  }
 
   const alive = game.heroes.filter((h) => !h.dead)
   for (const hero of game.heroes) {
@@ -895,6 +1076,7 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       act: h.act,
       mana: r2(h.mana),
       heals: h.heals,
+      drinks: h.drinks,
     })),
     enemies: game.enemies.map((e) => ({
       id: e.id,
@@ -909,6 +1091,7 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       stunned: e.stun > 0,
       burning: e.burn > 0,
       chicken: e.poly > 0,
+      possessed: e.id === game.possessed,
     })),
     strikes: game.strikes
       .filter((s) => s.landsAt >= game.time)
@@ -927,6 +1110,11 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       opened: i.openedAt !== null,
       phase: i.kind === 'trap' ? spikePhase(game.time, i.group) : undefined,
     })),
+    potions: game.potions,
+    introWaiting: [...game.intro],
+    cinematic: game.cinematic ? { room: game.cinematic.room, t: r2(game.time - game.cinematic.at), total: R.CINEMATIC_SECONDS } : null,
+    possessed: game.possessed,
+    summonIn: r2(Math.max(0, game.summonAt - game.time)),
   }
 }
 

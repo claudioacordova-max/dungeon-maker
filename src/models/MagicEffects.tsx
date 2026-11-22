@@ -1,12 +1,13 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
-  BufferGeometry, DataTexture, DynamicDrawUsage, Float32BufferAttribute, Group,
-  InstancedMesh, LinearFilter, MeshBasicMaterial, Object3D, RingGeometry, SpriteMaterial,
+  BufferGeometry, CircleGeometry, DataTexture, DynamicDrawUsage, Float32BufferAttribute, Group,
+  InstancedMesh, LinearFilter, MeshBasicMaterial, Object3D, PlaneGeometry, Quaternion, RingGeometry, SpriteMaterial, SRGBColorSpace,
   type Mesh,
 } from 'three'
 import { bake, ball, gem, toon, type Part } from './kit'
 import { loft } from './Enemies'
+import { fold, ramp } from './Heroes'
 
 const tau = 2 * Math.PI
 export const spellPaint = new MeshBasicMaterial({ vertexColors: true, toneMapped: false })
@@ -197,7 +198,154 @@ function Poof({ progress, scale = 1 }: { progress: Playhead; scale?: number }) {
 }
 export function PoofFx(props: { progress: number; scale?: number }) { return <Poof {...props} /> }
 
-export type MagicExhibit = 'Light orb' | 'Fire spark' | 'Poly bolt' | 'Burn' | 'Heal' | 'Poof'
+// Paint a billow once. Overlapping soft-edged lobes hide the host during the burst.
+function cloudTexture() {
+  const size = 64, pixels = new Uint8Array(size*size*4)
+  const lobes = [[-.43,-.08,.43],[-.24,.26,.43],[.13,.32,.46],[.43,-.01,.39],[.14,-.27,.45],[-.23,-.30,.38]]
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const u = 2*(x+.5)/size-1, v = 2*(y+.5)/size-1
+    let density = -1, light = 0
+    for (const [cx,cy,r] of lobes) {
+      const d = r-Math.hypot(u-cx,v-cy)
+      density = Math.max(density,d)
+      light = Math.max(light, unit(d/.13)*unit(.45+.75*(v-cy)/r-.42*(u-cx)/r))
+    }
+    pixels.set([83+69*light,35+39*light,112+64*light,232*unit(.5+density/.18)],4*(y*size+x))
+  }
+  const map = new DataTexture(pixels,size,size)
+  map.colorSpace = SRGBColorSpace
+  map.minFilter = map.magFilter = LinearFilter
+  map.needsUpdate = true
+  return map
+}
+const smokeBank = new PlaneGeometry(1,1)
+const vapor = new MeshBasicMaterial({ map: cloudTexture(), transparent: true, depthWrite: false, toneMapped: false })
+// The pinched ends and the bent spine stay legible above the round smoke banks.
+const wisp = bake([{ g: loft([[0,.013,.017],[.17,.104,.060,0,.09],[.38,.099,.082,.04,.11],
+  [.61,.063,.049,.10,-.085],[.81,.028,.033,.09,-.23],[.95,.004,.007,0,-.20]],6), c: '#49235e' }],0).color
+function Possession({ progress, scale = 1 }: { progress: Playhead; scale?: number }) {
+  const { ref, pivot } = useParticles()
+  const trails = useRef<InstancedMesh>(null)
+  const facing = useMemo(() => new Quaternion(), [])
+  useFrame(({camera}) => {
+    const p = unit(sample(progress)), clouds = ref.current!, curls = trails.current!
+    clouds.visible = curls.visible = p > 0 && p < 1
+    if (!clouds.visible) return
+    clouds.getWorldQuaternion(facing).invert().multiply(camera.quaternion)
+    for (let i = 0; i < clouds.count; i++) {
+      const level = i%3
+      const life = unit((p-level*.055)/(1-level*.055))
+      const burst = 1-(1-life)**3
+      const a = i*2.4 + life*(1.47+.24*level)
+      const radius = (.15+.71*burst) * (1-.16*level)
+      const y = .27 + level*.29 + life*(.88+.19*level)
+      const size = (.85+.12*level)*Math.sin(Math.PI*Math.sqrt(life))
+      pivot.position.set(Math.cos(a)*radius,y,Math.sin(a)*radius)
+      pivot.quaternion.copy(facing)
+      pivot.rotateZ(.34*Math.sin(a)+.25*life)
+      pivot.scale.set(size*1.54,size*(1.21+.23*life),1)
+      updateParticle(clouds,i,pivot)
+      pivot.position.set(Math.cos(a+.38)*radius*1.32,y-.22,Math.sin(a+.38)*radius*1.32)
+      pivot.rotation.set(.22,a+.76,.32*Math.sin(a))
+      pivot.scale.set(size,size*(1.06+.57*life),size)
+      updateParticle(curls,i,pivot)
+    }
+    clouds.instanceMatrix.needsUpdate = curls.instanceMatrix.needsUpdate = true
+  })
+  return <group scale={scale} dispose={null}>
+    <instancedMesh ref={ref} args={[smokeBank,vapor,12]} onUpdate={initializeParticles} frustumCulled={false} />
+    <instancedMesh ref={trails} args={[wisp,toon,12]} onUpdate={initializeParticles} frustumCulled={false} />
+  </group>
+}
+export function PossessSmoke(props: { progress: number; scale?: number }) { return <Possession {...props} /> }
+
+const floorRing = (inner: number, outer: number, segments: number, arc = tau) =>
+  new RingGeometry(inner,outer,segments,1,0,arc).rotateX(-Math.PI/2)
+const runeArc = floorRing(.84,.91,8,tau/6-.19)
+const rune = fold([[0,.5],[.40,0],[0,-.5],[-.40,0]],.05)
+const circle = bake([
+  { g: floorRing(.968,1,48), c: '#d5a1ff' },
+  { g: floorRing(.61,.64,36), c: '#da74ff' },
+  { g: floorRing(.553,.60,3), c: '#c265ff' },
+  { g: floorRing(.553,.60,3), c: '#f3b6ff', r: [0,Math.PI/3,0] },
+  ...Array.from({ length: 6 }, (_,i): Part[] => {
+    const a = i*tau/6
+    return [
+      { g: runeArc, c: '#ac47f7', r: [0,a+.09,0] },
+      { g: rune, c: '#ffd8ff', p: [.78*Math.cos(a),.004,-.78*Math.sin(a)], s: [.108,.36,.1], r: [-Math.PI/2,0,a-Math.PI/2] },
+    ]
+  }).flat(),
+],0).color
+const flashDisc = new CircleGeometry(1,48).rotateX(-Math.PI/2)
+function Summoning({ progress }: { progress: Playhead }) {
+  const ring = useRef<Mesh>(null), flash = useRef<Mesh>(null)
+  const lines = useRef<MeshBasicMaterial>(null), wash = useRef<MeshBasicMaterial>(null)
+  useFrame(() => {
+    const p = unit(sample(progress)), open = 1-(1-p)**4
+    const pulse = ramp(p,.32,.48)*(1-ramp(p,.48,.76))
+    ring.current!.visible = flash.current!.visible = p > 0 && p < 1
+    ring.current!.scale.setScalar(.64*(.12+.88*open))
+    ring.current!.rotation.y = .76*open+.23*p
+    lines.current!.opacity = ramp(p,0,.11)*(1-ramp(p,.69,1))
+    flash.current!.scale.setScalar(.62*open)
+    wash.current!.opacity = .51*pulse
+  })
+  return <group>
+    <mesh ref={ring} geometry={circle} position-y={.039} renderOrder={3}>
+      <meshBasicMaterial ref={lines} vertexColors transparent depthWrite={false} toneMapped={false} />
+    </mesh>
+    <mesh ref={flash} geometry={flashDisc} position-y={.035} renderOrder={2}>
+      <meshBasicMaterial ref={wash} color="#e7acff" transparent depthWrite={false} toneMapped={false} />
+    </mesh>
+  </group>
+}
+export function SummonFx(props: { progress: number }) { return <Summoning {...props} /> }
+
+const heart = fold([[0,.23],[.16,.43],[.34,.46],[.49,.29],[.50,.10],[.39,-.12],[0,-.50],
+  [-.39,-.12],[-.50,.10],[-.49,.29],[-.34,.46],[-.16,.43]],.13)
+const potionHeart = bake([
+  { g: heart, c: '#ff4678' },
+  { g: star, c: '#fff3df', p: [-.24,.26,.115], s: [.19,.23,.15] },
+  { g: star, c: '#ffacca', p: [.69,-.27,.012], s: [.26,.40,.30] },
+],0).color
+const blushRing = bake([
+  { g: floorRing(.75,.84,40), c: '#ff557a' }, { g: floorRing(.84,.89,40), c: '#ffd4d5' },
+  { g: floorRing(.95,1,40), c: '#fc7399' },
+],0).color
+function Potion({ progress }: { progress: Playhead }) {
+  const { ref, pivot } = useParticles()
+  const ring = useRef<Mesh>(null), blush = useRef<MeshBasicMaterial>(null)
+  const facing = useMemo(() => new Quaternion(), [])
+  useFrame(({camera}) => {
+    const p = unit(sample(progress)), hearts = ref.current!
+    hearts.visible = ring.current!.visible = p > 0 && p < 1
+    if (!hearts.visible) return
+    ring.current!.scale.setScalar(.20+.34*(1-(1-p)**3))
+    blush.current!.opacity = ramp(p,0,.10)*(1-ramp(p,.32,.82))
+    hearts.getWorldQuaternion(facing).invert().multiply(camera.quaternion)
+    for (let i = 0; i < hearts.count; i++) {
+      const delay = (i%3)*.085, life = unit((p-delay)/(1-delay))
+      const a = i*tau/hearts.count+.48*life
+      const radius = .32+.12*life
+      pivot.position.set(radius*Math.cos(a),.19+life*(.83+.14*(i%3)),radius*Math.sin(a))
+      pivot.quaternion.copy(facing)
+      pivot.rotateZ(.13*Math.sin(i+life*5))
+      pivot.scale.setScalar((.16+.035*(i%2))*ramp(life,0,.19)*(1-ramp(life,.65,1)))
+      updateParticle(hearts,i,pivot)
+    }
+    hearts.instanceMatrix.needsUpdate = true
+  })
+  return <group>
+    <mesh ref={ring} geometry={blushRing} position-y={.037} renderOrder={2}>
+      <meshBasicMaterial ref={blush} vertexColors transparent depthWrite={false} toneMapped={false} />
+    </mesh>
+    <instancedMesh ref={ref} args={[potionHeart,spellPaint,6]} onUpdate={initializeParticles} frustumCulled={false} dispose={null} />
+  </group>
+}
+export function PotionFx(props: { progress: number }) { return <Potion {...props} /> }
+
+export type MagicExhibit = 'Light orb' | 'Fire spark' | 'Poly bolt' | 'Burn' | 'Heal' | 'Poof' |
+  'Possess smoke' | 'Summon' | 'Potion'
 export function PreviewMagic({ name, clock }: { name: MagicExhibit; clock: Clock }) {
   const phase = () => (clock.t * .72 + .16) % 1
   switch (name) {
@@ -207,5 +355,8 @@ export function PreviewMagic({ name, clock }: { name: MagicExhibit; clock: Clock
     case 'Burn': return <Flames time={() => clock.t} radius={.37} />
     case 'Heal': return <Healing progress={phase} radius={.64} />
     case 'Poof': return <Poof progress={phase} />
+    case 'Possess smoke': return <Possession progress={() => (clock.t % 1.55)/1.2} />
+    case 'Summon': return <Summoning progress={() => (clock.t % 1.25)/.8} />
+    case 'Potion': return <Potion progress={() => (clock.t % 1.35)/.9} />
   }
 }

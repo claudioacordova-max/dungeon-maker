@@ -3,7 +3,7 @@ export const TEAM_LIVES = 3
 // One more team life with 4 heroes (designer, 2026-11-21).
 export const teamLives = (heroes: number) => TEAM_LIVES + (heroes >= 4 ? 1 : 0)
 export const HERO_HITS = 4
-export const MAX_ROOMS = 6 // master rooms before the boss room (the start room does not count)
+export const MAX_ROOMS = 5 // master rooms before the boss room (the start room does not count; designer 2026-11-21)
 export const ROOM_DIFFICULTY_CAP = 10
 export const CAP_PER_EXTRA_HERO = 5
 // Enemies (placed one by one) and the room layout (broken floor, spike pack, each chest) share the room's cap.
@@ -14,13 +14,19 @@ export const maxChests = (heroes: number) => [1, 1, 2, 2, 3][Math.max(0, Math.mi
 export const SPIKE_CYCLE = { down: 1.5, warn: 0.5, up: 1 } as const
 // Cap of every room for a match with `heroes` heroes.
 export const roomCap = (heroes: number) => ROOM_DIFFICULTY_CAP + CAP_PER_EXTRA_HERO * Math.max(0, heroes - 1)
-export const CHEST_HEAL = 2
+// Chests give potions to the team's shared stock (designer 2026-11-21): 1, or 2 with `doubleChance`. A potion is drunk
+// by itself when a hit leaves a hero with `drinkAt` hits or fewer, and heals `heal`.
+export const POTION = { heal: 2, doubleChance: 0.2, drinkAt: 1 } as const
 export const RESPAWN_SECONDS = 1
 export const ENEMY_TELEGRAPH = 0.5 // seconds a red zone / aim line shows before an enemy strikes
 export const ENEMY_HIT_STUN = 0.25
 export const START_ROOM_SLIMES = 2
 export const CHARGE_TIME = 0.6 // seconds holding attack for the powered attack
 export const BOSS_HP = 30
+// +5% boss life per hero after the first (designer 2026-11-21).
+export const bossHp = (heroes: number) => BOSS_HP * (1 + 0.05 * Math.max(0, heroes - 1))
+export const CINEMATIC_SECONDS = 4 // boss entrance: the Maestro possesses the boss (proposal)
+export const SUMMON_COOLDOWN = 30 // seconds between the Maestro's summoned slimes (proposal)
 
 // Feel and tuning values chosen by the agent (not in DESIGN.md).
 export const MAX_HEROES = 4
@@ -66,6 +72,10 @@ export const ENEMY_KNOCKBACK = 0.35
 export const HIT_INVULNERABLE = 0.8
 export const RESPAWN_INVULNERABLE = 2 // seconds of protection after reappearing
 export const TICK_HZ = 20
+
+// The Maestro controlling an enemy (agent's feel values): the slime's attack is a short dash; the boss jumps up to
+// `kingJump` cells in the aimed direction.
+export const POSSESS = { dashSeconds: 0.3, dashSpeed: 3, dashCooldown: 0.9, kingJump: 4.5, autoAim: 9 } as const
 
 // Netcode tolerances (server checks on what devices report).
 export const MOVE_TOLERANCE = 1.5

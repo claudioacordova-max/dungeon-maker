@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useRef } from 'react'
 import { BufferGeometry, Float32BufferAttribute, TorusGeometry, type Group } from 'three'
 import { BlobShadow } from './Effects'
+import { eyeLayers, eyePaint, maestroEyes, recolor } from './MaestroEyes'
 import { bake, ball, barrel, Batch, box, gem, type Part, type V3 } from './kit'
 import type { Pose } from './types'
 
@@ -111,13 +112,14 @@ function skinPatch(points: Point[], c: string, s: V3, depth: number, around = 0)
   return { g: geometry(vertices, indices), c, s, ink: false }
 }
 
-function slimeFace(s: V3, royal: boolean) {
+function slimeFace(s: V3, royal: boolean, possessed: boolean) {
   const face: Part[] = []
   for (const side of [-1, 1]) {
     function eye(points: Point[], color: string, depth: number) {
       face.push(skinPatch(points.map(([x, y]) => [side * x, royal ? .65 + .82 * (y - .65) : y]), color, s, depth))
     }
     eye([[.025,.668],[.212,.80],[.292,.795],[.274,.644],[.217,.518],[.095,.50],[.040,.555]], soot, .010)
+    if (possessed) continue
     eye([[.054,.649],[.240,.739],[.245,.667],[.198,.556],[.101,.542],[.067,.570]], cream, .019)
     eye([[.081,.644],[.118,.673],[.151,.653],[.145,.585],[.106,.562],[.078,.592]],
       royal ? '#a42a67' : '#11564b', .026)
@@ -141,16 +143,24 @@ function slimeFace(s: V3, royal: boolean) {
 const smallSize: V3 = [.82, .59, .73]
 const gloss: Point[] = [[.064,.911],[.079,.934],[.119,.947],[.164,.940],[.201,.923],
   [.228,.901],[.247,.873],[.237,.854],[.206,.862],[.158,.893],[.105,.905]]
-const slimeShape = bake([
+function jellyEyes(size: V3, royal: boolean) {
+  return bake([-1,1].flatMap(side => eyeLayers(side).map(({points,color}, i) =>
+    skinPatch(points.map(([x,y]) => [side*.152 + x*.243, .648 + y*(royal ? .207 : .254)]),
+      color,size,.025+i*.012))), 0).color
+}
+const slimeEyes = jellyEyes(smallSize,false)
+const slimeParts: Part[] = [
   { g: dome, c: '#58ce45', s: smallSize },
-  ...slimeFace(smallSize, false),
   // A raised, swept-back jelly curl and its little satellite survive an overhead view.
   { g: loft([[0,.091,.08],[.05,.087,.078,.012],[.12,.055,.05,.055],[.16,.014,.014,.100]], 7),
     c: '#9beb43', p: [-.075,.55,.018] },
   { g: gem, c: '#ceff8a', p: [.10,.574,.045], s: [.095,.068,.095], ink: false },
   skinPatch(gloss, '#dbff9c', smallSize,.019),
   skinPatch([[-.14,.64],[-.015,.79],[.065,.77],[.041,.69],[-.078,.599]], '#a5ef66', smallSize,.012,Math.PI),
-], .013)
+]
+const slimeShape = bake([...slimeParts,...slimeFace(smallSize,false,false)],.013)
+const possessedSlime = bake([...recolor(slimeParts,{ '#58ce45':'#983ed5', '#9beb43':'#c477ee',
+  '#ceff8a':'#f3c6ff', '#dbff9c':'#edb2ff', '#a5ef66':'#c478eb' }),...slimeFace(smallSize,false,true)],.013)
 
 const kingSize: V3 = [2.38, 1.43, 2.12]
 
@@ -202,16 +212,19 @@ function crown() {
   return geometry(vertices, indices)
 }
 
-const kingBody = bake([
-  { g: dome, c: '#a25be6', s: kingSize },
-  ...slimeFace(kingSize, true),
+const kingParts: Part[] = [
+  { g: dome, c: '#65c94a', s: kingSize },
   { g: mantle(.12,.69,.019,.086), c: '#bb3263', ink: false },
   { g: mantle(.12,.176,.025,.086), c: '#ffb249', ink: false },
   { g: mantle(.60,.73,.028,.026), c: '#fff1cb', ink: false },
   skinPatch([[-.17,.405],[0,.505],[.17,.405],[0,.227]], '#fbc949', kingSize,.041, Math.PI),
   skinPatch([[-.074,.385],[0,.435],[.074,.385],[0,.308]], '#7e285f', kingSize,.052, Math.PI),
-  skinPatch(gloss, '#f5c6ef', kingSize,.019),
-], .029)
+  skinPatch(gloss, '#d8ff9f', kingSize,.019),
+]
+const kingBody = bake([...kingParts,...slimeFace(kingSize,true,false)],.029)
+const possessedKing = bake([...recolor(kingParts,{ '#65c94a':'#a25be6', '#d8ff9f':'#f5c6ef' }),
+  ...slimeFace(kingSize,true,true)],.029)
+const kingEyes = jellyEyes(kingSize,true)
 
 const kingCrown = bake([
   { g: crown(), c: '#ffbd36' },
@@ -232,7 +245,8 @@ const spitBead = bake([
 function unit(t: number) { return Math.min(1, Math.max(0, t)) }
 function hit(t: number, duration: number) { return Math.sin(Math.PI * unit(t / duration)) }
 
-function Jelly({ pose, royal }: { pose: Pose; royal: boolean }) {
+type EnemyProps = { pose: Pose; possessed?: boolean }
+function Jelly({ pose, royal, possessed = false }: EnemyProps & { royal: boolean }) {
   const body = useRef<Group>(null)
   const crownRef = useRef<Group>(null)
   const spitRef = useRef<Group>(null)
@@ -333,7 +347,8 @@ function Jelly({ pose, royal }: { pose: Pose; royal: boolean }) {
     <group>
       <group ref={shadow}><BlobShadow radius={royal ? 1.13 : .39} /></group>
       <group ref={body}>
-        <Batch shape={royal ? kingBody : slimeShape} pose={pose} />
+        <Batch shape={royal ? (possessed ? possessedKing : kingBody) : (possessed ? possessedSlime : slimeShape)} pose={pose} />
+        {possessed && <mesh geometry={royal ? kingEyes : slimeEyes} material={eyePaint} dispose={null} />}
         {royal && <group ref={crownRef} position={[0,1.276,.05]} rotation={[.045,.18,-.092]}>
           <Batch shape={kingCrown} pose={pose} />
         </group>}
@@ -343,8 +358,8 @@ function Jelly({ pose, royal }: { pose: Pose; royal: boolean }) {
   )
 }
 
-export function Slime({ pose }: { pose: Pose }) { return <Jelly pose={pose} royal={false} /> }
-export function SlimeKing({ pose }: { pose: Pose }) { return <Jelly pose={pose} royal /> }
+export function Slime(props: EnemyProps) { return <Jelly {...props} royal={false} /> }
+export function SlimeKing(props: EnemyProps) { return <Jelly {...props} royal /> }
 
 // A bevel around the cheek and the hood opening makes their rim catch light from above.
 function bevel(points: Point[]) {
@@ -397,6 +412,7 @@ const casterParts: Part[] = [
   { g: barrel, c: '#66428e', p: [.205,.387,-.016], s: [.17,.20,.161], r: [-.48,0,.34] },
   { g: gem, c: '#b7d95e', p: [.246,.316,-.110], s: [.155,.148,.173] },
 ]
+const goblinEyes: Part[] = []
 for (const side of [-1, 1]) {
   // Pointed ears extend beyond the hood and read when only its back is visible.
   casterParts.push(
@@ -404,30 +420,39 @@ for (const side of [-1, 1]) {
       [.801,.073,.043,.002,.353 * side],[.855,.011,.012,.022,.420 * side]], 5), c: '#8fc849' },
     { g: gem, c: '#f19676', p: [.333 * side,.762,-.049], s: [.155,.073,.040], r: [0,0,side * .48], ink: false },
     goblinDetail(eyeBadge,soot,.105 * side,.043,-.105,[.154,.105,.024],side * .22),
+    goblinDetail(box,'#526238',.109 * side,.096,-.100,[.155,.035,.026],side * .27),
+  )
+  goblinEyes.push(
     goblinDetail(eyeBadge,'#fff0a5',.107 * side,.039,-.125,[.119,.079,.016],side * .22),
     goblinDetail(gem,soot,.087 * side,.039,-.141,[.041,.068,.019]),
-    goblinDetail(box,'#526238',.109 * side,.096,-.100,[.155,.035,.026],side * .27),
   )
 }
 // A single gold ear hoop breaks the bilateral silhouette.
 casterParts.push({ g: new TorusGeometry(.036,.010,4,8), c: '#ffd35d', p: [.349,.717,-.013], ink: false })
-const casterBody = bake(casterParts,.012)
+const casterBody = bake([...casterParts,...goblinEyes],.012)
+const possessedCaster = bake(recolor(casterParts,{
+  '#a7d351':'#a259d3', '#d3dd53':'#ca88ea', '#b7d95e':'#c17ae0', '#8fc849':'#9e55c8',
+  '#f19676':'#cd92dd', '#526238':'#592870', '#903cb5':'#70299e',
+}),.012)
+const casterEyes = bake(maestroEyes(.105,.805,-.357,.144,.090,faceTilt),0).color
 const boots = bake([
   { g: mask, c: '#49304a', p: [-.104,.084,-.022], s: [.17,.17,.243] },
   { g: mask, c: '#49304a', p: [.104,.084,-.022], s: [.17,.17,.243] },
 ],.009)
-const castingArm = bake([
+const armParts: Part[] = [
   { g: barrel, c: '#754497', p: [-.041,-.040,-.033], s: [.153,.194,.155], r: [.68,0,-.64] },
   { g: barrel, c: '#ffb44e', p: [-.076,-.09,-.087], s: [.156,.055,.15], r: [.69,0,-.72], ink: false },
   { g: gem, c: '#acd84e', p: [-.099,-.081,-.136], s: [.153,.145,.163] },
-],.010)
+]
+const castingArm = bake(armParts,.010)
+const possessedArm = bake(recolor(armParts,{ '#acd84e':'#bf7ee4' }),0)
 const castingOrb = bake([
   { g: ball, c: '#a84ced', s: [.165,.165,.165], glow: true },
   { g: new TorusGeometry(.089,.013,4,10), c: '#bbff73', r: [1.10,.10,-.30], glow: true },
   { g: gem, c: '#daff9e', p: [-.019,.052,-.049], s: [.078,.055,.063], glow: true },
 ],0)
 
-export function Thrower({ pose }: { pose: Pose }) {
+export function Thrower({ pose, possessed = false }: EnemyProps) {
   const torso = useRef<Group>(null)
   const stride = useRef<Group>(null)
   const hand = useRef<Group>(null)
@@ -512,9 +537,10 @@ export function Thrower({ pose }: { pose: Pose }) {
     <group ref={shadow}><BlobShadow radius={.34} /></group>
     <group ref={stride}><Batch shape={boots} pose={pose} /></group>
     <group ref={torso}>
-      <Batch shape={casterBody} pose={pose} />
+      <Batch shape={possessed ? possessedCaster : casterBody} pose={pose} />
+      {possessed && <mesh geometry={casterEyes} material={eyePaint} dispose={null} />}
       <group ref={hand} position={[-.206,.453,-.012]} rotation={[-.38,0,-.08]}>
-        <Batch shape={castingArm} pose={pose} />
+        <Batch shape={possessed ? possessedArm : castingArm} pose={pose} />
       </group>
       <group ref={orb} position={[-.335,.46,-.11]} scale={.77}><Batch shape={castingOrb} pose={pose} /></group>
     </group>

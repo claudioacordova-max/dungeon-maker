@@ -7,8 +7,14 @@ import * as R from '../src/shared/rules.ts'
 import {
   attack,
   build,
-  createGame,
+  createGame as createGameRaw,
   demolish,
+  enemyAct,
+  introReady,
+  possess,
+  release,
+  steer,
+  summon,
   openChest,
   place,
   removeItem,
@@ -24,6 +30,13 @@ import {
   step,
   type Game,
 } from '../src/shared/sim.ts'
+
+// Most tests skip the intro (every hero already pressed "Entrar a la mazmorra").
+function createGame(heroes: Parameters<typeof createGameRaw>[0]) {
+  const g = createGameRaw(heroes)
+  g.intro.clear()
+  return g
+}
 
 function run(game: Game, seconds: number) {
   for (let t = 0; t < seconds; t += 0.05) step(game, 0.05)
@@ -42,20 +55,19 @@ test('a new game: start room with two slimes, team lives, full hit bars, heroes 
   assert.equal(g.enemies.filter((e) => e.kind === 'slime').length, R.START_ROOM_SLIMES)
 })
 
-test('the master builds north, east or west of existing rooms; 6 rooms, then the boss room, which is the last', () => {
+test('the master builds north, east or west of existing rooms; 5 rooms, then the boss room, which is the last', () => {
   const g = createGame([{ id: 'a', cls: 'melee' }])
   assert.equal(build(g, 0, -1, 'normal'), false, 'never back south')
-  assert.equal(build(g, 0, 1, 'boss'), false, 'the boss room needs the 6 rooms first')
+  assert.equal(build(g, 0, 1, 'boss'), false, 'the boss room needs the 5 rooms first')
   const slots = [
     [0, 1],
     [1, 0],
     [-1, 0],
     [0, 2],
     [1, 1],
-    [-1, 1],
   ]
   for (const [gx, gy] of slots) assert.ok(build(g, gx, gy, 'normal'), `room at ${gx},${gy}`)
-  assert.equal(build(g, 0, 3, 'normal'), false, 'no 7th normal room')
+  assert.equal(build(g, 0, 3, 'normal'), false, 'no 6th normal room')
   assert.ok(build(g, 0, 3, 'boss'))
   assert.equal(build(g, 1, 2, 'normal'), false, 'nothing after the boss room')
   assert.ok(buildableSlots(g.rooms).length > 0)
@@ -253,12 +265,13 @@ test('slime contact, thrower orbs and boss jumps hurt only when the device repor
 
 test('the boss jump is an announced strike; defeating the boss wins; no lives left loses', () => {
   const g = createGame([{ id: 'a', cls: 'melee' }])
-  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]) build(g, gx, gy, 'normal')
-  assert.ok(build(g, 0, 7, 'boss'))
+  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5]]) build(g, gx, gy, 'normal')
+  assert.ok(build(g, 0, 6, 'boss'))
   const boss = g.rooms.at(-1)!
   setReady(g, boss.id, true)
   const king = g.enemies.find((e) => e.kind === 'king')!
   assert.equal(king.hp, R.BOSS_HP)
+  assert.ok(boss.ready, 'the boss room is predesigned and ready at once')
   const hero = g.heroes[0]
   hero.x = king.x
   hero.y = king.y - 3
@@ -285,7 +298,7 @@ test('the boss jump is an announced strike; defeating the boss wins; no lives le
   assert.equal(g2.result, 'master-won')
 })
 
-test('a chest opens when a hero hits it, heals that hero, and stays shut when walked over', () => {
+test('a chest opens when a hero hits it and gives the team potions; it stays shut when walked over', () => {
   const g = createGame([{ id: 'a', cls: 'melee' }])
   g.enemies = []
   build(g, 0, 1, 'normal')
@@ -301,8 +314,10 @@ test('a chest opens when a hero hits it, heals that hero, and stays shut when wa
   assert.equal(hero.hp, 1, 'walking over it does nothing')
   assert.equal(openChest(g, 'a', chest.id), false, 'no attack yet')
   attack(g, 'a', 1, 'basic', 0, [], 0)
+  g.rand = () => 0.5
   assert.ok(openChest(g, 'a', chest.id))
-  assert.equal(hero.hp, 1 + R.CHEST_HEAL)
+  assert.equal(hero.hp, 1, 'no heal on the spot')
+  assert.equal(g.potions, 1)
   assert.equal(openChest(g, 'a', chest.id), false, 'already open')
   run(g, 1.5)
   assert.ok(!g.items.includes(chest), 'it vanishes after opening')
@@ -405,8 +420,8 @@ test('mage: the spark burns; polymorph makes a harmless chicken, short and with 
 
   // Boss
   const b = createGame([{ id: 'a', cls: 'mage' }])
-  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]) build(b, gx, gy, 'normal')
-  build(b, 0, 7, 'boss')
+  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5]]) build(b, gx, gy, 'normal')
+  build(b, 0, 6, 'boss')
   setReady(b, b.rooms.at(-1)!.id, true)
   const king = b.enemies.find((e) => e.kind === 'king')!
   const mage = b.heroes[0]
@@ -426,7 +441,7 @@ test('mage: the spark burns; polymorph makes a harmless chicken, short and with 
   assert.equal(king.poly, 0, 'boss immune for a while')
 })
 
-test('ogre: announced slam in front that takes 2 hits; boss room spawns the boss after its enemies', () => {
+test('ogre: announced slam in front that takes 2 hits; the boss room cannot be edited', () => {
   const g = createGame([{ id: 'a', cls: 'melee' }])
   g.enemies = []
   build(g, 0, 1, 'normal')
@@ -445,15 +460,160 @@ test('ogre: announced slam in front that takes 2 hits; boss room spawns the boss
   assert.equal(hero.hp, R.HERO_HITS - 2)
 
   const b = createGame([{ id: 'a', cls: 'melee' }])
-  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]) build(b, gx, gy, 'normal')
-  build(b, 0, 7, 'boss')
+  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5]]) build(b, gx, gy, 'normal')
+  build(b, 0, 6, 'boss')
   const boss = b.rooms.at(-1)!
-  place(b, boss.id, 'slime', 2, 2)
-  setReady(b, boss.id, true)
-  assert.deepEqual(b.enemies.filter((e) => e.room === boss.id).map((e) => e.kind), ['slime'])
-  const slime = b.enemies.find((e) => e.room === boss.id)!
-  slime.hp = 0
-  step(b, 0.05)
+  assert.equal(place(b, boss.id, 'slime', 2, 2), false, 'predesigned: no enemies')
+  assert.equal(setLayout(b, boss.id, 'cross', true, 1), false, 'predesigned: no traps or holes')
   assert.deepEqual(b.enemies.filter((e) => e.room === boss.id).map((e) => e.kind), ['king'])
-  assert.equal(boss.enemies, 1, 'the doors never see an empty boss room')
+  assert.equal(boss.enemies, 1)
+})
+
+test('potions: drunk by themselves when a hit leaves a hero at 1 or 0; they save a fatal hit, not a fall', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  const hero = g.heroes[0]
+  const slime = g.enemies[0]
+  g.potions = 3
+  hero.hp = 2
+  slime.x = hero.x + 0.5
+  slime.y = hero.y
+  assert.ok(reportTouched(g, 'a', slime.id))
+  assert.equal(hero.hp, 3, '2 - 1 = 1, then a potion: 3')
+  assert.equal(g.potions, 2)
+  assert.equal(hero.drinks, 1)
+  hero.hp = 2
+  hero.invulnerable = 0
+  const strike = { id: 99, owner: 0, x: hero.x, y: hero.y, r: 1, hits: 2, landsAt: g.time, claimed: new Set<string>() }
+  g.strikes.push(strike)
+  assert.ok(reportStruck(g, 'a', 99))
+  assert.equal(hero.hp, 2, 'a 2-hit blow at 2 would down the hero: the potion leaves 2')
+  assert.equal(g.lives, R.TEAM_LIVES)
+  hero.hp = 4
+  hero.invulnerable = 0
+  g.strikes.push({ ...strike, id: 100, claimed: new Set<string>() })
+  reportStruck(g, 'a', 100)
+  assert.equal(hero.hp, 2, 'no potion while 2 or more remain')
+  assert.equal(g.potions, 1)
+  // A chest gives 2 potions with the double chance.
+  g.enemies = []
+  build(g, 0, 1, 'normal')
+  setLayout(g, g.rooms[1].id, 'full', false, 1)
+  setReady(g, g.rooms[1].id, true)
+  const chest = g.items.find((i) => i.kind === 'chest')!
+  hero.x = chest.x
+  hero.y = chest.y
+  attack(g, 'a', 1, 'basic', 0, [], 0)
+  g.rand = () => 0.1
+  assert.ok(openChest(g, 'a', chest.id))
+  assert.equal(g.potions, 3)
+})
+
+test('intro: nothing moves until every hero pressed "Entrar a la mazmorra"; the Maestro can already build', () => {
+  const g = createGameRaw([
+    { id: 'a', cls: 'melee' },
+    { id: 'b', cls: 'ranged' },
+  ])
+  const slime = g.enemies[0]
+  const hero = g.heroes[0]
+  slime.x = hero.x + 3
+  slime.y = hero.y
+  const x0 = slime.x
+  for (let i = 0; i < 20; i++) step(g, 0.05)
+  assert.equal(slime.x, x0)
+  assert.equal(g.time, 0)
+  assert.ok(build(g, 0, 1, 'normal'), 'building works during the intro')
+  introReady(g, 'a')
+  step(g, 0.05)
+  assert.equal(g.time, 0, 'still one hero reading')
+  introReady(g, 'b')
+  run(g, 0.5)
+  assert.ok(slime.x < x0, 'the match runs')
+})
+
+test('boss: hp +5% per extra hero; the entrance freezes everyone, then the Maestro controls the boss', () => {
+  const ids = ['a', 'b', 'c', 'd'].map((id) => ({ id, cls: 'melee' as const }))
+  assert.deepEqual([1, 2, 3, 4].map((n) => R.bossHp(n)), [30, 31.5, 33, 34.5])
+  const g = createGame(ids.slice(0, 2))
+  g.enemies = []
+  for (const [gx, gy] of [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5]]) build(g, gx, gy, 'normal')
+  build(g, 0, 6, 'boss')
+  const room = g.rooms.at(-1)!
+  const king = g.enemies.find((e) => e.kind === 'king')!
+  assert.equal(king.hp, 31.5)
+  const hero = g.heroes[0]
+  hero.x = room.gx * R.ROOM_W + R.ROOM_W / 2
+  hero.y = room.gy * R.ROOM_H + 0.8
+  reportPosition(g, 'a', hero.x, hero.y + 0.2, 0, hero.epoch)
+  assert.ok(g.cinematic, 'the first hero inside starts the entrance')
+  const y = hero.y
+  reportPosition(g, 'a', hero.x, y + 1, 0, hero.epoch)
+  assert.equal(hero.y, y, 'heroes stand still')
+  king.cooldown = 0
+  run(g, R.CINEMATIC_SECONDS - 0.2)
+  assert.equal(king.state, 'idle', 'the boss waits')
+  run(g, 0.4)
+  assert.equal(g.cinematic, null)
+  assert.equal(g.possessed, king.id)
+  assert.equal(release(g), false, 'the Maestro keeps the boss')
+  // The Maestro's buttons: jump toward the aimed direction, fan of orbs.
+  assert.ok(enemyAct(g, 'attack', -Math.PI / 2))
+  assert.equal(king.state, 'jump')
+  assert.ok(king.jumpTo.y < king.y)
+  run(g, 1.2)
+  king.cooldown2 = 0
+  assert.ok(enemyAct(g, "special", 0))
+  assert.equal(king.pending, 'fan')
+})
+
+test('possession: an enemy of a room with heroes; moved by the Maestro at its own speed; its attack', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  const slime = g.enemies[0]
+  const hero = g.heroes[0]
+  assert.ok(possess(g, slime.id))
+  assert.equal(g.possessed, slime.id)
+  const x0 = slime.x
+  run(g, 0.5)
+  assert.equal(slime.x, x0, 'no AI while possessed')
+  steer(g, slime.x + 5, slime.y, 0)
+  assert.ok(slime.x - x0 < 2, 'speed limited')
+  assert.ok(slime.x > x0)
+  slime.cooldown = 0
+  assert.ok(enemyAct(g, 'attack', 0), 'the slime dashes')
+  assert.equal(enemyAct(g, 'attack', 0), false, 'cooldown')
+  assert.ok(release(g))
+  assert.equal(g.possessed, null)
+  // Rooms without heroes: no possession.
+  g.enemies = []
+  build(g, 0, 1, 'normal')
+  place(g, g.rooms[1].id, 'thrower', 5, 5)
+  setReady(g, g.rooms[1].id, true)
+  const thrower = g.enemies.find((e) => e.kind === 'thrower')!
+  assert.equal(possess(g, thrower.id), false)
+  hero.x = thrower.x
+  hero.y = thrower.y - 4
+  assert.ok(possess(g, thrower.id))
+  thrower.cooldown = 0
+  assert.ok(enemyAct(g, 'attack', -Math.PI / 2))
+  assert.equal(thrower.pending, 'throw')
+  thrower.hp = 0
+  step(g, 0.05)
+  assert.equal(g.possessed, null, 'it ends when the enemy dies')
+})
+
+test('summon: one slime at the doorway farthest from the heroes, only while they fight, then a long wait', () => {
+  const g = createGame([{ id: 'a', cls: 'melee' }])
+  const room = start(g)
+  const hero = g.heroes[0]
+  hero.x = R.ROOM_W / 2
+  hero.y = 2
+  const before = g.enemies.length
+  assert.ok(summon(g, room.id))
+  assert.equal(g.enemies.length, before + 1)
+  const slime = g.enemies.at(-1)!
+  assert.equal(slime.kind, 'slime')
+  assert.ok(slime.y > R.ROOM_H - 2, 'far from the hero (north doorway)')
+  assert.equal(summon(g, room.id), false, 'cooldown')
+  run(g, R.SUMMON_COOLDOWN)
+  g.enemies = []
+  assert.equal(summon(g, room.id), false, 'no fight, no summon')
 })

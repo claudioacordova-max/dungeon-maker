@@ -2,6 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useRef } from 'react'
 import { TetrahedronGeometry, type Group } from 'three'
 import { BlobShadow } from './Effects'
+import { eyePaint, maestroEyes, recolor } from './MaestroEyes'
 import { loft } from './Enemies'
 import { band, beveled, diamond, face, fold, paint, part, ramp, shell, taper } from './Heroes'
 import { Batch, bake, ball, box, cone, gem, type Part } from './kit'
@@ -21,7 +22,7 @@ function carved(profile: Parameters<typeof loft>[0], sides = 5) {
 const knuckle = carved([[-.5,.47,.46],[.22,.52,.53],[.5,.44,.43]])
 const cuff = carved([[-.5,.46,.48],[.5,.5,.5]])
 const tusk = carved([[0,.064,.062],[.082,.053,.051,-.024],[.17,.030,.031,-.025],[.228,.005,.007,-.006]])
-const ogreBody = bake([
+const ogreParts: Part[] = [
   part(chest, hide, [0,0,0], [1,1,1]),
   paint(band, leather, [0,.575,.02], [.85,.26,.66]),
   part(pelt, '#a36345', [-.043,.465,-.32], [.43,.46,.34], [-.16,0,-.07]),
@@ -47,23 +48,32 @@ const ogreBody = bake([
     paint(gem, '#b49c82', [side*.411,1.57,-.089], [.096,.071,.054]),
     paint(tusk, tooth, [side*.224,1.40,-.405], [1,1,1], [.10,0,-side*.20]),
     paint(box, ink, [side*.166,1.615,-.312], [.173,.099,.060], [.24,0,side*.17]),
-    paint(box, '#ffd375', [side*.165,1.616,-.348], [.127,.064,.025], [.24,0,side*.17]),
-    paint(box, ink, [side*.15,1.617,-.362], [.043,.057,.018], [.24,0,0]),
     paint(knuckle, sage, [side*.168,1.677,-.297], [.248,.102,.14], [.24,0,side*.23]),
     paint(gem, '#465c53', [side*.126,1.776,.014], [.25,.136,.29], [-.16,0,-side*.18]),
   ]),
   paint(gem, '#52675a', [0,1.804,.035], [.20,.146,.30], [-.2,0,.1]),
-], .019)
-const ogreLeg = bake([
+]
+const ogreEyes = [-1,1].flatMap(side => [
+  paint(box, '#ffd375', [side*.165,1.616,-.348], [.127,.064,.025], [.24,0,side*.17]),
+  paint(box, ink, [side*.15,1.617,-.362], [.043,.057,.018], [.24,0,0]),
+])
+const ogrePurple = { [hide]:'#a263c8', [moss]:'#804da6', [sage]:'#bd85df',
+  '#b49c82':'#c58bb2', '#465c53':'#583768', '#52675a':'#693c77' }
+const ogreBody = bake([...ogreParts,...ogreEyes],.019)
+const possessedBody = bake(recolor(ogreParts,ogrePurple),.019)
+const possessedEyes = bake(maestroEyes(.166,1.624,-.365,.168,.098,.24),0).color
+const legParts: Part[] = [
   paint(knuckle, moss, [0,-.096,.04], [.308,.33,.354]),
   paint(cuff, leather, [0,-.251,.005], [.316,.104,.347]),
   paint(knuckle, hide, [0,-.342,-.040], [.345,.199,.464]),
   ...[-1,0,1].map(i => paint(gem, '#d2c39b', [i*.092,-.367,-.241], [.084,.059,.081])),
-], 0)
+]
+const ogreLeg = bake(legParts,0)
+const possessedLeg = bake(recolor(legParts,ogrePurple),0)
 // The grip and barrel are carved along -Z. Rotating the shoulder lifts the whole club overhead.
 const clubHead = carved([[-.34,.071,.07],[-.12,.154,.148],[.19,.20,.185],[.33,.138,.127]],6)
 const clubHoop = carved([[-.5,.5,.5],[.5,.5,.5]],6)
-const club = bake([
+const clubParts: Part[] = [
   part(knuckle, hide, [.033,-.071,-.027], [.346,.353,.38], [.31,0,.19]),
   paint(cuff, leather, [.09,-.163,-.104], [.30,.119,.315], [.48,0,.20]),
   paint(knuckle, sage, [.115,-.192,-.205], [.31,.251,.28], [.40,0,.15]),
@@ -74,7 +84,9 @@ const club = bake([
   paint(clubHoop, bronze, [.128,-.173,-1.104], [.45,.065,.424], [-Math.PI/2,0,0]),
   paint(gem, '#c99156', [.128,-.173,-1.229], [.252,.218,.034]),
   paint(gem, '#da9e61', [.29,-.154,-.94], [.139,.121,.148]),
-], .015)
+]
+const club = bake(clubParts,.015)
+const possessedClub = bake(recolor(clubParts,ogrePurple),0)
 const impactParts: Part[] = []
 const crack = fold([[0,-.50],[-.44,.14],[.13,.5],[.47,.16]],0).rotateX(Math.PI/2)
 const grit = new TetrahedronGeometry(.5)
@@ -88,7 +100,7 @@ for (let i = 0; i < 6; i++) {
 }
 const impact = bake(impactParts,0)
 
-export function Ogre({ pose }: { pose: Pose }) {
+export function Ogre({ pose, possessed = false }: { pose: Pose; possessed?: boolean }) {
   const body = useRef<Group>(null), hand = useRef<Group>(null), dust = useRef<Group>(null)
   const left = useRef<Group>(null), right = useRef<Group>(null)
   useFrame(() => {
@@ -120,13 +132,15 @@ export function Ogre({ pose }: { pose: Pose }) {
       fx.scale.setScalar((.55+.8*ramp(p,0,.45))*(1-ramp(p,.65,1)))
     }
   })
+  const leg = possessed ? possessedLeg : ogreLeg
   return <group dispose={null}>
     <BlobShadow radius={.75} />
     <group ref={body}>
-      <Batch shape={ogreBody} pose={pose} />
-      <group ref={left} position={[-.235,.441,0]}><Batch shape={ogreLeg} pose={pose} /></group>
-      <group ref={right} position={[.235,.441,0]}><Batch shape={ogreLeg} pose={pose} /></group>
-      <group ref={hand} position={[.473,1.217,-.026]}><Batch shape={club} pose={pose} /></group>
+      <Batch shape={possessed ? possessedBody : ogreBody} pose={pose} />
+      {possessed && <mesh geometry={possessedEyes} material={eyePaint} />}
+      <group ref={left} position={[-.235,.441,0]}><Batch shape={leg} pose={pose} /></group>
+      <group ref={right} position={[.235,.441,0]}><Batch shape={leg} pose={pose} /></group>
+      <group ref={hand} position={[.473,1.217,-.026]}><Batch shape={possessed ? possessedClub : club} pose={pose} /></group>
     </group>
     <group ref={dust} position={[.60,0,-.66]} visible={false}><Batch shape={impact} /></group>
   </group>
