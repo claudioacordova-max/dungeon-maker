@@ -523,6 +523,12 @@ test('intro: nothing moves until every hero pressed "Entrar a la mazmorra"; the 
   assert.equal(slime.x, x0)
   assert.equal(g.time, 0)
   assert.ok(build(g, 0, 1, 'normal'), 'building works during the intro')
+  assert.ok(possess(g, slime.id), 'the Maestro can already take an enemy to set it up')
+  steer(g, slime.x - 1, slime.y, 0)
+  assert.ok(slime.x < x0, 'and move it')
+  assert.equal(enemyAct(g, 'attack', 0), false, 'but not attack')
+  release(g)
+  slime.x = x0
   introReady(g, 'a')
   step(g, 0.05)
   assert.equal(g.time, 0, 'still one hero reading')

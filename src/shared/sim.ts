@@ -732,7 +732,9 @@ function heroesIn(game: Game, room: Room) {
   return game.heroes.filter((h) => !h.dead && roomAtPoint(game.rooms, h.x, h.y) === room)
 }
 
-const busy = (game: Game) => game.result !== 'playing' || game.intro.size > 0 || game.cinematic !== null
+// While the heroes read the intro the Maestro can already take, move and summon enemies (to set them up), but not
+// attack: nothing else moves yet.
+const busy = (game: Game) => game.result !== 'playing' || game.cinematic !== null
 
 // The Maestro takes any enemy (also in a room the heroes have not reached: to place it by hand and wait for them).
 // The boss is taken only by its entrance, and is never dropped.
@@ -793,7 +795,7 @@ export function reportRam(game: Game, heroId: string): boolean {
 // The Maestro's attack button (and the boss's second one) on the possessed enemy, toward `dir`.
 export function enemyAct(game: Game, kind: 'attack' | 'special', dir: number): boolean {
   const enemy = possessedEnemy(game)
-  if (!enemy || !Number.isFinite(dir) || enemy.poly > 0 || enemy.stun > 0) return false
+  if (!enemy || game.intro.size > 0 || !Number.isFinite(dir) || enemy.poly > 0 || enemy.stun > 0) return false
   if (enemy.state === 'windup' || enemy.state === 'jump' || enemy.state === 'recover') return false
   const room = roomOf(game, enemy.room)
   if (!room) return false
