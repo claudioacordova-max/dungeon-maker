@@ -13,10 +13,10 @@ import type { MenuPose } from './menuPose'
 const tau = Math.PI * 2
 const zero: V3 = [0, 0, 0], unit: V3 = [1, 1, 1]
 const plum = '#322336', gold = '#ffbf51', gilt = '#ffea9b'
-const hide = '#8b4934', hideLight = '#b46945', umber = '#553044'
+const hide = '#864633', hideLight = '#bd7048', umber = '#513048'
 const iron = '#819bb9', silver = '#c2d9e9', frost = '#f2f9fb'
-const cobalt = '#2853b0', sky = '#4891e1', midnight = '#233b79', aqua = '#46bed2'
-const leaf = '#80a638', lime = '#b4cc52', forest = '#436d34', moss = '#688d36'
+const cobalt = '#305bbd', sky = '#5aadea', midnight = '#29356a', aqua = '#48c8cb'
+const leaf = '#799c37', lime = '#bbcf62', forest = '#366441', moss = '#577e39'
 const ink = new MeshBasicMaterial({ color: '#2e243c', side: BackSide })
 const orb = new SphereGeometry(1, 12, 8)
 const smallOrb = new SphereGeometry(1, 8, 5)
@@ -100,12 +100,16 @@ const pivots = {
   hips:       [null, 0,.38,0], spine: ['hips',0,.46,0], chest: ['spine',0,.68,0],
   neck: ['chest',0,.84,0], head: ['neck',0,1.062,.008],
   eyeL: ['head',-.092,1.078,.215], eyeR: ['head',.092,1.078,.215],
+  lidL: ['head',-.092,1.078,.215], lidR: ['head',.092,1.078,.215],
+  browL: ['head',-.092,1.14,.211], browR: ['head',.092,1.14,.211],
+  fringe: ['head',.066,1.276,.113],
   crest: ['head',0,1.23,0], cape: ['chest',0,.785,-.105], hem: ['cape',-.07,.55,-.18],
   shoulderL: ['chest',-.197,.774,0], elbowL: ['shoulderL',-.197,.609,0], handL: ['elbowL',-.197,.449,0],
   shoulderR: ['chest',.197,.774,0], elbowR: ['shoulderR',.197,.609,0], handR: ['elbowR',.197,.449,0],
-  thighL: ['hips',-.102,.38,0], kneeL: ['thighL',-.102,.204,0], bootL: ['kneeL',-.102,.107,0],
-  thighR: ['hips',.102,.38,0], kneeR: ['thighR',.102,.204,0], bootR: ['kneeR',.102,.107,0],
+  thighL: ['hips',-.102,.38,0], kneeL: ['thighL',-.102,.239,0], bootL: ['kneeL',-.102,.107,0],
+  thighR: ['hips',.102,.38,0], kneeR: ['thighR',.102,.239,0], bootR: ['kneeR',.102,.107,0],
   weapon: ['handR',.197,.449,0],
+  bolt: ['handR',.197,.421,.061],
 } as const
 type Joint = keyof typeof pivots
 type Limb = 'L' | 'R'
@@ -114,6 +118,14 @@ type Sculpt = Partial<Record<Joint, Part[]>>
 function add(s: Sculpt, joint: Joint, ...parts: Part[]) {
   const batch = s[joint] ??= []
   batch.push(...parts)
+}
+// Locks are sculpted against the head surface, then hinged at the hair part.
+function addFringe(s: Sculpt, ...locks: Part[]) {
+  const head=pivots.head, hinge=pivots.fringe
+  for (const lock of locks) {
+    lock.p=[head[1]-hinge[1],head[2]-hinge[2],head[3]-hinge[3]]
+    add(s,'fringe',lock)
+  }
 }
 const buckle = (p: V3, w: number) => [
   oval(gold, p, [w,.030,.012]),
@@ -124,20 +136,20 @@ const buckle = (p: V3, w: number) => [
 function legs(s: Sculpt, ranger: boolean) {
   for (const side of sides) {
     const k: Limb = side < 0 ? 'L' : 'R'
-    add(s,`thigh${k}`, garment(ranger ? '#584437' : '#534050', [
-      [-.195,.066,.067],[-.13,.071,.075],[-.045,.073,.079],[.014,.064,.061],
+    add(s,`thigh${k}`, garment(ranger ? '#64423c' : '#534050', [
+      [-.154,.044,.046],[-.132,.061,.063],[-.095,.068,.072],[-.045,.073,.079],[.014,.064,.061],
     ]))
-    add(s,`knee${k}`, garment(hide, [[-.125,.074,.071],[-.082,.081,.08],[.024,.09,.087],[.040,.081,.077]]),
-      garment(ranger ? hideLight : umber, [[.005,.089,.085],[.014,.093,.09],[.042,.089,.087]], false))
+    add(s,`knee${k}`, garment(hide, [[-.151,.064,.063],[-.100,.074,.074],[-.042,.083,.079],[-.012,.085,.081],[.008,.071,.067]]),
+      garment(ranger ? hideLight : umber, [[-.043,.083,.082],[-.031,.090,.086],[-.005,.087,.083],[.005,.072,.069]], false))
     if (ranger) {
-      add(s,`knee${k}`, ...buckle([side*.025,.022,.088],.027))
+      add(s,`knee${k}`, ...buckle([side*.025,-.022,.083],.026))
     } else {
       add(s,`knee${k}`, oval(iron,[0,.012,.068],[.076,.073,.029],undefined,true),
         piece(gem,silver,[0,.02,.091],[.13,.13,.035]), bead(gilt,[side*.055,.026,.089],[.007,.007,.005]))
     }
     add(s,`boot${k}`, garment(umber,[[-.107,.083,.125,0,.030],[-.098,.095,.135,0,.031],[-.077,.094,.131,0,.028]]),
-      garment(hide,[[-.080,.092,.131,0,.029],[-.057,.097,.13,0,.033],[-.035,.092,.112,0,.025],[.020,.071,.077],[.062,.074,.07]]),
-      cord(hideLight,[[-.078,-.045,.089],[-.048,-.034,.122],[0,-.032,.131],[.051,-.035,.12],[.079,-.046,.086]],.004))
+      garment(hide,[[-.080,.092,.131,0,.029],[-.057,.097,.13,0,.033],[-.035,.092,.112,0,.025],[.006,.073,.078],[.040,.067,.063],[.056,.051,.050]]),
+      cord(hideLight,[[-.081,-.051,.112],[-.047,-.042,.145],[0,-.041,.151],[.049,-.044,.145],[.082,-.055,.112]],.005))
     for (let i=0;i<3;i++) add(s,`boot${k}`,cord('#d18a58',
       [[side*(.070+.005*i),-.04-.008*i,.104-i*.012],[side*(.076+.005*i),-.045-.008*i,.098-i*.012]],.0026,1))
   }
@@ -154,22 +166,33 @@ function clothes(s: Sculpt, ranger: boolean) {
   if (ranger) {
     add(s,'spine',oval(hide, [.146,.012,.099],[.065,.064,.037],[0,.55,-.12],true),
       oval(hideLight,[.148,.035,.122],[.067,.037,.024],[0,.51,-.13]),
-      bead(gold,[.154,.019,.146],[.009,.01,.009]))
+      bead(gold,[.160,.018,.147],[.012,.011,.007]),
+      quill('#cf9165',[-.107,.069,.103],[-.102,.045,.122],[-.107,.011,.110],.012,.007),
+      quill('#d4a075',[-.078,.069,.116],[-.075,.045,.136],[-.083,.011,.116],.010,.006))
     add(s,'chest', cord(hide, [[.145,.094,.057],[.104,.056,.12],[.028,-.02,.137],[-.115,-.139,.115]],.023),
       cord(hideLight, [[.138,.096,.073],[.100,.053,.136],[.02,-.029,.152],[-.126,-.137,.124]],.004),
       garment(leaf,[[.046,.179,.118],[.071,.196,.127],[.128,.124,.114],[.177,.093,.087]]),
       quill(lime,[.136,.113,.083],[.041,.055,.141],[-.095,-.003,.132],.035,.014),
       quill(moss,[-.15,.105,.083],[-.069,.045,.141],[.022,-.033,.141],.043,.015),
-      quill('#8fb843',[-.073,.117,.12],[-.019,.039,.152],[.057,-.044,.144],.081,.019),
-      cord(lime,[[-.092,.081,.133],[-.042,.050,.167],[.008,.028,.172]],.004))
+      quill('#9dbc4e',[-.073,.117,.12],[-.019,.039,.152],[.057,-.044,.144],.081,.019),
+      quill(gilt,[-.068,.101,.145],[-.025,.040,.174],[.043,-.029,.159],.006,.004),
+      piece(gem,gold,[-.056,.088,.156],[.060,.069,.033]),
+      piece(gem,'#338e87',[-.056,.090,.169],[.038,.044,.016]))
   } else {
-    add(s,'hips',quill(aqua,[-.12,.124,.084],[-.135,.040,.13],[-.179,-.099,.127],.040,.015),
+    add(s,'hips',quill('#356fc0',[-.027,.067,.125],[-.054,-.044,.154],[-.079,-.112,.132],.061,.010),
+      quill(sky,[-.053,.050,.137],[-.081,-.050,.154],[-.079,-.103,.137],.009,.006),
+      quill(aqua,[-.12,.124,.084],[-.135,.040,.13],[-.179,-.099,.127],.040,.015),
       quill('#78dee0',[-.128,.102,.105],[-.152,.048,.134],[-.204,-.015,.105],.026,.012))
+    add(s,'spine',quill('#71d7da',[.137,.054,.081],[.070,.047,.128],[-.119,.014,.115],.014,.005),
+      quill('#329cae',[-.130,.058,.082],[-.074,.039,.130],[.002,.022,.133],.009,.005),
+      piece(gem,gilt,[-.127,.040,.095],[.047,.043,.023],[0,-.6,.16]))
     add(s,'chest',garment(iron,[[-.132,.130,.105],[-.095,.158,.137],[.019,.190,.151],[.079,.181,.133],[.118,.123,.10]]),
       garment(silver,[[.027,.190,.152],[.061,.188,.148],[.107,.148,.127]],false),
       garment(midnight,[[.085,.171,.126],[.123,.159,.12],[.16,.108,.085]]),
       garment(sky,[[.104,.163,.125],[.125,.160,.119]],false),
-      piece(gem,gilt,[0,.005,.153],[.067,.089,.021]),
+      piece(gem,midnight,[0,.012,.153],[.108,.118,.028]),
+      decal(gilt,[[0,.059],[.015,.013],[.043,.002],[.013,-.013],[0,-.051],[-.011,-.012],[-.043,0],[-.013,.015]],
+        [0,.012,.170]),
       cord('#647f9f',[[-.150,-.035,.106],[-.095,-.057,.141],[0,-.083,.147],[.099,-.056,.14],[.152,-.035,.103]],.004),
       cord(silver,[[-.15,-.027,.106],[-.093,-.050,.143],[0,-.075,.15],[.098,-.049,.142],[.15,-.027,.107]],.005),
       quill(cobalt,[-.13,.127,.083],[-.034,.105,.136],[.105,.091,.124],.036,.019))
@@ -188,16 +211,25 @@ function arms(s: Sculpt, ranger: boolean) {
         garment(silver,[[-.056,.100,.103],[-.029,.104,.108],[.018,.09,.094],[.05,.060,.066],[.058,.022,.027]]),
         garment(iron,[[-.059,.101,.104],[-.044,.103,.107]],false),
         bead(gilt,[side*.06,-.037,.088],[.009,.009,.006]))
+      if(k==='R') add(s,'shoulderR',
+        quill('#8aa6bf',[.037,.046,.047],[.049,.005,.093],[.051,-.035,.098],.018,.006),
+        quill(frost,[.035,.047,.049],[.039,.005,.099],[.045,-.028,.103],.008,.004))
     }
     add(s,`elbow${k}`,oval(ranger ? '#df996a' : '#ebb485',[0,-.051,0],[.055,.09,.056]),
       garment(ranger ? hide : iron,[[-.161,.057,.059],[-.141,.068,.067],[-.068,.064,.063],[-.056,.057,.057]]),
       garment(ranger ? hideLight : silver,[[-.088,.065,.065],[-.066,.066,.064]],false),
       garment(ranger ? umber : midnight,[[-.15,.067,.067],[-.139,.069,.068]],false))
     const glove = ranger ? hideLight : hide
-    add(s,`hand${k}`,oval(glove,[0,-.022,.007],[.063,.069,.054],undefined,true))
-    for (let i=0;i<3;i++) add(s,`hand${k}`,
-      bead(glove,[(i-1)*.034,-.046,.041],[.022,.039,.022],[.14,0,(i-1)*.11]))
-    add(s,`hand${k}`,oval(ranger ? '#e29c72' : hideLight,[-side*.052,-.017,.034],[.028,.042,.030],[.17,0,side*.46]))
+    const loose = ranger ? k==='R' : k==='L'
+    add(s,`hand${k}`,oval(glove,[0,-.020,.007],[.061,loose ? .047 : .057,loose ? .035 : .048],undefined,true))
+    for (let i=0;i<4;i++) {
+      const x=side*(i-1.5)*.025, y=loose ? -.060+.005*i : -.046
+      add(s,`hand${k}`,oval(ranger ? '#efa975' : '#9f5339',[x,y,.038],
+        [.016,loose ? .046-.003*i : .026,.020],[loose ? -.18 : .25,0,side*(i-1.5)*.20]))
+    }
+    if(!ranger && loose) add(s,'handL',oval(hideLight,[0,-.039,-.019],[.046,.029,.009],[.16,0,0]))
+    add(s,`hand${k}`,oval(ranger ? '#efa975' : hideLight,[-side*.046,-.018,.042],
+      [.024,.041,.023],[.28,0,-side*.50]))
   }
 }
 
@@ -229,42 +261,74 @@ function eyePaint(c: string, side: Side, contour: Point[], lift: number) {
 function irisShape(cx:number,cy:number,rx:number,ry:number,top=1):Point[] {
   return Array.from({length:24},(_,i)=>[cx+rx*Math.cos(i*tau/24),cy+ry*Math.min(top,Math.sin(i*tau/24))])
 }
+
+// The top lip, tooth and tongue follow the slope from the cheek down to the chin.
+// Each column is [x, lower edge, upper edge] in head space.
+function smilePaint(c: string, columns: [number,number,number][], lift: number) {
+  const xyz: number[]=[], indices: number[]=[]
+  for (const [x,low,high] of columns) for (const y of [low,high]) {
+    const u=(y+.130)/.067
+    const rx=.186+.038*u, rz=.168+.024*u, cheekZ=.014-.005*u
+    xyz.push(x,y,cheekZ+rz*(1-(Math.abs(x)/rx)**(2/.68))**(.68/2)+lift)
+  }
+  for (let a=0;a<columns.length*2-2;a+=2) indices.push(a,a+2,a+1,a+1,a+2,a+3)
+  const g=new BufferGeometry()
+  g.setAttribute('position',new Float32BufferAttribute(xyz,3))
+  g.setIndex(indices)
+  g.computeVertexNormals()
+  return piece(g,c)
+}
 function faces(s: Sculpt, ranger: boolean) {
-  const skin = ranger ? '#edab78' : '#f5b987'
-  add(s,'head',piece(loft([[-.190,.061,.089,0,.018],[-.177,.124,.132,0,.018],
+  const skin = ranger ? '#eba777' : '#f5b886'
+  const cheek=loft([[-.190,.061,.089,0,.018],[-.177,.124,.132,0,.018],
     [-.130,.186,.168,0,.014],[-.063,.224,.192,0,.009],[.020,.233,.204],
-    [.107,.224,.196],[.169,.183,.159],[.192,.109,.110]],.68,24),skin,zero,unit,undefined,true))
+    [.107,.224,.196],[.169,.183,.159],[.192,.109,.110]],.68,32)
+  const vertices=cheek.getAttribute('position'), blush:number[]=[]
+  for(let i=0;i<vertices.count;i++) {
+    const x=vertices.getX(i), y=vertices.getY(i), z=vertices.getZ(i)
+    const warmth=Math.exp(-(((Math.abs(x)-.146)/.084)**2+((y+.058)/.053)**2))*smooth(z/.095)
+    blush.push(1+.04*warmth,1-.24*warmth,1-.19*warmth)
+  }
+  cheek.setAttribute('color',new Float32BufferAttribute(blush,3))
+  add(s,'head',piece(cheek,skin,zero,unit,undefined,true))
   for (const side of sides) {
     add(s,'head',oval(skin,[side*.224,-.017,-.005],[.047,.064,.037],[0,0,-side*.36],true),
       oval('#d88562',[side*.245,-.018,.024],[.022,.038,.011],[0,side*.32,-side*.35]))
     const k = side < 0 ? 'eyeL' : 'eyeR'
-    const iris = ranger ? '#477369' : '#91502e'
+    const iris = ranger ? '#368779' : '#ab6233'
     const lid:Point[]=[[-.058,.011],[-.041,.031],[-.014,.039],[.015,.040],[.044,.037],
       [ranger ? .074 : .061, ranger ? .049 : .030],[.058,.007],[.050,-.019],[.032,-.035],[.004,-.043],[-.024,-.039],[-.046,-.023]]
     const white:Point[]=[[-.054,.007],[-.034,.021],[-.010,.027],[.020,.029],[.050,.026],
       [.052,.008],[.045,-.015],[.027,-.030],[.004,-.038],[-.021,-.034],[-.042,-.019]]
-    const look = side*(ranger ? .006 : .009)
+    const look = side*(ranger ? .014 : .012)
+    // The little curved lash sits under the open eye and is uncovered by a blink.
+    add(s,side<0 ? 'lidL':'lidR',eyePaint(plum,side,[[-.050,-.004],[-.027,.009],[.008,.016],
+      [.035,.014],[.055,.010],[.040,.001],[.009,.007],[-.022,.003]],.0035))
     add(s,k,eyePaint(plum,side,lid,.005),
       eyePaint('#fff4db',side,white,.007),
-      eyePaint(iris,side,irisShape(look-.001,-.001,.029,.034,.81),.009),
+      eyePaint(iris,side,irisShape(look-.001,-.001,.031,.035,.80),.009),
       eyePaint('#38283a',side,irisShape(look,.003,.019,.024,.91),.0105),
-      eyePaint('#fff9e3',side,irisShape(look-side*.008,.013,.008,.009),.0125),
-      eyePaint(ranger ? '#a5e6c3' : '#e6a654',side,irisShape(look+side*.009,-.021,.005,.0035),.0125))
-    const browY = side < 0 ? (ranger ? .092 : .09) : .066
-    const brow: Point[] = [[-.064,.004],[-.037,.018],[.036,.024],[.068,.016],[.055,-.002],[-.040,-.010]]
-    add(s,'head',decal(ranger ? '#6a372a' : '#673126',brow.map(([x,y]) => [side*x,y]),
-      [side*.093,browY,.210],[0,side*.28,side*(ranger ? .12 : .22)]))
-    for (let i=0;i<3;i++) add(s,'head',bead(ranger ? '#b96b50' : '#dc966d',
-      [side*(.130+i*.017),-.040+Math.sin(i*2)*.009,.196-i*.007],[.0045,.0038,.003]))
+      eyePaint('#fff9eb',side,irisShape(look-side*.009,.014,.012,.0125),.013),
+      eyePaint(ranger ? '#a5e6c3' : '#fbc378',side,irisShape(look+side*.009,-.018,.006,.005),.013))
+    const brow: Point[] = [[-.060,-.003],[-.036,.014],[.018,.026],[.043,.023],[.069,.013],[.043,-.002],[-.035,-.012]]
+    add(s,side<0 ? 'browL':'browR',decal(ranger ? '#683629' : '#602b24',brow.map(([x,y]) => [side*x,y]),
+      [0,0,0],[0,side*.32,0]))
+    for (let i=0;i<3;i++) add(s,'head',bead(ranger ? '#a76046' : '#c68359',
+      [side*(.126+i*.018),-.042+Math.sin(i*2)*.009,.196-i*.007],[.006,.0049,.003]))
   }
   add(s,'head',oval(skin,[0,-.036,.200],[.035,.026,.034],[-.10,0,0]),
     bead('#fbd0a2',[-.005,-.034,.227],[.012,.007,.005]))
-  const grin: Point[] = ranger
-    ? [[-.057,.005],[-.017,-.003],[.024,.002],[.064,.023],[.047,-.004],[.013,-.022],[-.017,-.020],[-.040,-.013]]
-    : [[-.061,.003],[-.028,-.001],[.014,.001],[.051,.012],[.066,.025],[.057,.002],[.026,-.013],[-.010,-.015],[-.041,-.007]]
-  add(s,'head',decal('#773d3a',grin,[.008,-.100,.192],[-.30,0,0]),
-    decal('#fff1d5',[[-.026,-.003],[.019,.001],[.052,.014],[.040,.001],[.006,-.007]],
-      [.008,-.099,.194],[-.30,0,0]))
+  if (ranger) {
+    add(s,'head',smilePaint('#683238',[[-.075,-.079,-.078],[-.043,-.112,-.091],[-.008,-.129,-.095],
+      [.029,-.126,-.091],[.057,-.106,-.079],[.078,-.068,-.067]],.004),
+      smilePaint('#fff0d4',[[-.048,-.092,-.092],[-.012,-.107,-.096],[.025,-.104,-.093],[.06,-.080,-.080]],.006),
+      smilePaint('#dd806b',[[-.020,-.122,-.122],[.002,-.126,-.117],[.018,-.125,-.116],[.029,-.122,-.122]],.006))
+  } else {
+    add(s,'head',smilePaint('#6c3533',[[-.066,-.103,-.101],[-.027,-.109,-.102],[.012,-.116,-.096],
+      [.053,-.107,-.081],[.078,-.087,-.069],[.087,-.063,-.063]],.004),
+      smilePaint('#fff0cc',[[-.026,-.103,-.103],[.012,-.108,-.098],[.049,-.101,-.084],[.077,-.072,-.072]],.006),
+      smilePaint('#ca815b',[[.071,-.063,-.063],[.084,-.062,-.056],[.094,-.058,-.058]],.005))
+  }
 }
 
 function swordsmanHair(s: Sculpt) {
@@ -274,11 +338,9 @@ function swordsmanHair(s: Sculpt) {
   // The bangs follow a part above the right eyebrow and sweep past the left temple.
   const curls: [string,V3,V3,V3,number,number][] = [
     ['#9f4930',[.088,.206,.087],[.153,.139,.153],[.220,.061,.118],.074,.044],
-    ['#783929',[.151,.165,.091],[.213,.077,.107],[.217,-.032,.093],.057,.043],
+    ['#783929',[.151,.165,.091],[.213,.077,.107],[.216,-.050,.103],.057,.043],
     ['#9e4a30',[-.161,.183,.070],[-.219,.091,.095],[-.236,-.035,.079],.061,.047],
-    ['#a74d31',[.095,.229,.068],[.018,.158,.182],[-.102,.067,.202],.075,.042],
-    ['#bf6440',[.062,.245,.068],[-.052,.200,.175],[-.211,.101,.147],.079,.047],
-    ['#a64f35',[-.017,.236,.040],[-.159,.196,.117],[-.306,.171,.078],.074,.045],
+    ['#a64f35',[-.017,.236,.040],[-.159,.196,.117],[-.323,.156,.101],.074,.045],
     ['#aa4d31',[.069,.246,.041],[.168,.218,.080],[.268,.176,.014],.067,.046],
     ['#c66a43',[.067,.229,.113],[.108,.162,.193],[.072,.089,.218],.051,.033],
     ['#8a402c',[-.099,.171,-.090],[-.19,.121,-.12],[-.269,.060,-.083],.068,.048],
@@ -286,12 +348,17 @@ function swordsmanHair(s: Sculpt) {
     ['#75382e',[0,.139,-.166],[-.022,.046,-.193],[-.066,-.070,-.177],.129,.046],
   ]
   for (const [c,a,b,t,w,d] of curls) add(s,'head',quill(c,a,b,t,w,d,[0,.35,1],true))
+  addFringe(s,
+    quill('#a74d31',[.095,.229,.068],[.018,.158,.182],[-.102,.067,.202],.075,.042,[0,.35,1],true),
+    quill('#bf6440',[.062,.245,.068],[-.052,.200,.175],[-.211,.101,.147],.079,.047,[0,.35,1],true),
+    quill('#e68954',[.058,.234,.152],[-.060,.202,.217],[-.182,.135,.180],.022,.007))
   add(s,'crest',
-    quill('#a65032',[.077,.051,-.024],[-.021,.136,-.005],[-.19,.178,-.021],.078,.046,[0,.75,.7],true),
-    quill('#be5f39',[.076,.056,.032],[-.048,.137,.060],[-.215,.121,.050],.066,.046,[0,1,.7],true),
-    quill('#d07747',[.056,.053,-.034],[.102,.136,-.040],[.078,.203,-.012],.044,.034,[0,.6,1],true),
+    quill('#ae5434',[.077,.051,-.024],[-.021,.149,-.005],[-.167,.215,-.021],.077,.045,[0,.75,.7],true),
+    quill('#c86a40',[.076,.056,.032],[-.048,.145,.060],[-.235,.154,.071],.061,.048,[0,1,.7],true),
+    quill('#df8551',[.056,.053,-.034],[.112,.136,-.040],[.120,.201,-.006],.042,.034,[0,.6,1],true),
     quill('#a45134',[-.008,.040,-.071],[-.114,.075,-.112],[-.249,.107,-.116],.078,.041,[0,1,0],true))
-  add(s,'head',quill('#d17a49',[.056,.241,.130],[-.056,.204,.207],[-.181,.132,.176],.012,.005),
+  add(s,'head',quill('#cb7047',[.110,.208,.167],[.123,.155,.214],[.075,.099,.226],.011,.006),
+    quill('#70372c',[-.153,.198,.109],[-.235,.171,.115],[-.302,.159,.097],.015,.008),
     quill('#b36642',[.101,.208,.147],[.145,.165,.166],[.183,.123,.145],.010,.006),
     quill('#773929',[-.07,.217,.103],[-.157,.183,.139],[-.258,.158,.104],.016,.008),
     quill('#a45234',[.157,.218,.048],[.233,.165,.051],[.282,.145,.047],.036,.023,[0,.5,1],true),
@@ -305,25 +372,42 @@ function hood(s: Sculpt) {
   function opening(rx: number, ry: number, z: number, cy: number, brim: number, cx = 0): V3[] {
     return Array.from({length:n},(_,i) => {
       const a=tau*i/n, x=Math.sin(a), y=Math.cos(a)
-      return [cx+rx*x,cy+ry*y+.023*x-brim*.026*Math.max(0,y)**9,
+      return [cx+rx*x,cy+ry*y+.023*x-brim*.038*Math.max(0,y)**9,
         z+brim*(.077*y-.038*x*x)]
     })
   }
   const rows = [
-    opening(.023,.028,-.279,.186,0,-.082),opening(.132,.124,-.235,.120,0,-.060),
-    opening(.243,.207,-.133,.055,0,-.032),opening(.285,.250,-.016,.026,0,-.012),
+    opening(.023,.028,-.304,.214,0,-.143),opening(.132,.124,-.247,.143,0,-.084),
+    opening(.243,.207,-.133,.065,0,-.043),opening(.285,.250,-.016,.026,0,-.012),
     opening(.264,.232,.086,.019,.20),opening(.249,.213,.134,.016,.69),
     opening(.227,.193,.156,.012,1),opening(.217,.183,.146,.011,1),opening(.211,.178,.118,.01,.83),
   ]
-  add(s,'head',piece(skinRings(rows.slice(0,6),false),leaf,zero,unit,undefined,true),
+  const crown=skinRings(rows.slice(0,6),false)
+  const dye:number[]=[]
+  for(let i=0;i<crown.getAttribute('position').count;i++) {
+    const angle=tau*(i%n)/n, row=Math.floor(i/n)
+    const inset=Math.max(0,Math.cos(angle-1.42))**5
+    const rim=smooth((row-2)/3)
+    dye.push(1-.33*inset+.05*rim,1-.26*inset+.09*rim,1-.08*inset)
+  }
+  crown.setAttribute('color',new Float32BufferAttribute(dye,3))
+  add(s,'head',piece(crown,leaf,zero,unit,undefined,true),
     piece(skinRings(rows.slice(5,8),false,false),lime),
     piece(skinRings(rows.slice(7),false,false),'#4e7132'))
+  // A curved panel seam follows the drape from the notched brim to the trailing tip.
+  for(const index of [4,31]) {
+    const seam=rows.slice(0,6).map((row):V3=>[row[index][0]*1.012,row[index][1]+.005,row[index][2]])
+    add(s,'head',cord('#60863a',seam,.0065,15))
+    const edge=seam.map(([x,y,z]):V3=>[x+.007,y+.003,z])
+    add(s,'head',cord('#a5b953',edge,.0045,15))
+  }
   // Draw cord and built-in peak badge, with loose red-brown locks in the opening.
-  add(s,'head',quill('#ac5836',[.113,.173,.105],[.035,.140,.177],[-.084,.084,.201],.052,.025),
+  addFringe(s,quill('#ac5836',[.113,.173,.105],[.035,.140,.177],[-.084,.084,.201],.052,.025),
     quill('#92442e',[-.013,.158,.112],[-.125,.106,.155],[-.193,.035,.131],.052,.029),
-    quill('#a24d31',[.106,.165,.114],[.168,.104,.137],[.200,.006,.109],.051,.030),
-    piece(gem,gold,[.015,.191,.221],[.071,.073,.032],[0,0,-.12]),
-    piece(gem,gilt,[.010,.195,.232],[.032,.035,.013]),
+    quill('#a24d31',[.106,.165,.114],[.168,.104,.137],[.200,.006,.109],.051,.030))
+  add(s,'head',piece(gem,'#98713a',[.015,.177,.234],[.080,.086,.030],[0,0,-.12]),
+    piece(gem,gold,[.015,.179,.245],[.063,.069,.023],[0,0,-.12]),
+    piece(gem,gilt,[.011,.184,.254],[.030,.035,.013]),
     quill(forest,[-.045,.197,-.139],[-.135,.195,-.215],[-.224,.150,-.263],.070,.050,[0,1,0],true))
   for (const side of sides) {
     add(s,'head',quill(side < 0 ? moss : leaf,[side*.189,.014,.085],[side*.229,-.081,.068],[side*.194,-.172,.098],.042,.030),
@@ -332,14 +416,40 @@ function hood(s: Sculpt) {
       quill(moss,[side*.237,.077,-.087],[side*.270,-.019,-.061],[side*.225,-.133,.018],.034,.021,[side,0,.2]),
       quill('#95b542',[side*.215,.106,-.086],[side*.263,.025,-.032],[side*.242,-.058,-.012],.018,.010,[side,0,.2]))
   }
-  plume(s,'#f4db9a',[.16,-.018,-.065],[.229,.067,-.075],[.303,.179,-.113],.039)
-  plume(s,'#45c5cd',[.144,-.023,-.036],[.210,.063,-.032],[.233,.190,-.061],.046)
+  plume(s,'#f6db91','#d19e58',[.16,-.018,-.065],[.253,.064,-.075],[.345,.163,-.113],.039)
+  plume(s,'#53ced1','#278f99',[.144,-.023,-.036],[.235,.075,-.032],[.255,.218,-.061],.052)
   add(s,'crest',piece(gem,gold,[.164,-.012,-.021],[.050,.069,.052]))
 }
 
-function plume(s: Sculpt,c: string,a: V3,b: V3,t: V3,w: number) {
-  add(s,'crest',quill(c,a,b,t,w,.013,[0,0,1],true),
-    cord('#fff1bf', [a,[b[0],b[1],b[2]+.014],[t[0]-.006,t[1]-.012,t[2]+.003]],.0035))
+function plume(s: Sculpt, light: string, dark: string, a: V3, b: V3, tip: V3, w: number) {
+  const path=new CatmullRomCurve3([a,b,tip].map(p=>new Vector3(...p)))
+  // Each vane has its own scalloped edge. The raised shaft catches light between them.
+  const stations=[[0,.06,.05],[.22,.63,.64],[.43,.99,.88],[.48,.56,.96],[.50,1,1],
+    [.63,.90,.85],[.67,.81,.43],[.69,.80,.79],[.85,.39,.49],[1,0,0]]
+  const vanes: V3[][]=[[],[]], shaft: V3[]=[]
+  for (const [t,left,right] of stations) {
+    const p=path.getPoint(t), tangent=path.getTangent(t)
+    const across=new Vector3(tangent.y,-tangent.x,0).normalize()
+    shaft.push([p.x,p.y,p.z+.011*Math.sin(Math.PI*t)])
+    vanes[0].push(p.clone().addScaledVector(across,-w*left).toArray())
+    vanes[1].push(p.clone().addScaledVector(across,w*right).toArray())
+  }
+  for (let side=0;side<2;side++) {
+    const positions:number[]=[],indices:number[]=[]
+    for(let i=0;i<shaft.length;i++) positions.push(...shaft[i],...vanes[side][i])
+    for(let i=0;i<shaft.length-1;i++) {
+      const k=i*2
+      indices.push(k,k+1,k+2,k+1,k+3,k+2, k+2,k+1,k,k+2,k+3,k+1)
+    }
+    const g=new BufferGeometry()
+    g.setAttribute('position',new Float32BufferAttribute(positions,3))
+    g.setIndex(indices)
+    // The vane folds along the shaft and each side catches the light separately.
+    const facets=g.toNonIndexed()
+    facets.computeVertexNormals()
+    add(s,'crest',piece(facets,side ? dark : light))
+  }
+  add(s,'crest',cord('#ffedb4',shaft,.004,10))
 }
 
 function cape(s: Sculpt, ranger: boolean) {
@@ -350,7 +460,7 @@ function cape(s: Sculpt, ranger: boolean) {
   for (const t of rows) for (const back of [0,1]) for (let i=0;i<n;i++) {
     const u=i/(n-1), w=ranger ? .74 : 1
     const fold = Math.cos(u*tau*3.3+.5)*(.013+t*.02)
-    const x=(u-.5)*(.33+.45*t*w)+(ranger ? -.085 : .188)*t*t
+    const x=(u-.5)*(.33+.40*t*w)+(ranger ? -.085 : .088)*t*t
     const y=.014-.53*t*w-.025*Math.sin(u*Math.PI)+t*t*(.039*Math.cos(tau*u*1.7)+.115*(u-.5))
     const z=.063*(2*u-1)**2-.071-.15*t+fold+back*.012
     pos.push(x,y,z)
@@ -379,7 +489,8 @@ function cape(s: Sculpt, ranger: boolean) {
 
 function sword(s: Sculpt) {
   // Four forged planes, a widened ricasso and a long, interrupted blue fuller.
-  const sections = [[-.586,.002,.002],[-.475,.043,.014],[-.224,.052,.018],[-.159,.063,.022],[-.105,.039,.015]]
+  const sections = [[-.586,.001,.002],[-.486,.047,.014],[-.241,.055,.019],
+    [-.209,.046,.018],[-.166,.072,.023],[-.118,.048,.018],[-.099,.037,.013]]
   for (let face=0;face<4;face++) {
     const vertices:number[]=[], indices:number[]=[]
     for (const [y,w,d] of sections) {
@@ -394,23 +505,31 @@ function sword(s: Sculpt) {
     g.setAttribute('position',new Float32BufferAttribute(vertices,3))
     g.setIndex(indices)
     g.computeVertexNormals()
-    add(s,'weapon',piece(g,[frost,'#9dbade',silver,iron][face]))
+    add(s,'weapon',piece(g,[frost,'#8aa9cc',silver,'#7593b6'][face]))
   }
   add(s,'weapon',garment(umber,[[-.105,.025,.024],[-.066,.028,.027],[.045,.024,.023],[.064,.030,.027]]),
     piece(gem,gold,[0,.074,0],[.079,.084,.065]),
     piece(gem,aqua,[0,.077,.027],[.037,.039,.016]),
     oval(gold,[0,-.102,0],[.101,.025,.036],undefined,true),
     piece(gem,gilt,[0,-.106,.017],[.077,.064,.047]),
-    piece(gem,'#338fb3',[0,-.106,.038],[.040,.042,.015]),
-    decal('#7c98bd',[[0,0],[.006,-.021],[.003,-.158],[0,-.183]], [0,-.144,.023]))
+    piece(gem,'#338fb3',[0,-.106,.038],[.040,.042,.015]))
+  for(const face of sides) {
+    add(s,'weapon',decal('#508598',[[0,0],[.012,-.023],[0,-.052],[-.012,-.023]],
+      [0,-.133,face*.024],[0,face<0 ? Math.PI : 0,0]),
+      decal('#718da8',[[0,0],[.006,-.010],[.004,-.207],[0,-.243],[-.004,-.207],[-.006,-.010]],
+        [0,-.199,face*.020],[0,face<0 ? Math.PI : 0,0]))
+  }
   for (const side of sides) {
-    add(s,'weapon',quill(gold,[side*.031,-.107,0],[side*.088,-.100,.002],[side*.125,-.066,0],.023,.024,[0,0,1],true))
+    add(s,'weapon',quill(gold,[side*.031,-.107,0],[side*.094,-.100,.002],[side*.140,-.058,0],.026,.024,[0,0,1],true),
+      quill(gilt,[side*.048,-.101,.023],[side*.092,-.094,.022],[side*.129,-.074,.011],.008,.004))
   }
   for (let i=0;i<5;i++) add(s,'weapon',cord(hideLight,[[-.023,-.079+.025*i,.007],[0,-.071+.025*i,.028],[.025,-.067+.025*i,0]],.004))
 }
 
 function crossbow(s: Sculpt) {
   const p='weapon'
+  const broadhead=skinRings([[.238,.010,.008],[.247,.045,.015],[.268,.042,.014],[.327,.001,.001]]
+    .map(([z,w,d]):V3[]=>[[w,0,z],[0,-d,z],[-w,0,z],[0,d,z]]))
   // Local +Z is the bolt axis. Curved walnut limbs, ferrules and string form the crossbow silhouette.
   add(s,p,piece(loft([[-.181,.036,.030],[-.153,.043,.046],[-.064,.031,.032],
       [.027,.041,.037],[.172,.039,.036],[.224,.043,.033]],.60,12),hide,[0,.036,0],unit,[Math.PI/2,0,0],true),
@@ -418,17 +537,24 @@ function crossbow(s: Sculpt) {
     oval('#425775',[0,.071,.108],[.035,.023,.137]),
     oval(gold,[0,.062,.200],[.061,.037,.036],undefined,true),
     oval(gold,[0,.051,-.106],[.044,.031,.015]),
-    cord('#ffe4a1',[[-.187,.064,.079],[0,.069,-.067],[.187,.064,.079]],.005,2),
-    cord('#dbaf7c',[[0,.099,-.106],[0,.099,.268]],.008,1),
-    piece(gem,silver,[0,.10,.278],[.059,.037,.092]),
+    cord('#ffe4a1',[[-.190,.069,.062],[0,.088,-.087],[.190,.069,.062]],.006,2),
+    cord('#dbaf7c',[[0,.099,-.113],[0,.099,.269]],.009,1),
+    piece(broadhead,'#a4d8e3',[0,.099,0]),
+    cord('#ae773e',[[.024,.019,.039],[.023,-.019,.033],[.022,-.032,.006],[.023,-.028,-.028],[.025,.013,-.045]],.008),
     quill('#5ac2c9',[0,.097,-.037],[.014,.109,-.068],[.019,.124,-.123],.011,.009,[0,1,0]))
   for (const d of sides) {
-    add(s,p,quill('#c98344',[d*.017,.062,.204],[d*.132,.065,.186],[d*.191,.066,.073],.024,.021,[0,1,0],true),
+    add(s,p,quill('#ba7039',[d*.017,.062,.204],[d*.138,.065,.181],[d*.193,.066,.060],.031,.024,[0,1,0],true),
       cord(gilt,[[d*.047,.082,.203],[d*.119,.085,.178],[d*.158,.081,.138]],.005),
       oval(gold,[d*.184,.066,.088],[.017,.020,.024],[0,d*.39,0]),
       bead('#a5d757',[d*.188,.065,.074],[.014,.016,.015]),
       bead(gilt,[d*.04,.060,-.013],[.008,.009,.009]))
   }
+  // A spare bolt turns at the pinch between her thumb and first finger.
+  add(s,'bolt',cord('#dfaa68',[[0,-.139,0],[0,.134,0]],.0075,1),
+    piece(gem,'#97c5d3',[0,-.147,0],[.049,.079,.022]),
+    garment(gold,[[.076,.011,.011],[.091,.011,.011]],false))
+  for (const d of sides) add(s,'bolt',quill(d<0 ? '#33b4b7' : '#a2e3d1',
+    [0,.061,0],[d*.012,.105,0],[d*.027,.153,0],.015,.008))
   // The quiver leans clear of the opposite shoulder and stays readable from the front.
   add(s,'chest',quill(hide,[.045,-.225,-.155],[.156,-.015,-.183],[.258,.123,-.166],.072,.064,[0,0,-1],true),
     oval(umber,[.227,.098,-.175],[.073,.054,.063],[0,0,-.55]),
@@ -513,8 +639,13 @@ function rig(ranger: boolean) {
   }
   if(ranger) bones.weapon.position.x=0
   function limb(k:Limb) {
-    return {upper:bones[`shoulder${k}`],lower:bones[`elbow${k}`],hand:bones[`hand${k}`],
-      leg:bones[`thigh${k}`],knee:bones[`knee${k}`],boot:bones[`boot${k}`]}
+    const side=k==='L' ? -1 : 1
+    return {
+      arm:{upper:bones[`shoulder${k}`],lower:bones[`elbow${k}`],end:bones[`hand${k}`],
+        pole:new Vector3(side,-.53,-.62),first:.165,second:.160},
+      leg:{upper:bones[`thigh${k}`],lower:bones[`knee${k}`],end:bones[`boot${k}`],
+        pole:new Vector3(side*.31,0,1),first:.141,second:.132},
+    }
   }
   return {group,bones,skeleton,L:limb('L'),R:limb('R'),
     target:new Vector3(), axis:new Vector3(), elbow:new Vector3(), fore:new Vector3(),
@@ -527,28 +658,27 @@ function beat(t: number, a: number, b: number, c: number, d: number) {
   return smooth((t-a)/(b-a))*(1-smooth((t-c)/(d-c)))
 }
 
-// Two-link arms plant the sword and let the other palm actually reach the fringe.
-// Targets and wrist orientations are in the fighter's own coordinates, including when
-// the caller rotates or scales the whole figure for a party portrait.
-function reach(r: Rig, k: Limb, x:number,y:number,z:number, rx:number,ry:number,rz:number) {
-  const {upper,lower,hand}=r[k]
+// Both boots and grips use fixed-length links. Goals are in fighter space so contact
+// holds when a caller scales or turns the complete figure in a party portrait.
+function reach(r: Rig, chain: Rig['L']['arm'], x:number,y:number,z:number, rx:number,ry:number,rz:number) {
+  const {upper,lower,end,first,second,pole}=chain
   const parent=upper.parent!
   r.target.set(x,y,z)
   r.group.localToWorld(r.target)
   parent.worldToLocal(r.target)
   r.target.sub(upper.position)
-  const length=Math.max(.012,Math.min(.3248,r.target.length()))
+  const length=Math.max(Math.abs(first-second)+.0001,Math.min(first+second-.0001,r.target.length()))
   r.axis.copy(r.target).normalize()
-  r.elbow.set(k==='L' ? -.86 : .86,-.8,-.58)
+  r.elbow.copy(pole)
   r.elbow.addScaledVector(r.axis,-r.elbow.dot(r.axis)).normalize()
-  const along=(.165**2-.160**2+length*length)/(2*length)
-  r.elbow.multiplyScalar(Math.sqrt(Math.max(0,.165**2-along*along))).addScaledVector(r.axis,along)
+  const along=(first*first-second*second+length*length)/(2*length)
+  r.elbow.multiplyScalar(Math.sqrt(Math.max(0,first*first-along*along))).addScaledVector(r.axis,along)
   r.fore.copy(r.axis).multiplyScalar(length).sub(r.elbow).normalize()
   upper.quaternion.setFromUnitVectors(down,r.elbow.normalize())
   lower.quaternion.setFromUnitVectors(down,r.fore).premultiply(r.parentRotation.copy(upper.quaternion).invert())
   lower.getWorldQuaternion(r.parentRotation)
   r.wristRotation.setFromEuler(r.euler.set(rx,ry,rz,'YXZ')).premultiply(r.modelRotation)
-  hand.quaternion.copy(r.parentRotation.invert()).multiply(r.wristRotation)
+  end.quaternion.copy(r.parentRotation.invert()).multiply(r.wristRotation)
 }
 function animate(r: Rig, pose: MenuPose, ranger: boolean) {
   const b=r.bones
@@ -556,59 +686,70 @@ function animate(r: Rig, pose: MenuPose, ranger: boolean) {
   const idle=pose.anim==='idle' ? t%8 : 0
   const cheer=pose.anim==='cheer' ? Math.min(t,1.6) : 0
   const sway=Math.sin(idle*tau/4), breath=Math.sin(idle*tau/2), lag=Math.sin(idle*tau/4-.65)
-  const fidget=beat(idle,3.75,4.33,4.75,5.40)
-  const gather=beat(cheer,0,.15,.20,.43), salute=beat(cheer,.16,.52,.92,1.56)
-  const follow=beat(cheer,.25,.67,1.02,1.6)
-  const hop=ranger && cheer>.20 && cheer<.78 ? Math.sin(Math.PI*smooth((cheer-.20)/.58))**2*.094 : 0
-  b.hips.position.set((ranger ? -.019 : -.016)+.009*sway,.38+hop,0)
-  b.hips.rotation.set(0,ranger ? -.13 : .095,-.063+.018*sway)
-  b.spine.rotation.set(.035+gather*.16-salute*.07,-.09+.033*sway+(ranger ? -.22 : .24)*salute,.097-.021*sway)
-  b.chest.position.y=.22+.008*breath-.015*gather
-  b.chest.rotation.set(-.025-.015*breath+.068*fidget,-.085+.036*sway+(ranger ? -.21 : -.10)*fidget,-.032)
-  b.neck.rotation.set(-.025, .13+.04*sway, ranger ? -.047 : .025)
-  b.neck.position.y=.140-(ranger ? .020 : .042)*fidget
+  const fidget=beat(idle,3.60,4.17,4.98,5.58)
+  const gather=beat(cheer,0,.18,.21,.40), salute=beat(cheer,.18,.49,.88,1.47)
+  const snap=beat(cheer,.28,.44,.46,.66), landing=beat(cheer,.74,.90,.92,1.17)
+  const follow=beat(cheer,.27,.64,.94,1.60)
+  const air=smooth((cheer-.20)/.57)
+  const hop=ranger ? .129*4*air*(1-air) : 0
+  b.hips.position.set((ranger ? -.058 : .043)+.013*sway+(ranger ? .026 : -.033)*salute,
+    (ranger ? .338 : .343)+hop-.037*gather-(ranger ? .030 : .009)*landing,0)
+  b.hips.rotation.set(.025,ranger ? -.18 : -.24,(ranger ? -.10 : .105)+.022*sway)
+  b.spine.rotation.set((ranger ? .16 : -.085)+gather*.21-salute*.10,
+    (ranger ? .03 : .24)+.044*sway+(ranger ? -.25 : .18)*salute,
+    (ranger ? .25 : -.25)-.037*sway+(ranger ? -.19 : .20)*salute)
+  b.chest.position.y=.22+.009*breath-.014*gather
+  b.chest.rotation.set(-.030-.033*breath+.08*fidget,(ranger ? .17 : -.13)+.05*sway-.14*gather,
+    (ranger ? -.06 : .045)+.024*breath)
+  b.neck.rotation.set(-.05,.16+.06*sway, ranger ? -.06 : .035)
+  b.neck.position.y=(ranger ? .158 : .147)-(ranger ? .012 : .043)*fidget
   const shrug=ranger ? 0 : fidget
   b.shoulderL.position.set(-.197,.094+.063*shrug,.058*shrug)
-  b.head.rotation.set(-.037+.014*breath+.12*fidget-.095*salute,
-    .14+.045*sway+(ranger ? -.34 : .16)*fidget+(ranger ? -.13 : .08)*salute,
-    (ranger ? -.078 : .064)+.02*sway+(ranger ? -.14 : .12)*fidget-.10*salute)
-  b.crest.rotation.set(.027*lag-.12*follow,0,.035*lag+(ranger ? -.18 : .14)*follow-.11*fidget)
-  b.cape.rotation.set(.07+.044*lag+.53*follow, .045*sway, -.045-.18*follow)
-  b.hem.rotation.set(.035+.056*Math.sin(idle*tau/4-1.1)+.24*follow,.13*lag,-.075*sway-.24*follow)
+  b.head.rotation.set((ranger ? -.11 : -.07)+.025*breath+.19*fidget-.09*salute+.11*gather,
+    (ranger ? .24 : .33)+.086*sway+(ranger ? .42 : -.24)*fidget+(ranger ? -.13 : .08)*salute,
+    (ranger ? -.27 : -.095)+.036*sway+(ranger ? -.16 : .26)*fidget+.12*salute)
+  b.crest.rotation.set(.057*lag-.23*follow+.12*landing,.035*sway,
+    .062*lag+(ranger ? -.26 : .18)*follow-.17*fidget)
+  const comb=ranger ? 0 : beat(idle,4.18,4.62,4.91,5.19)-.30*beat(idle,5.10,5.25,5.28,5.63)
+  b.fringe.rotation.set(.026*lag-.10*follow,0,.025*lag-.26*comb+.050*landing)
+  b.cape.rotation.set(.10+.073*lag+.32*follow,.075*sway+.30*follow,-.055+.21*follow)
+  b.hem.rotation.set(.05+.097*Math.sin(idle*tau/4-1.1)+.19*follow-.14*landing,.15*lag+.14*follow,-.10*sway+.15*follow)
   const blink=beat(idle,2.03,2.096,2.12,2.24)+beat(idle,6.27,6.34,6.36,6.49)
   const wink=ranger ? beat(cheer,.49,.58,.92,1.08) : 0
-  b.eyeL.scale.y=1-.94*Math.max(blink,wink)
-  b.eyeR.scale.y=1-.94*blink
+  const shutL=Math.max(blink,wink)
+  b.eyeL.scale.set(1.09,(ranger ? 1.12 : .90)*(1-.97*shutL),1)
+  b.eyeR.scale.set(1.09,(ranger ? 1.14 : 1.09)*(1-.97*blink),1)
+  b.eyeL.position.z=.207-.021*shutL
+  b.eyeR.position.z=.207-.021*blink
+  b.browL.position.y=.077-(ranger ? .006 : .019)-.011*wink+.008*gather
+  b.browR.position.y=.086+.012*fidget+.010*salute
+  b.browL.rotation.z=(ranger ? -.19 : -.32)-.10*gather
+  b.browR.rotation.z=(ranger ? -.10 : -.18)+.09*fidget
   r.group.getWorldQuaternion(r.modelRotation)
-  for (let side=-1;side<=1;side+=2) {
-    const {leg,knee,boot}=side===-1 ? r.L : r.R
-    const lifted=side===1 && ranger ? salute : 0
-    leg.rotation.set(side*(ranger ? .24 : .18)-lifted*.43,-side*.12,side*(.19+.018*sway))
-    knee.rotation.x=.13+lifted*.76
-    knee.getWorldQuaternion(r.parentRotation)
-    r.wristRotation.setFromEuler(r.euler.set(.26*lifted,-side*.19,side*.1*lifted)).premultiply(r.modelRotation)
-    boot.quaternion.copy(r.parentRotation.invert()).multiply(r.wristRotation)
-    // Solve from the bind position each frame, including seeking directly to a clip endpoint.
-    boot.position.set(0,-.097,0)
-    boot.updateWorldMatrix(true,false)
-    r.target.setFromMatrixPosition(boot.matrixWorld)
-    r.group.worldToLocal(r.target)
-    r.target.y=.107+hop+lifted*.072
-    r.group.localToWorld(r.target)
-    boot.position.copy(knee.worldToLocal(r.target))
-  }
   if (ranger) {
-    const aim=Math.max(fidget*.82,salute)
-    reach(r,'L',-.248-.032*aim,.596+.251*aim+hop+.007*breath,.146+.082*aim,
-      .29-.39*aim,-.70+.26*aim,-.25+.30*aim)
-    reach(r,'R',.218-.260*aim,.482+.306*aim+hop+.009*sway,.046+.124*aim,
-      -.18-aim*.47,-.31-.77*aim,-.49-.36*aim)
+    reach(r,r.L.leg,-.177,.107+hop,.070,0,-.21,0)
+    // Either front bevel can touch the floor as the heel rolls up.
+    const toe=.25+.033*sway+.49*salute
+    const toeY=Math.max(.107*Math.cos(toe)+.155*Math.sin(toe),.098*Math.cos(toe)+.166*Math.sin(toe))
+    reach(r,r.R.leg,.169,toeY+hop+.047*salute,-.105-.044*salute,toe,.31,0)
+    reach(r,r.L.arm,-.267+.047*salute,.602+.226*salute+hop+.013*breath,.200+.035*salute,
+      -.18+.16*salute+.13*gather,-.61+.26*salute,-.71+.27*salute+.06*sway)
+    reach(r,r.R.arm,.301+.068*fidget+.014*salute,.606+.110*fidget+.028*salute+hop+.014*sway,
+      .182+.020*fidget,-.61+.45*fidget-.27*salute,.39-.20*fidget,-.29-.15*fidget)
+    const roll=smooth((idle-4.10)/.79)%1
+    b.bolt.rotation.z=-.65+.075*sway-.40*beat(idle,3.88,4.09,4.10,4.32)+tau*roll+.16*beat(idle,4.72,4.88,4.91,5.12)
   } else {
-    reach(r,'R',.336+.021*salute,.579+.286*salute-.012*gather,.112+.052*salute,
-      .156-3.00*salute+.12*gather,-.13+.32*salute,.058+.13*salute)
-    const brush=smooth((idle-4.23)/.51)
-    reach(r,'L',-.188+(.075-.136*brush)*fidget-.093*salute,.505+.561*fidget+.095*salute,
-      .109+(.177-.080*brush)*fidget+.016*salute,-.24-2.63*fidget-.55*salute,-.25+.40*fidget,.30-.41*fidget)
+    reach(r,r.L.leg,-.164,.107,.091,0,-.39,0)
+    reach(r,r.R.leg,.202,.107,-.048,0,.27,0)
+    // The blade pivots on its point during the crouch, lifts clear, then sweeps up.
+    const rake=.40-.10*gather
+    const plantedY=.586*Math.cos(.30)*Math.cos(rake)+.0006
+    const lift=beat(cheer,.11,.30,1.30,1.56)
+    reach(r,r.R.arm,.313+.113*salute,plantedY*(1-salute)+.923*salute+.038*snap+.095*lift*(1-salute),.143+.058*salute,
+      .30-3.37*salute-.13*snap,.44-.32*salute,rake+.25*beat(cheer,.20,.34,.38,.53)-.04*salute)
+    const brush=smooth((idle-4.19)/.56)
+    reach(r,r.L.arm,-.132+(.101-.174*brush)*fidget-.17*salute,.526+.510*fidget+.078*salute,
+      .166+(.141-.073*brush)*fidget+.028*salute,-.58-2.12*fidget-.47*salute,.20+1.04*fidget,.95-.62*fidget-.48*salute)
   }
 }
 

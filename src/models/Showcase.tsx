@@ -6,6 +6,7 @@ import type { SpikePhase } from '../shared/protocol'
 import { ROOM_H, ROOM_W } from '../shared/rules'
 import { MeleeHero, RangedHero } from './Heroes'
 import { HdArcher, HdSwordsman } from './hd/HdFighters'
+import { HdMaestro, HdMage, HdPriestess } from './hd/HdCasters'
 import type { MenuPose } from './hd/menuPose'
 import { PriestHero, MageHero } from './Spellcasters'
 import { Ogre, Chicken } from './Creatures'
@@ -253,16 +254,18 @@ function Diorama({ play, labels, page, shape, phase }: {
   </>
 }
 
-const menuModels = { Espadachín: HdSwordsman, Arquera: HdArcher }
+const menuModels = { Espadachín: HdSwordsman, Arquera: HdArcher, Sacerdotisa: HdPriestess, Mago: HdMage, Maestro: HdMaestro }
 type MenuName = keyof typeof menuModels
 
 function MenuExhibit({ name, pose }: { name: MenuName; pose: MenuPose }) {
   const Model = menuModels[name]
+  const widthFit = useThree(({ size }) => Math.min(1, 1.55 * size.width / size.height))
+  const scale = Model === HdSwordsman || Model === HdArcher ? 1 : widthFit
   useFrame((_, dt) => {
     pose.t += Math.min(.1, dt)
     if (pose.anim === 'cheer' && pose.t >= 1.6) { pose.anim = 'idle'; pose.t = 0 }
   }, -1)
-  return <group rotation-y={-.22}><Model pose={pose} /></group>
+  return <group rotation-y={-.22} scale={scale} position-y={.73 * (1 - scale)}><Model pose={pose} /></group>
 }
 
 export default function Showcase() {
@@ -310,7 +313,7 @@ export default function Showcase() {
         }}>{room}</button>)}
       </div>
       <div className="dm-playback-row">
-        {page === 'HD' && <div className="dm-transport dm-shapes" role="group" aria-label="Menu models">
+        {page === 'HD' && <div className="dm-transport dm-shapes" role="group" aria-label="Menu models" style={{ maxWidth: '96vw', overflowX: 'auto' }}>
           {(Object.keys(menuModels) as MenuName[]).map(name => <button type="button" key={name}
             aria-pressed={menuName === name} onClick={() => setMenuName(name)}>{name}</button>)}
           <button type="button" onClick={() => { menuPose.anim = 'cheer'; menuPose.t = 0 }}>Cheer</button>
