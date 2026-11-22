@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { me, useNet } from '../net/connection'
-import type { HeroClass } from '../shared/protocol'
+import type { HeroClass, PassiveId } from '../shared/protocol'
 import { MAX_HEROES } from '../shared/rules'
 import { EnterIcon, ScanIcon, ShareIcon, UserIcon } from './icons'
 
@@ -9,7 +9,24 @@ export const art = (file: string) => `/ui/${file}`
 
 export const PLAYER_COLORS = ['#38bdf8', '#f472b6', '#facc15', '#a3e635', '#fb923c']
 
-const CLASS_NAME: Record<HeroClass, string> = { melee: 'Espadachín', ranged: 'Arquera', priest: 'Sacerdotisa', mage: 'Mago' }
+export const CLASS_NAME: Record<HeroClass, string> = { melee: 'Espadachín', ranged: 'Arquera', priest: 'Sacerdotisa', mage: 'Mago' }
+export const CLASS_TAG: Record<HeroClass, string> = { melee: 'Cuerpo a cuerpo', ranged: 'A distancia', priest: 'Cura al equipo', mage: 'Hechizos' }
+// Portraits taken from the 3D models (src/ui/PhotoStudio.tsx, ?photos). The older painted cards (card-*.webp) stay
+// in public/ui/ for comparison.
+export const PHOTO: Record<HeroClass | 'master' | 'party', string> = {
+  melee: 'photo-melee.webp',
+  ranged: 'photo-ranged.webp',
+  priest: 'photo-priest.webp',
+  mage: 'photo-mage.webp',
+  master: 'photo-master.webp',
+  party: 'photo-party.webp',
+}
+export const PASSIVE_INFO: Record<PassiveId, { name: string; text: string }> = {
+  recover: { name: 'Recuperar fuerzas', text: 'Al limpiar una sala de enemigos, recupera 1 golpe.' },
+  tough: { name: 'Piel dura', text: 'A veces (10 %) ignora un golpe.' },
+  keenEye: { name: 'Ojo certero', text: 'Sus flechas básicas pueden ser críticas (3 %, doble daño).' },
+  focus: { name: 'Mente clara', text: 'Cada enemigo que derrota le devuelve 1 de maná.' },
+}
 
 // Dungeon backdrop for the menus (home, lobby, connecting).
 function MenuScreen({ label, children, kind = '' }: { label: string; children: ReactNode; kind?: string }) {
@@ -128,14 +145,7 @@ export function ConnectingScreen() {
   return <LoadingScreen label="Abriendo la mazmorra…" />
 }
 
-type Pick = { id: 'master' | HeroClass; title: string; tag: string; image: string }
-const PICKS: Pick[] = [
-  { id: 'master', title: 'Maestro de mazmorra', tag: 'Construye la mazmorra', image: 'card-master.webp' },
-  { id: 'melee', title: 'Espadachín', tag: 'Cuerpo a cuerpo', image: 'card-melee.webp' },
-  { id: 'ranged', title: 'Arquera', tag: 'A distancia', image: 'card-ranged.webp' },
-  { id: 'priest', title: 'Sacerdotisa', tag: 'Cura al equipo', image: 'card-priest.webp' },
-  { id: 'mage', title: 'Mago', tag: 'Hechizos', image: 'card-mage.webp' },
-]
+type RolePick = 'master' | 'hero'
 
 export function LobbyScreen() {
   const state = useNet()
@@ -146,10 +156,11 @@ export function LobbyScreen() {
   const heroes = state.players.filter((p) => p.role === 'hero')
   const canStart = isHost && !!master && heroes.length >= 1 && heroes.length <= MAX_HEROES
   useEffect(preloadGame, [])
-  const confirmed: Pick['id'] | undefined = self ? (self.role === 'master' ? 'master' : self.cls) : undefined
+  // In the lobby each player only chooses Maestro or hero; the heroes pick who they are at the dungeon entrance.
+  const confirmed: RolePick | undefined = self?.role
   // The card lights up at once (optimistic); if the server says otherwise (e.g. someone else took the master),
   // the confirmed choice comes back within a moment.
-  const [optimistic, setOptimistic] = useState<{ id: Pick['id']; at: number } | null>(null)
+  const [optimistic, setOptimistic] = useState<{ id: RolePick; at: number } | null>(null)
   useEffect(() => {
     if (!optimistic) return
     if (optimistic.id === confirmed) {
@@ -161,14 +172,9 @@ export function LobbyScreen() {
   }, [optimistic, confirmed])
   const selected = optimistic?.id ?? confirmed
 
-  function choose(id: Pick['id']) {
+  function choose(id: RolePick) {
     setOptimistic({ id, at: performance.now() })
-    if (id === 'master') {
-      state.send({ type: 'role', role: 'master' })
-      return
-    }
-    if (self?.role === 'master') state.send({ type: 'role', role: 'hero' })
-    state.send({ type: 'class', cls: id })
+    state.send({ type: 'role', role: id })
   }
 
   async function invite() {
@@ -203,32 +209,36 @@ export function LobbyScreen() {
               {p.away && <span className="away-tag">Reconectando…</span>}
               {p.id === state.host && <span className="host-tag">Anfitrión</span>}
               <span className="lobby-role">
-                {p.role === 'master' ? 'Maestro' : CLASS_NAME[p.cls]}
+                {p.role === 'master' ? 'Maestro' : 'Héroe'}
               </span>
             </li>
           ))}
         </ul>
-        <div className="pick-cards" role="group" aria-label="Elige tu papel">
-          {PICKS.map((pick) => {
-            const taken = pick.id === 'master' && !!master && master.id !== state.you
-            const isSel = selected === pick.id
-            return (
-              <button
-                key={pick.id}
-                type="button"
-                className={['pick-card', `is-${pick.id}`, isSel ? 'is-selected' : ''].join(' ')}
-                aria-pressed={isSel}
-                disabled={taken}
-                onClick={() => choose(pick.id)}
-              >
-                <span className="pick-art" style={{ backgroundImage: `url(${art(pick.image)})` }} />
-                <span className="pick-text">
-                  <b>{pick.title}</b>
-                  <small>{taken ? `Lo es ${master?.name}` : pick.tag}</small>
-                </span>
-              </button>
-            )
-          })}
+        <div className="role-cards" role="group" aria-label="Elige tu papel">
+          <button
+            type="button"
+            className={['role-card', 'is-master', selected === 'master' ? 'is-selected' : ''].join(' ')}
+            aria-pressed={selected === 'master'}
+            disabled={!!master && master.id !== state.you}
+            onClick={() => choose('master')}
+          >
+            <img className="role-photo" src={art(PHOTO.master)} alt="" />
+            <b>Maestro</b>
+            <small>{master && master.id !== state.you ? `Lo es ${master.name}` : 'Construye la mazmorra'}</small>
+          </button>
+          <button
+            type="button"
+            className={['role-card', 'is-hero', selected === 'hero' ? 'is-selected' : ''].join(' ')}
+            aria-pressed={selected === 'hero'}
+            disabled={heroes.length >= MAX_HEROES && self?.role !== 'hero'}
+            onClick={() => choose('hero')}
+          >
+            <img className="role-photo" src={art(PHOTO.party)} alt="" />
+            <b>Héroes</b>
+            <small>
+              {heroes.length}/{MAX_HEROES} · Eligen su héroe al llegar
+            </small>
+          </button>
         </div>
         <div className="lobby-actions">
           <button type="button" className="ui-button ui-button-blue with-icon" onClick={invite}>

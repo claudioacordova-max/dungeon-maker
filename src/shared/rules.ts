@@ -1,3 +1,4 @@
+import type { HeroClass, PassiveId } from './protocol.ts'
 // Balance numbers. The designer owns those listed in DESIGN.md "Números"; change them only on request.
 export const TEAM_LIVES = 3
 // One more team life with 4 heroes (designer, 2026-11-21).
@@ -29,6 +30,26 @@ export const CINEMATIC_SECONDS = 4 // boss entrance: the Maestro possesses the b
 // Seconds before the Maestro can summon again: after a slime summoned into a fight, or anywhere else (designer,
 // 2026-11-22). It never lands closer than `minHeroDistance` cells to a hero, and does not count toward the room's cap.
 export const SUMMON = { fightCooldown: 30, calmCooldown: 60, minHeroDistance: 2.5 } as const
+
+// Passives (designer, 2026-11-22; numbers are proposals except the archer's 3 %): two per class to choose from.
+//   recover: when the hero's room is cleared of enemies, it recovers `heal` hit(s).
+//   tough: `chance` of shrugging off a hit.
+//   keenEye: `chance` that a basic arrow is critical (x`mult` damage).
+//   focus: each enemy the hero defeats gives back `mana`.
+export const PASSIVES = {
+  recover: { heal: 1 },
+  tough: { chance: 0.1 },
+  keenEye: { chance: 0.03, mult: 2 },
+  focus: { mana: 1 },
+} as const
+export const CLASS_PASSIVES: Record<HeroClass, readonly [PassiveId, PassiveId]> = {
+  melee: ['recover', 'tough'],
+  ranged: ['keenEye', 'recover'],
+  priest: ['focus', 'recover'],
+  mage: ['focus', 'recover'],
+}
+// The forest clearing south of the start room where the heroes start (cells deep; as wide as a room).
+export const ENTRANCE_DEPTH = 8
 
 // Feel and tuning values chosen by the agent (not in DESIGN.md).
 export const MAX_HEROES = 4

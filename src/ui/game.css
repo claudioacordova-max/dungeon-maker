@@ -1095,3 +1095,63 @@
     display: block;
   }
 }
+
+/* Pops over a hero's head: a potion drunk ("+2") or its passive triggered (the passive's name). */
+.world-label {
+  position: relative;
+}
+
+.world-pop {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  font-size: 1.9em;
+  line-height: 1;
+  white-space: nowrap;
+  -webkit-text-stroke: 4px var(--ink);
+  paint-order: stroke fill;
+  animation: world-pop 1.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+.world-pop.is-potion {
+  color: #ff6b93;
+}
+
+.world-pop.is-boon {
+  color: #ffd45e;
+  font-size: 1.15em;
+  animation-delay: 0.05s;
+}
+
+@keyframes world-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0.6em) scale(0.5);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(-50%, -0.1em) scale(1.25);
+  }
+  28% {
+    transform: translate(-50%, -0.2em) scale(1);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -1.6em) scale(1);
+  }
+}
+
+/* The hit pips flash pink a few times after a potion. */
+.world-label.is-healed .world-hp {
+  animation: hp-healed 0.35s ease-in-out 4;
+}
+
+@keyframes hp-healed {
+  50% {
+    background: #ff6b93;
+    box-shadow: 0 0 0.6em #ff6b93;
+  }
+}

@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { me, useNet } from '../net/connection'
 import { MAX_ROOMS } from '../shared/rules'
 import { AttackStick, MoveStick, SpecialStick } from './Controls'
 import MasterHud from './MasterHud'
 import SoundToggle from './SoundToggle'
-import { ExitIcon, HeartIcon, PotionIcon, SkullIcon } from './icons'
-import { PLAYER_COLORS } from './screens'
+import EntrancePick from './EntrancePick'
+import { ExitIcon, HeartIcon, PassiveIcon, PotionIcon, SkullIcon } from './icons'
+import { PASSIVE_INFO, PLAYER_COLORS } from './screens'
 
 // In-game HUD over the scene. Heroes: lives, party and the two sticks. Master: map counters and build tools.
 export default function Hud() {
@@ -33,6 +34,7 @@ export default function Hud() {
             <PotionIcon />
             <b>{s.potions}</b>
           </span>
+          {own?.passive && <PassiveChip id={own.passive} boons={own.boons} />}
         </div>
         )}
         <div className="chip rooms" aria-label={`Habitaciones ${s.normalRooms} de ${MAX_ROOMS}`}>
@@ -68,8 +70,8 @@ export default function Hud() {
 
       {isMaster ? (
         <MasterHud s={s} />
-      ) : s.introWaiting.length > 0 ? (
-        <Intro waiting={s.introWaiting} you={state.you} total={s.heroes.length} />
+      ) : s.introWaiting.length > 0 && own ? (
+        <EntrancePick s={s} own={own} />
       ) : s.cinematic ? (
         <div className="cinema-bars" aria-hidden="true" />
       ) : (
@@ -87,39 +89,39 @@ export default function Hud() {
         )
       )}
       {own?.dead && <div className="down-banner">Reapareciendo…</div>}
+      {own && <PotionFlash drinks={own.drinks} />}
     </div>
   )
 }
 
-// The story the heroes read at the start while the Maestro begins to build (fixed text, designer 2026-11-21).
-function Intro({ waiting, you, total }: { waiting: string[]; you: string | null; total: number }) {
-  const send = useNet((st) => st.send)
-  const [pressed, setPressed] = useState(false)
-  const done = pressed || (you !== null && !waiting.includes(you))
+// The own hero's passive, small next to the potions; it bounces when the passive triggers.
+function PassiveChip({ id, boons }: { id: keyof typeof PASSIVE_INFO; boons: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const last = useRef(boons)
+  useEffect(() => {
+    if (boons === last.current) return
+    last.current = boons
+    const el = ref.current
+    if (!el) return
+    el.classList.remove('is-active')
+    void el.offsetWidth
+    el.classList.add('is-active')
+  }, [boons])
   return (
-    <div className="intro" role="dialog" aria-label="Historia">
-      <div className="intro-card panel">
-        <h2>La mazmorra despierta</h2>
-        <p>Bajo la montaña, el Maestro de la mazmorra levanta sus salas una a una, y cada una guarda un peligro nuevo.</p>
-        <p>Nadie que haya entrado ha vuelto a salir. Ustedes son los primeros en intentarlo juntos: crucen sus salas, sobrevivan a sus trampas y derroten a su guardián.</p>
-        <p className="intro-last">El Maestro ya los está mirando.</p>
-        {done ? (
-          <p className="intro-wait">
-            Esperando a los demás héroes · {total - waiting.length}/{total}
-          </p>
-        ) : (
-          <button
-            type="button"
-            className="ui-button ui-button-primary"
-            onClick={() => {
-              setPressed(true)
-              send({ type: 'introReady' })
-            }}
-          >
-            Entrar a la mazmorra
-          </button>
-        )}
-      </div>
-    </div>
+    <span ref={ref} className="passive-chip" title={PASSIVE_INFO[id].name} aria-label={`Pasiva: ${PASSIVE_INFO[id].name}`}>
+      <PassiveIcon id={id} />
+    </span>
   )
+}
+
+// A pink glow around the screen edges when the own hero drinks a potion.
+function PotionFlash({ drinks }: { drinks: number }) {
+  const [flash, setFlash] = useState(0)
+  const last = useRef(drinks)
+  useEffect(() => {
+    if (drinks === last.current) return
+    last.current = drinks
+    setFlash((f) => f + 1)
+  }, [drinks])
+  return flash > 0 ? <div key={flash} className="potion-flash" aria-hidden="true" /> : null
 }

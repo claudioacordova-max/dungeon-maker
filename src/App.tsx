@@ -10,19 +10,18 @@ import { LoadingScreen } from './ui/screens'
 // fetched in the background from the lobby (preloadGame) and only drawn during a match.
 // ?models shows every 3D model and its animations (art review), instead of the game.
 const SHOWCASE = new URLSearchParams(location.search).has('models')
+// ?photos renders the menu portraits from the models (see PhotoStudio.tsx).
+const PHOTOS = new URLSearchParams(location.search).has('photos')
 
 const GameView = lazy(() => import('./scene/GameView'))
 const Showcase = lazy(() => import('./models/Showcase'))
+const PhotoStudio = lazy(() => import('./ui/PhotoStudio'))
 
 export default function App() {
   useEffect(startInput, [])
   const inMatch = useNet((s) => s.status === 'room' && s.phase !== 'lobby')
-  if (SHOWCASE) {
-    return (
-      <Suspense fallback={null}>
-        <Showcase />
-      </Suspense>
-    )
+  if (SHOWCASE || PHOTOS) {
+    return <Suspense fallback={null}>{PHOTOS ? <PhotoStudio /> : <Showcase />}</Suspense>
   }
 
   const game = (

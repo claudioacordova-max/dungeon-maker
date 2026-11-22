@@ -760,3 +760,83 @@
     margin-inline: auto;
   }
 }
+
+/* ---------- Lobby: only Maestro or hero (heroes pick who they are at the dungeon entrance) ---------- */
+.role-cards {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 0.5em;
+  width: 100%;
+}
+
+.role-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15em;
+  min-width: 0;
+  padding: 0.3em 0.35em 0.5em;
+  overflow: hidden;
+  color: #fff;
+  font: inherit;
+  font-weight: 400;
+  background: radial-gradient(circle at 50% 38%, #7a5ad8 0, #4a3392 45%, #2d1d63 100%);
+  border: 0.16em solid var(--ink);
+  border-radius: 0.6em;
+  box-shadow: inset 0 0 0 0.12em #7b5fd0, 0 0.22em 0 var(--ink);
+  cursor: pointer;
+  pointer-events: auto;
+  container-type: inline-size;
+  transition: transform 100ms;
+}
+
+.role-card.is-master {
+  background: radial-gradient(circle at 50% 38%, #b04fe0 0, #5b2a92 45%, #2d1d63 100%);
+}
+
+.role-card:active:not(:disabled) {
+  transform: translateY(0.12em);
+}
+
+.role-card.is-selected {
+  box-shadow: inset 0 0 0 0.16em var(--gold), 0 0 0.9em rgb(255 197 51 / 0.65), 0 0.22em 0 var(--ink);
+  background: radial-gradient(circle at 50% 38%, #fff1b0 0, #ffd45e 40%, #e59400 100%);
+}
+
+.role-card:disabled {
+  opacity: 0.55;
+  filter: grayscale(0.5);
+}
+
+.role-photo {
+  width: 100%;
+  height: 7.2em;
+  object-fit: contain;
+  filter: drop-shadow(0 0.15em 0 rgb(23 14 45 / 0.55));
+}
+
+.role-card b {
+  font-size: min(1em, 16cqi);
+  line-height: 1;
+  text-transform: uppercase;
+  -webkit-text-stroke: 0.15em var(--ink);
+  paint-order: stroke fill;
+}
+
+.role-card small {
+  max-width: 100%;
+  padding: 0.15em 0.45em;
+  color: var(--ink);
+  font-size: min(0.56em, 10cqi);
+  line-height: 1.1;
+  text-align: center;
+  background: var(--cream);
+  border-radius: 0.4em;
+}
+
+@container (min-aspect-ratio: 1 / 1.75) {
+  .role-photo {
+    height: 5.6em;
+  }
+}

@@ -12,8 +12,8 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 ## Reglas
 
 <!-- Del diseñador. Prueba de concepto acordada el 2026-11-20; segunda versión el 2026-11-20 (marcada «v2»). -->
-- **Sala de juego estilo Pinturillo:** sin registro, solo un nombre. Alguien crea una sala con código; los demás entran con el código y todos se ven en la lista. Alguien elige "Ser el máster"; el anfitrión empieza cuando hay un máster y al menos un héroe (máximo cuatro héroes).
-- **Clases (v2):** cada héroe elige su clase en la sala de espera; se pueden repetir.
+- **Sala de juego estilo Pinturillo:** sin registro, solo un nombre. Alguien crea una sala con código; los demás entran con el código y todos se ven en la lista. En la sala cada jugador solo elige **Maestro** o **Héroes** (2026-11-22); el anfitrión empieza cuando hay un maestro y al menos un héroe (máximo cuatro héroes).
+- **Clases (v2; elección movida el 2026-11-22):** cada héroe elige su clase ya en la partida, en la entrada de la mazmorra, y no se pueden repetir: cada jugador, un héroe distinto.
   - **Cuerpo a cuerpo:** ataque básico en un cono corto hacia el frente (un golpe de hoja). Manteniendo presionado se carga un ataque en círculo alrededor, de mayor alcance.
   - **A distancia:** ataque básico con un disparo. Manteniendo presionado se carga un disparo certero, que es crítico.
   - **Sacerdotisa elfa** (2026-11-20): usa maná, que se recarga con el tiempo. Básico: un orbe de luz que daña al enemigo que toca y cura al aliado que toca (atraviesa aliados). Potenciado: una oración que cura a todos los aliados cercanos, ella incluida.
@@ -29,14 +29,15 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
   - **Pinchos:** ya no se colocan uno por uno; se compra un paquete que pone varias trampas en lugares fijos pensados para la forma del suelo.
   - **Cofres:** se elige cuántos (máximo 3) y aparecen en lugares fijos de esa forma, siempre sobre suelo y alcanzables.
 - **Sala del jefe prediseñada** (2026-11-21, reemplaza la sala por fases): sin enemigos, trampas ni hoyos; el maestro solo la ubica y no la edita. Al entrar el primer héroe, una cinemática breve que no se puede saltar y que ven todos: héroes y enemigos quietos, el maestro aparece junto al jefe (verde), mira a los héroes, se vuelve, se deshace en humo morado y lo posee; el jefe se vuelve morado con los ojos del maestro. Después el maestro controla al jefe con sus ataques (salto con zona roja y abanico de orbes) hasta el final.
-- **Introducción** (2026-11-21): al empezar, los héroes leen un texto fijo y breve que termina en «Entrar a la mazmorra»; la partida de los héroes empieza cuando todos lo presionan, sin límite de tiempo. Mientras tanto el maestro ya construye y ve cuántos están listos.
+- **Entrada de la mazmorra** (2026-11-22, reemplaza la introducción con texto): los héroes empiezan fuera, en un claro del bosque con un camino hacia la puerta de la mazmorra (que recuerda al logo). Sobre esa vista eligen su héroe (distinto cada uno) y una pasiva, y presionan «Entrar a la mazmorra»; la partida de los héroes empieza cuando todos están listos, sin límite de tiempo. Mientras tanto el maestro ya construye y ve cuántos están listos.
+- **Pasivas** (2026-11-22): cada héroe elige una de dos pasivas pequeñas de su clase. Se ven como un iconito junto a las pociones y, al activarse, el icono salta y su nombre aparece sobre el héroe. Recuperar fuerzas (espadachín, arquera, sacerdotisa, mago): al limpiar de enemigos la sala donde está, recupera golpes. Piel dura (espadachín): a veces ignora un golpe. Ojo certero (arquera): a veces una flecha básica es crítica. Mente clara (sacerdotisa, mago): cada enemigo que derrota le devuelve maná.
 - **Poderes en cada sala lista** (2026-11-22, reemplaza la vista Observar): en una sala lista (o donde ya están los héroes) el maestro tiene sus poderes; en una en obra, las herramientas de construir. Si los héroes aún no entraron, un botón «Editar» la devuelve a obra.
 - **Poseer un enemigo** (2026-11-21, habilidad principal del maestro): toca un enemigo de cualquier sala lista, aunque aún no hayan llegado los héroes (para acomodarlo a mano y esperarlos), y lo controla con joystick y botón de ataque, con la misma fuerza que tiene. Sin costo, sin tiempo límite y sin espera; termina cuando lo suelta o el enemigo muere. Mientras posee, no construye.
 - **Invocar un slime** (2026-11-22, secundaria): se toca «Invocar» y luego el suelo donde aparecerá, en cualquier sala lista salvo la del jefe; nunca pegado a un héroe; no cuenta para el tope de dificultad. La espera es más corta si se invoca en un combate. Sin recurso aparte para los poderes y sin activar trampas.
 - **El cuerpo del maestro** (2026-11-22, reemplaza el modelo fijo en el centro de la sala): el maestro mueve su propio personaje con el joystick, como un héroe, y solo él lo ve (los héroes lo ven solo en la cinemática del jefe). Flota rápido sobre las salas y los espacios libres junto a ellas y atraviesa paredes y puertas: al cruzarlas va un poco más lento y se ve medio disuelto. La sala donde está decide qué puede hacer: construir (sala en obra), usar sus poderes (sala lista) o «Construir aquí» (espacio libre; con 5 salas, la del jefe). Paredes y puertas solo se cruzan, no se recorren a lo largo. Al poseer se vuelve humo y entra en el enemigo; al soltarlo reaparece a su lado (o donde murió). El mapa es un teletransporte: tocar una sala lo lleva ahí. La cámara siempre lo sigue; solo al tocar algo de construir («Construir aquí», el riel, el suelo de una sala en obra) se aleja para mostrar la sala completa, y moverlo vuelve a seguirlo (2026-11-22, tras la primera prueba).
 - **Contador del maestro** (2026-11-22): en la barra de arriba el maestro no ve vidas ni pociones sino una calavera con cuántas veces cayeron los héroes.
 - **Fuera de las salas** (2026-11-22): roca de la montaña alrededor de todo el mapa; los espacios libres se ven como terreno sin excavar con el contorno brillante de la sala futura (rojizo para la del jefe), y solo el maestro los ve.
-- **Pociones** (2026-11-21): los cofres dan pociones a un inventario compartido del equipo, como las vidas. Se usan solas, sin botón: después de un golpe, si al héroe le quedan 1 o 0 golpes y hay pociones, se gasta una y le cura (con 0 no cae). Caer al vacío no se salva con pociones. Tienen su propio sonido y un brillo de curación alrededor del héroe.
+- **Pociones** (2026-11-21): los cofres dan pociones a un inventario compartido del equipo, como las vidas. Se usan solas, sin botón: después de un golpe, si al héroe le quedan 1 o 0 golpes y hay pociones, se gasta una y le cura (con 0 no cae). Caer al vacío no se salva con pociones. Tienen su propio sonido y un brillo de curación alrededor del héroe; desde el 2026-11-22 más visible en combate: el brillo dura casi el doble y es más grande, un «+2» rosado sobre el héroe, su barra parpadea y la pantalla propia se tiñe de rosa en los bordes.
 - **Panel del maestro «Mando del Maestro»** (2026-11-21, diseño C; reacomodado el 2026-11-22): joystick abajo a la izquierda; a la derecha un riel con el enemigo elegido (su lista, con miniatura y costo, se abre hacia la izquierda, y sola al tocar el suelo sin enemigo elegido), suelo, pinchos y cofres; un botón grande abajo a la derecha («Sala lista», «Invocar» o «Construir aquí») con Mapa y Quitar/Editar/Soltar encima; la dificultad arriba. Tocar el suelo pone el enemigo elegido; tocar un enemigo lo quita.
 - **Controles al poseer** (2026-11-22): mientras se mantiene el botón, el suelo muestra el ataque (línea del lanzador, círculo del garrote, flecha de la embestida, círculo del salto y abanico de orbes del jefe); tocar apunta al héroe más cercano y arrastrar apunta a mano; un anillo oscuro en el botón muestra la espera; la cámara sigue al enemigo controlado. Sin cambiar tiempos ni animaciones.
 - **Ataques enemigos anunciados** (2026-11-20): antes de golpear, el enemigo se detiene y marca en el suelo una zona roja que se llena; al llenarse, golpea a quien esté dentro. Golpear a un enemigo lo deja aturdido un instante.
@@ -62,6 +63,7 @@ Aspecto y sensación de un juego de acción móvil al estilo de Brawl Stars: mod
 - Poción (diseñador, 2026-11-21): cura 2 golpes, sin pasar de 4; el cofre da 1, o 2 con probabilidad del 20 %; sin máximo en el inventario.
 - Cuerpo del maestro (diseñador, 2026-11-22): 7,4 casillas/s (casi el doble de un héroe; un 12 % menos que la primera prueba), 70 % al cruzar una pared, humo de 0,5 s al entrar en un enemigo; teletransporte sin espera.
 - Invocar slime (diseñador, 2026-11-22): espera de 30 s si se invocó en una sala con héroes y enemigos, 1 minuto si no; a 2,5 casillas o más de cualquier héroe. Cinemática del jefe: 4 s (propuesta).
+- Pasivas (2026-11-22): Recuperar fuerzas, 1 golpe (diseñador); Ojo certero, 3 % de crítico con doble daño (diseñador: «un 3 % de daño crítico, tal vez»); Piel dura, 10 % (propuesta); Mente clara, 1 de maná por enemigo (propuesta).
 - Reaparición tras caer: 1 s (diseñador).
 - Aviso de ataque enemigo: 0,5 s (diseñador). Aturdimiento del enemigo golpeado: 0,25 s (propuesta).
 - La habitación inicial trae 2 slimes de serie (propuesta).
@@ -111,7 +113,15 @@ Anterior, prueba de concepto multijugador, sin dependencias nuevas (el servidor 
 3. [x] Máster: colocar enemigos, trampas y cofres en la siguiente sala con sus puntos; puertas.
 4. [x] Combate: enemigos que persiguen, ataque automático, golpes, vidas grupales, cofres y final para cada bando.
 
-## Plan actual (2026-11-21, validar al maestro)
+## Plan actual (2026-11-22, entrada de la mazmorra)
+
+1. [x] Sala solo con Maestro o Héroes (fotos de los modelos en vez de las tarjetas pintadas, que se conservan en `public/ui/card-*.webp`).
+2. [x] Héroes fuera, en el claro del bosque; elección de héroe distinto y de pasiva sobre esa vista (servidor y pruebas).
+3. [x] Pasivas, su icono y su efecto; poción más visible.
+4. [ ] Arte de Codex (GPT-6.2-Astra, xhigh): bosque, camino y puerta de la mazmorra.
+5. [ ] Probarlo jugando.
+
+## Plan anterior (2026-11-21, validar al maestro)
 
 1. [x] Servidor: 5 salas, pociones, introducción, posesión, invocación, jefe prediseñado con cinemática y controlado por el maestro (pruebas).
 2. [x] Panel del maestro C (Mando del Maestro), vista Observar y controles de posesión.

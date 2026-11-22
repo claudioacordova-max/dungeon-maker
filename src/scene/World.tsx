@@ -14,8 +14,8 @@ import { latestEnemy, sampleEnemy, sampleHero, sampleOrb, sampleShot } from '../
 import { CHEST_SLOTS, floorCell, SPIKES } from '../shared/layouts'
 import { buildableSlots, DIRS, doorState, isPlaceableCell, overGap, roomAtPoint } from '../shared/map'
 import type { DoorState, EnemyView, HeroView, PlanItem, RoomView, ShotKind, Snapshot, SpikePhase } from '../shared/protocol'
-import { ENEMY, ENEMY_TELEGRAPH, HERO, HERO_HITS, LORD, MAX_ROOMS, POSSESS, ROOM_H, ROOM_W, SUMMON } from '../shared/rules'
-import { PLAYER_COLORS } from '../ui/screens'
+import { ENEMY, ENEMY_TELEGRAPH, ENTRANCE_DEPTH, HERO, HERO_HITS, LORD, MAX_ROOMS, POSSESS, POTION, ROOM_H, ROOM_W, SUMMON } from '../shared/rules'
+import { PASSIVE_INFO, PLAYER_COLORS } from '../ui/screens'
 import { MasterLord } from '../models/Master'
 import { Bedrock, UnbuiltLot } from '../models'
 import { PossessSmoke, PotionFx, SummonFx } from '../models/MagicEffects'
@@ -130,6 +130,11 @@ function CameraRig() {
       cx = (cine.gx + 0.5) * ROOM_W
       cy = (cine.gy + 0.5) * ROOM_H - 1
       dist *= 1.15
+    } else if (!isMaster && s && s.introWaiting.length > 0) {
+      // At the entrance, picking: the clearing and the dungeon gate fill the screen above the picking sheet.
+      cx = ROOM_W / 2
+      cy = -ENTRANCE_DEPTH + 2
+      dist *= 0.75
     } else if (!isMaster && local.ready) {
       cx = local.x
       cy = local.y + 1.6 // look a bit ahead (north): the hero sits lower on the screen
@@ -270,8 +275,14 @@ function EnemyModel({ kind, pose, possessed = false }: { kind: EnemyView['kind']
 }
 
 // A potion drunk by a hero: a red-pink glow around it.
+// Longer and larger than the first version so it reads in the middle of a fight (with the "+2" over the head).
+const POTION_MS = 1700
 function PotionBurst({ at }: { at: () => number }) {
-  return <FxProgress get={() => Math.min(1, (performance.now() - at()) / 900)}>{(p) => <PotionFx progress={p} />}</FxProgress>
+  return (
+    <group scale={1.6}>
+      <FxProgress get={() => Math.min(1, (performance.now() - at()) / POTION_MS)}>{(p) => <PotionFx progress={p} />}</FxProgress>
+    </group>
+  )
 }
 
 function useDrinkClock(hero: HeroView) {
@@ -505,6 +516,14 @@ function OtherHero({ hero, color }: { hero: HeroView; color: string }) {
   )
 }
 
+function pop(root: HTMLElement, kind: string, text: string) {
+  const el = document.createElement('span')
+  el.className = `world-pop ${kind}`
+  el.textContent = text
+  root.appendChild(el)
+  setTimeout(() => el.remove(), 1600)
+}
+
 // Name and hit bar over every hero, for everyone (the healer reads her allies' bars here). Plain DOM elements over
 // the canvas, positioned every frame: no React roots of their own, so heroes falling, dying and coming back can
 // never leave a hero without its bar.
@@ -517,7 +536,9 @@ function HeroLabels() {
     el.className = 'world-labels'
     return el
   }, [])
-  const labels = useRef(new Map<string, { root: HTMLDivElement; name: HTMLSpanElement; pips: HTMLElement[]; text: string; hp: number }>())
+  const labels = useRef(
+    new Map<string, { root: HTMLDivElement; name: HTMLSpanElement; pips: HTMLElement[]; text: string; hp: number; drinks: number; boons: number }>(),
+  )
   useEffect(() => {
     const parent = gl.domElement.parentElement
     parent?.appendChild(layer)
@@ -543,8 +564,20 @@ function HeroLabels() {
         const pips = Array.from({ length: HERO_HITS }, () => bar.appendChild(document.createElement('i')))
         root.append(name, bar)
         layer.appendChild(root)
-        l = { root, name, pips, text: '', hp: -1 }
+        l = { root, name, pips, text: '', hp: -1, drinks: h.drinks, boons: h.boons }
         labels.current.set(h.id, l)
+      }
+      // A potion drunk ("+2", pips flashing) or the passive triggered (its name): a short pop over the head.
+      if (h.drinks !== l.drinks) {
+        l.drinks = h.drinks
+        pop(l.root, 'is-potion', `+${POTION.heal}`)
+        l.root.classList.remove('is-healed')
+        void l.root.offsetWidth
+        l.root.classList.add('is-healed')
+      }
+      if (h.boons !== l.boons) {
+        l.boons = h.boons
+        if (h.passive) pop(l.root, 'is-boon', PASSIVE_INFO[h.passive].name)
       }
       const own = h.id === net.you
       const player = net.players.find((p) => p.id === h.id)
@@ -561,7 +594,7 @@ function HeroLabels() {
       }
       const p = own ? ownPos() : sampleHero(h.id)
       const falling = own ? local.fallAt >= 0 : !!p && !!s && overGap(s.rooms, p.x, p.y, 0.15)
-      if (!p || h.dead || falling) {
+      if (!p || h.dead || falling || !h.chosen) {
         l.root.style.display = 'none'
         continue
       }
@@ -1305,8 +1338,8 @@ export default function World() {
         const player = state.players.find((p) => p.id === h.id)
         const color = PLAYER_COLORS[player?.color ?? 0]
         const own = h.id === state.you
-        if (h.dead) return null
-        return <group key={h.id}>{own ? <OwnHero hero={h} color={color} /> : <OtherHero hero={h} color={color} />}</group>
+        if (h.dead || !h.chosen) return null
+        return <group key={`${h.id}-${h.cls}`}>{own ? <OwnHero hero={h} color={color} /> : <OtherHero hero={h} color={color} />}</group>
       })}
       <HeroLabels />
       <OwnShots />

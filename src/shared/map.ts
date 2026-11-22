@@ -35,7 +35,8 @@ export function neighbour(rooms: readonly MapRoom[], room: MapRoom, dir: Dir): M
 // and come back the way they came); 'locked' while either room is still being built.
 export function doorState(rooms: readonly MapRoom[], room: MapRoom, dir: Dir): DoorState {
   const other = neighbour(rooms, room, dir)
-  if (!other) return 'none'
+  // The start room's south door always leads out to the forest clearing where the heroes start.
+  if (!other) return isStart(room) && dir === 's' ? 'open' : 'none'
   if (!room.ready || !other.ready) return 'locked'
   return room.enemies === 0 || other.enemies === 0 ? 'open' : 'closed'
 }
@@ -68,9 +69,20 @@ export function canAdd(plan: readonly PlanItem[], layout: Layout, kind: Placeabl
   return difficulty(plan, layout) + R.DIFFICULTY[kind] <= cap
 }
 
-// True when a circle of radius r at (x, y) is on walkable floor: inside a room's floor, or crossing a wall
-// through an open doorway.
+// The start room is always at grid (0, 0); the entrance clearing lies right south of it.
+const isStart = (room: { gx: number; gy: number }) => room.gx === 0 && room.gy === 0
+
+// The forest clearing outside the dungeon: as wide as a room, ENTRANCE_DEPTH cells deep, south of the start room;
+// near the wall only the doorway is open.
+export function inEntrance(x: number, y: number, r: number): boolean {
+  if (y >= 0 || x < r || x > R.ROOM_W - r || y < -R.ENTRANCE_DEPTH + r) return false
+  return y <= -r || Math.abs(x - R.ROOM_W / 2) <= R.DOOR_HALF - r
+}
+
+// True when a circle of radius r at (x, y) is on walkable floor: inside a room's floor, crossing a wall through an
+// open doorway, or out in the entrance clearing.
 export function walkable(rooms: readonly MapRoom[], x: number, y: number, r: number): boolean {
+  if (y < 0) return inEntrance(x, y, r)
   const room = roomAtPoint(rooms, x, y)
   if (!room || !room.ready) return false
   const o = roomOrigin(room)

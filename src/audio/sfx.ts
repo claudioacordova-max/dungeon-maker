@@ -163,6 +163,11 @@ export const sfx = {
       ;[0, 1, 2, 3].forEach((i) => tone({ type: 'sine', f0: 500 + i * 180, f1: 620 + i * 200, dur: 0.07, vol: 0.13, at: 0.06 + i * 0.05 }, s))
       ;[659, 988].forEach((f, i) => tone({ type: 'triangle', f0: f, f1: f * 1.04, dur: 0.3, vol: 0.14, at: 0.26 + i * 0.07, attack: 0.03 }, s))
     }, 120),
+  // A hero's passive triggered: a short golden sparkle.
+  boon: (v = 1) =>
+    play('boon', v, (s) => {
+      ;[1047, 1319, 1568].forEach((f, i) => tone({ type: 'triangle', f0: f, f1: f * 1.02, dur: 0.14, vol: 0.12, at: i * 0.05 }, s))
+    }, 150),
   // The Maestro takes or drops an enemy: a dark whoosh.
   possess: (v = 1) =>
     play('possess', v, (s) => {

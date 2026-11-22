@@ -119,3 +119,36 @@ export function SkullIcon() {
     </svg>
   )
 }
+
+// The four passives: recover (heart with a rising arrow), tough (shield), keen eye (eye), focus (mana drop).
+export function PassiveIcon({ id }: { id: 'recover' | 'tough' | 'keenEye' | 'focus' }) {
+  return (
+    <svg className="icon passive-icon" viewBox="0 0 16 16" aria-hidden="true">
+      {id === 'recover' && (
+        <>
+          <path d="M8 14S1.5 10 1.5 5.6A3.4 3.4 0 0 1 8 4a3.4 3.4 0 0 1 6.5 1.6C14.5 10 8 14 8 14z" fill="#4ade80" stroke="#1a0f2e" strokeWidth="0.9" />
+          <path d="M8 11V6.2M5.9 8.2 8 6l2.1 2.2" stroke="#fff" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      )}
+      {id === 'tough' && (
+        <>
+          <path d="M8 1.5 13.5 3.5v4c0 3.4-2.4 5.8-5.5 7-3.1-1.2-5.5-3.6-5.5-7v-4z" fill="#93c5fd" stroke="#1a0f2e" strokeWidth="0.9" />
+          <path d="M8 3.2v9.6M4.2 6.6h7.6" stroke="#1e3a8a" strokeWidth="1.2" />
+        </>
+      )}
+      {id === 'keenEye' && (
+        <>
+          <path d="M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8z" fill="#fde68a" stroke="#1a0f2e" strokeWidth="0.9" />
+          <circle cx="8" cy="8" r="2.6" fill="#ef4444" stroke="#1a0f2e" strokeWidth="0.8" />
+          <circle cx="8" cy="8" r="1" fill="#1a0f2e" />
+        </>
+      )}
+      {id === 'focus' && (
+        <>
+          <path d="M8 1.5C8 1.5 3 7.2 3 10.2A5 5 0 0 0 13 10.2C13 7.2 8 1.5 8 1.5z" fill="#60a5fa" stroke="#1a0f2e" strokeWidth="0.9" />
+          <path d="M8 7.5v5M5.5 10h5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
+        </>
+      )}
+    </svg>
+  )
+}

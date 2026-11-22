@@ -78,7 +78,7 @@ export default function MasterHud({ s }: { s: Snapshot }) {
       )}
       {waiting > 0 && (
         <div className="master-top intro-status">
-          Los héroes leen la historia · listos {s.heroes.length - waiting}/{s.heroes.length}
+          Los héroes eligen en la entrada · listos {s.heroes.length - waiting}/{s.heroes.length}
         </div>
       )}
       {/* One movement stick for the body and for a possessed enemy: it must not be rebuilt when the room changes. */}

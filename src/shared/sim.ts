@@ -17,7 +17,7 @@ import {
   type MapRoom,
 } from './map.ts'
 import { CHEST_SLOTS, EMPTY_LAYOUT, floorCell, inGap, SHAPES, SPIKES, touchesGap, type Layout } from './layouts.ts'
-import type { EnemyKind, HeroAct, HeroClass, PlanItem, Placeable, RoomKind, ShotKind, Snapshot, SpikePhase } from './protocol.ts'
+import type { EnemyKind, HeroAct, HeroClass, PassiveId, PlanItem, Placeable, RoomKind, ShotKind, Snapshot, SpikePhase } from './protocol.ts'
 import * as R from './rules.ts'
 
 export { moveHero }
@@ -40,6 +40,9 @@ export type Hero = {
   mana: number
   heals: number
   drinks: number
+  chosen: boolean // picked its hero at the entrance
+  passive: PassiveId | null
+  boons: number // times its passive triggered
   shots: Map<number, { charged: boolean; at: number; used: boolean; healed: Set<string> }>
 }
 
@@ -72,6 +75,7 @@ type Enemy = {
   dashUntil: number // possessed slime: game time its dash ends
   steerAt: number // possessed: game time of the last position from the Maestro's device
   movedAt: number // possessed: game time it last moved (walk animation)
+  lastHero: string | null // hero whose attack hit it last (credited when it dies)
 }
 
 type Room = MapRoom & { kind: RoomKind; entered: boolean; plan: PlanItem[]; layout: Layout }
@@ -101,7 +105,7 @@ export type Game = {
   bossHp: number
   potions: number // the team's shared potions
   rand: () => number // chance (tests replace it)
-  intro: Set<string> // heroes still reading the intro: nothing moves until it is empty
+  intro: Set<string> // heroes still picking hero and passive at the entrance: nothing moves until it is empty
   cinematic: { room: number; at: number } | null // boss entrance, from game time `at`
   possessed: number | null // enemy the Maestro controls
   summonAt: number // game time the Maestro can summon again
@@ -125,7 +129,8 @@ function teleport(game: Game, hero: Hero, x: number, y: number) {
   hero.lastPosTime = game.time
 }
 
-export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
+// Heroes given without a class pick it at the entrance (pickClass); tests may pass one to skip that.
+export function createGame(heroes: { id: string; cls?: HeroClass }[]): Game {
   const game: Game = {
     time: 0,
     lives: R.teamLives(heroes.length),
@@ -161,11 +166,12 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
   game.rooms.push(start)
   spawnRoom(game, start)
   const c = roomCenter(start)
+  // Out in the forest clearing south of the start room, facing the dungeon gate.
   game.heroes = heroes.map((h, i) => ({
     id: h.id,
-    cls: h.cls,
-    x: c.x + (i - (heroes.length - 1) / 2) * 1.2,
-    y: 2,
+    cls: h.cls ?? 'melee',
+    x: c.x + (i - (heroes.length - 1) / 2) * 1.4,
+    y: -R.ENTRANCE_DEPTH / 2,
     facing: Math.PI / 2,
     epoch: 1,
     lastPosTime: 0,
@@ -176,9 +182,12 @@ export function createGame(heroes: { id: string; cls: HeroClass }[]): Game {
     readyAt: 0,
     lastAttackAt: -99,
     act: null,
-    mana: usesMana(h.cls) ? R.MANA[h.cls].max : 0,
+    mana: h.cls && usesMana(h.cls) ? R.MANA[h.cls].max : 0,
     heals: 0,
     drinks: 0,
+    chosen: !!h.cls,
+    passive: null,
+    boons: 0,
     shots: new Map(),
   }))
   return game
@@ -214,6 +223,7 @@ function spawnEnemy(game: Game, room: Room, kind: EnemyKind, x: number, y: numbe
     dashUntil: 0,
     steerAt: 0,
     movedAt: -99,
+    lastHero: null,
   })
 }
 
@@ -404,8 +414,33 @@ export function reportPosition(game: Game, heroId: string, x: number, y: number,
   }
 }
 
-export function introReady(game: Game, heroId: string) {
+// At the entrance each hero picks a hero nobody else has; changing it clears the passive (they are per hero).
+export function pickClass(game: Game, heroId: string, cls: HeroClass): boolean {
+  const hero = game.heroes.find((h) => h.id === heroId)
+  if (!hero || !game.intro.has(heroId) || !R.CLASS_PASSIVES[cls]) return false
+  if (game.heroes.some((h) => h !== hero && h.chosen && h.cls === cls)) return false
+  if (hero.chosen && hero.cls === cls) return true
+  hero.cls = cls
+  hero.chosen = true
+  hero.passive = null
+  hero.mana = usesMana(cls) ? R.MANA[cls].max : 0
+  teleport(game, hero, hero.x, hero.y) // new epoch: the device adopts the new hero
+  return true
+}
+
+export function pickPassive(game: Game, heroId: string, passive: PassiveId): boolean {
+  const hero = game.heroes.find((h) => h.id === heroId)
+  if (!hero || !hero.chosen || !game.intro.has(heroId) || !R.CLASS_PASSIVES[hero.cls].includes(passive)) return false
+  hero.passive = passive
+  return true
+}
+
+// Ready to go in ("Entrar a la mazmorra"): only with a hero and a passive picked.
+export function introReady(game: Game, heroId: string): boolean {
+  const hero = game.heroes.find((h) => h.id === heroId)
+  if (!hero?.chosen || !hero.passive) return false
   game.intro.delete(heroId)
+  return true
 }
 
 function enemyPositionAt(game: Game, enemyId: number, time: number) {
@@ -426,6 +461,7 @@ function damageChicken(game: Game, enemy: Enemy) {
 
 function hurtEnemy(game: Game, hero: Hero, enemy: Enemy, damage: number) {
   enemy.hp -= damage
+  enemy.lastHero = hero.id
   damageChicken(game, enemy)
   enemy.stun = R.ENEMY_HIT_STUN
   if (enemy.kind !== 'king' && enemy.kind !== 'ogre' && enemy.id !== game.possessed) {
@@ -546,7 +582,13 @@ export function shotHit(game: Game, heroId: string, seq: number, target: number,
   if (hero.cls === 'mage' && shot.charged) polymorph(game, enemy)
   else {
     const spec = R.HERO[hero.cls][kind] as { damage: number }
-    hurtEnemy(game, hero, enemy, spec.damage)
+    let damage = spec.damage
+    // Keen eye: now and then a basic arrow is critical.
+    if (hero.passive === 'keenEye' && hero.cls === 'ranged' && !shot.charged && game.rand() < R.PASSIVES.keenEye.chance) {
+      damage *= R.PASSIVES.keenEye.mult
+      hero.boons += 1
+    }
+    hurtEnemy(game, hero, enemy, damage)
     if (hero.cls === 'mage') {
       if (enemy.burn <= 0) enemy.burnTick = 1
       enemy.burn = R.BURN.seconds
@@ -573,6 +615,12 @@ export function shotHeal(game: Game, heroId: string, seq: number, allyId: string
 
 function damageHero(game: Game, hero: Hero, hits = 1) {
   if (hero.dead || hero.invulnerable > 0 || game.result !== 'playing') return false
+  // Tough skin: now and then a hit is shrugged off (still the short protection after it).
+  if (hero.passive === 'tough' && game.rand() < R.PASSIVES.tough.chance) {
+    hero.invulnerable = R.HIT_INVULNERABLE
+    hero.boons += 1
+    return false
+  }
   hero.hp -= hits
   hero.invulnerable = R.HIT_INVULNERABLE
   // A shared potion is drunk by itself when the hit leaves the hero about to fall (it saves even a fatal hit).
@@ -654,11 +702,35 @@ export function removeHero(game: Game, heroId: string) {
 // ---------- Simulation ----------
 
 function finishEnemies(game: Game) {
-  const killedBoss = game.enemies.some((e) => e.kind === 'king' && e.hp <= 0)
+  const dead = game.enemies.filter((e) => e.hp <= 0)
+  const killedBoss = dead.some((e) => e.kind === 'king')
   game.enemies = game.enemies.filter((e) => e.hp > 0)
   if (killedBoss && game.result === 'playing') game.result = 'heroes-won'
   if (game.possessed !== null && !game.enemies.some((e) => e.id === game.possessed)) game.possessed = null
   countEnemies(game)
+  if (dead.length > 0) passivesOnKills(game, dead)
+}
+
+// Focus: mana back for each enemy the hero defeated. Recover: a hit back for the living heroes in a room that has
+// just been cleared.
+function passivesOnKills(game: Game, dead: Enemy[]) {
+  for (const enemy of dead) {
+    const hero = game.heroes.find((h) => h.id === enemy.lastHero)
+    if (hero?.passive === 'focus' && !hero.dead && usesMana(hero.cls)) {
+      hero.mana = Math.min(R.MANA[hero.cls].max, hero.mana + R.PASSIVES.focus.mana)
+      hero.boons += 1
+    }
+  }
+  for (const room of game.rooms) {
+    if (room.enemies > 0 || !dead.some((e) => e.room === room.id)) continue
+    for (const hero of game.heroes) {
+      if (hero.passive !== 'recover' || hero.dead || roomAtPoint(game.rooms, hero.x, hero.y) !== room) continue
+      if (heal(hero, R.PASSIVES.recover.heal)) {
+        hero.heals -= 1 // its own effect, not the priestess's
+        hero.boons += 1
+      }
+    }
+  }
 }
 
 function throwOrb(game: Game, enemy: Enemy, dir: number) {
@@ -1096,6 +1168,9 @@ export function snapshot(game: Game, forMaster: boolean): Snapshot {
       mana: r2(h.mana),
       heals: h.heals,
       drinks: h.drinks,
+      chosen: h.chosen,
+      passive: h.passive,
+      boons: h.boons,
     })),
     enemies: game.enemies.map((e) => ({
       id: e.id,

@@ -5,6 +5,8 @@ import { buildableSlots, difficulty, doorState, walkable } from '../src/shared/m
 import { CHEST_SLOTS, floorCell, SHAPES, SPIKES } from '../src/shared/layouts.ts'
 import * as R from '../src/shared/rules.ts'
 import {
+  pickClass,
+  pickPassive,
   attack,
   build,
   createGame as createGameRaw,
@@ -32,10 +34,12 @@ import {
   type Game,
 } from '../src/shared/sim.ts'
 
-// Most tests skip the intro (every hero already pressed "Entrar a la mazmorra").
+// Most tests skip the entrance (every hero already picked and pressed "Entrar a la mazmorra") and start with the
+// heroes just inside the start room.
 function createGame(heroes: Parameters<typeof createGameRaw>[0]) {
   const g = createGameRaw(heroes)
   g.intro.clear()
+  for (const h of g.heroes) h.y = 2
   return g
 }
 
@@ -517,6 +521,10 @@ test('intro: nothing moves until every hero pressed "Entrar a la mazmorra"; the 
   ])
   const slime = g.enemies[0]
   const hero = g.heroes[0]
+  for (const h of g.heroes) {
+    h.y = 2
+    h.passive = 'recover'
+  }
   slime.x = hero.x + 3
   slime.y = hero.y
   const x0 = slime.x
@@ -536,6 +544,66 @@ test('intro: nothing moves until every hero pressed "Entrar a la mazmorra"; the 
   introReady(g, 'b')
   run(g, 0.5)
   assert.ok(slime.x < x0, 'the match runs')
+})
+
+test('entrance: heroes start outside, pick different heroes and a passive of theirs, then go in', () => {
+  const g = createGameRaw([{ id: 'a' }, { id: 'b' }])
+  const [a, b] = g.heroes
+  assert.ok(a.y < 0 && !a.chosen, 'out in the clearing, no hero yet')
+  assert.ok(walkable(g.rooms, a.x, a.y, R.HERO_RADIUS), 'the clearing is walkable')
+  assert.ok(walkable(g.rooms, R.ROOM_W / 2, 0, R.HERO_RADIUS), 'through the gate')
+  assert.ok(!walkable(g.rooms, 1, -0.1, R.HERO_RADIUS), 'but not through the wall beside it')
+  assert.equal(doorState(g.rooms, start(g), 's'), 'open')
+  assert.equal(introReady(g, 'a'), false, 'nothing picked yet')
+  assert.ok(pickClass(g, 'a', 'mage'))
+  assert.equal(pickClass(g, 'b', 'mage'), false, 'each hero is different')
+  assert.ok(pickClass(g, 'b', 'ranged'))
+  assert.equal(a.mana, R.MANA.mage.max)
+  assert.equal(pickPassive(g, 'a', 'tough'), false, 'not a passive of the mage')
+  assert.ok(pickPassive(g, 'a', 'focus'))
+  assert.ok(pickClass(g, 'a', 'priest'), 'changing hero')
+  assert.equal(a.passive, null, 'clears the passive')
+  assert.ok(pickPassive(g, 'a', 'recover'))
+  assert.ok(introReady(g, 'a'))
+  assert.equal(pickClass(g, 'a', 'melee'), false, 'no changes once ready')
+  assert.ok(pickPassive(g, 'b', 'keenEye') && introReady(g, 'b'))
+  assert.equal(g.intro.size, 0)
+  assert.equal(b.cls, 'ranged')
+})
+
+test('passives: recover after clearing a room, tough skin, keen eye, focus', () => {
+  const g = createGame([
+    { id: 'a', cls: 'melee' },
+    { id: 'b', cls: 'mage' },
+  ])
+  const [a, b] = g.heroes
+  a.passive = 'recover'
+  b.passive = 'focus'
+  a.hp = 2
+  b.mana = 1 // spent on the spark
+  const slimes = g.enemies.filter((e) => e.room === start(g).id)
+  for (const e of slimes) {
+    e.x = a.x + 1
+    e.y = a.y
+    e.hp = 1
+  }
+  attack(g, 'a', 1, 'basic', 0, [slimes[0].id], 0)
+  assert.equal(a.hp, 2, 'one enemy left: no recovery yet')
+  // The mage's spark finishes the last one: mana back for him, a hit back for the swordsman.
+  attack(g, 'b', 1, 'basic', Math.atan2(slimes[1].y - b.y, slimes[1].x - b.x), [], 0)
+  assert.ok(shotHit(g, 'b', 1, slimes[1].id, 0))
+  assert.equal(a.hp, 3)
+  assert.equal(a.boons, 1)
+  assert.equal(b.boons, 1)
+  assert.ok(b.mana >= 1 - 0.01 && b.mana < R.MANA.mage.max)
+  // Tough skin: a lucky roll shrugs the hit off.
+  a.passive = 'tough'
+  a.invulnerable = 0
+  g.rand = () => 0
+  g.enemies.push({ ...slimes[0], id: 999, hp: 3, x: a.x + 0.5, y: a.y, touched: new Map() })
+  assert.equal(reportTouched(g, 'a', 999), false)
+  assert.equal(a.hp, 3)
+  assert.equal(a.boons, 2)
 })
 
 test('boss: hp +5% per extra hero; the entrance freezes everyone, then the Maestro controls the boss', () => {

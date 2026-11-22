@@ -1,5 +1,5 @@
 // One Durable Object per room code: keeps the lobby and runs the authoritative game loop in memory.
-import { HERO_CLASSES, type ClientMessage, type HeroClass, type LobbyPlayer, type Phase, type Role, type ServerMessage } from '../src/shared/protocol.ts'
+import { HERO_CLASSES, PASSIVE_IDS, type ClientMessage, type HeroClass, type LobbyPlayer, type Phase, type Role, type ServerMessage } from '../src/shared/protocol.ts'
 import { MAX_HEROES, TICK_HZ } from '../src/shared/rules.ts'
 import {
   attack,
@@ -8,6 +8,8 @@ import {
   demolish,
   openChest,
   introReady,
+  pickClass,
+  pickPassive,
   possess,
   release,
   steer,
@@ -162,12 +164,6 @@ export class Room {
         return this.setRole(player, message.role)
       case 'start':
         return this.start(player)
-      case 'class':
-        if (this.phase === 'lobby' && HERO_CLASSES.includes(message.cls as HeroClass)) {
-          player.cls = message.cls as HeroClass
-          this.broadcastLobby()
-        }
-        return
       case 'ping':
         return this.send(player, { type: 'pong', t: Number(message.t) })
       case 'leave':
@@ -199,6 +195,12 @@ export class Room {
           return
         case 'openChest':
           openChest(game, player.id, Number(message.item))
+          return
+        case 'class':
+          if (HERO_CLASSES.includes(message.cls as HeroClass)) pickClass(game, player.id, message.cls as HeroClass)
+          return
+        case 'passive':
+          if (PASSIVE_IDS.includes(message.passive)) pickPassive(game, player.id, message.passive)
           return
         case 'introReady':
           introReady(game, player.id)
@@ -267,7 +269,7 @@ export class Room {
     if (this.phase !== 'lobby' || player.id !== this.host) return
     const heroes = this.players.filter((p) => p.role === 'hero')
     if (!this.players.some((p) => p.role === 'master') || heroes.length < 1 || heroes.length > MAX_HEROES) return
-    this.game = createGame(heroes.map((h) => ({ id: h.id, cls: h.cls })))
+    this.game = createGame(heroes.map((h) => ({ id: h.id })))
     this.phase = 'playing'
     this.broadcastLobby()
     this.lastTick = Date.now()

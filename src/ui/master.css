@@ -384,50 +384,290 @@
   bottom: 0;
 }
 
-/* The heroes' story at the start. */
-.intro {
+/* The dungeon entrance: the heroes pick hero and passive over the forest clearing (seen above the sheet). */
+.entrance {
   position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: var(--edge);
-  background: var(--scrim);
+  inset: auto 0 0;
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--edge) calc(var(--edge) + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, transparent, rgb(26 13 51 / 0.55) 35%);
   pointer-events: auto;
 }
 
-.intro-card {
+.entrance-card {
   display: flex;
   flex-direction: column;
-  gap: 0.7em;
-  max-width: calc(340 * var(--ui-px));
-  padding: 1.2em 1.1em;
-  text-align: center;
+  align-items: stretch;
+  gap: 0.55em;
+  width: 100%;
+  max-width: calc(420 * var(--ui-px));
+  padding: 0.75em 0.7em 0.8em;
   background: linear-gradient(180deg, #4a2c7a, #2a1747);
+  border: 0.16em solid #1a0d33;
+  border-radius: 0.9em;
+  box-shadow: inset 0 0 0 0.12em #ffc533, 0 0.3em 0 #1a0d33;
 }
 
-.intro-card h2 {
+.entrance-title {
   margin: 0;
   color: #ffce2e;
-  font-size: 1.35em;
-  -webkit-text-stroke: 0.06em var(--ink);
+  font-size: 1.2em;
+  text-align: center;
+  -webkit-text-stroke: 0.12em #1a0d33;
   paint-order: stroke fill;
 }
 
-.intro-card p {
+.entrance-party {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.3em;
   margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entrance-party li {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.15em 0.5em;
   color: #f3e8ff;
-  font-size: 0.78em;
-  font-weight: 700;
-  line-height: 1.45;
+  font-size: 0.66em;
+  background: rgb(26 13 51 / 0.6);
+  border-radius: 999px;
 }
 
-.intro-card .intro-last {
-  color: #fcd34d;
+.entrance-party li.is-ready {
+  box-shadow: inset 0 0 0 0.12em #4ade80;
 }
 
-.intro-card .intro-wait {
+.entrance-party-pick {
   color: #c4b5fd;
-  font-size: 0.72em;
+}
+
+.entrance-check {
+  color: #4ade80;
+}
+
+.entrance-wait {
+  margin: 0.4em 0;
+  color: #fcd34d;
+  font-size: 0.9em;
+  text-align: center;
+}
+
+.hero-picks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45em;
+}
+
+.hero-picks.is-compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.3em;
+}
+
+.hero-pick {
+  display: grid;
+  grid-template-columns: 42% 1fr;
+  grid-template-rows: 1fr auto;
+  align-items: center;
+  column-gap: 0.3em;
+  min-width: 0;
+  padding: 0.2em 0.35em 0.2em 0.15em;
+  overflow: hidden;
+  color: #fff;
+  font: inherit;
+  font-weight: 400;
+  text-align: left;
+  background: radial-gradient(circle at 22% 45%, #7a5ad8 0, #4a3392 50%, #2d1d63 100%);
+  border: 0.14em solid #1a0d33;
+  border-radius: 0.6em;
+  box-shadow: inset 0 0 0 0.1em #7b5fd0, 0 0.18em 0 #1a0d33;
+  cursor: pointer;
+  container-type: inline-size;
+}
+
+.hero-pick-photo {
+  grid-row: 1 / 3;
+  width: 100%;
+  height: 4.6em;
+  object-fit: contain;
+}
+
+.hero-pick b {
+  align-self: end;
+  font-size: min(0.95em, 13cqi);
+  -webkit-text-stroke: 0.14em #1a0d33;
+  paint-order: stroke fill;
+}
+
+.hero-pick small {
+  align-self: start;
+  color: #e9d5ff;
+  font-size: min(0.62em, 9.5cqi);
+}
+
+.hero-pick.is-selected {
+  background: radial-gradient(circle at 22% 45%, #fff1b0 0, #ffd45e 45%, #e59400 100%);
+  box-shadow: inset 0 0 0 0.12em #ffc533, 0 0 0.8em rgb(255 197 51 / 0.6), 0 0.18em 0 #1a0d33;
+}
+
+.hero-pick.is-selected small {
+  color: #1a0d33;
+}
+
+.hero-pick.is-taken {
+  opacity: 0.5;
+  filter: grayscale(0.6);
+  cursor: default;
+}
+
+.hero-picks.is-compact .hero-pick {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+  justify-items: center;
+  padding: 0.15em 0.15em 0.25em;
+  text-align: center;
+}
+
+.hero-picks.is-compact .hero-pick-photo {
+  grid-row: auto;
+  height: 3.2em;
+}
+
+.hero-picks.is-compact .hero-pick b {
+  font-size: min(0.68em, 17cqi);
+}
+
+.hero-picks.is-compact .hero-pick small {
+  display: none;
+}
+
+.passive-picks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45em;
+}
+
+.passive-pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4em;
+  min-width: 0;
+  padding: 0.45em 0.45em 0.5em;
+  color: #fff;
+  font: inherit;
+  font-weight: 400;
+  text-align: left;
+  background: #2e1a57;
+  border: 0.14em solid #1a0d33;
+  border-radius: 0.6em;
+  box-shadow: inset 0 0 0 0.1em #7b5fd0, 0 0.18em 0 #1a0d33;
+  cursor: pointer;
+}
+
+.passive-pick.is-selected {
+  background: #5b3a10;
+  box-shadow: inset 0 0 0 0.14em #ffc533, 0 0 0.8em rgb(255 197 51 / 0.5), 0 0.18em 0 #1a0d33;
+}
+
+.passive-badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2em;
+  height: 2em;
+  background: #f6eadb;
+  border: 0.12em solid #1a0d33;
+  border-radius: 50%;
+}
+
+.passive-badge .icon {
+  width: 1.35em;
+  height: 1.35em;
+}
+
+.passive-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  min-width: 0;
+}
+
+.passive-text b {
+  font-size: 0.8em;
+  color: #ffd45e;
+}
+
+.passive-text small {
+  color: #e9d5ff;
+  font-size: 0.62em;
+  line-height: 1.2;
+}
+
+.entrance-card > .ui-button {
+  align-self: center;
+  min-width: 70%;
+}
+
+/* The own hero's passive, small next to the team's potions; it bounces when it triggers. */
+.passive-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  margin-left: 0.15em;
+  background: #f6eadb;
+  border: 0.1em solid #1a0d33;
+  border-radius: 50%;
+}
+
+.passive-chip .icon {
+  width: 1.05em;
+  height: 1.05em;
+}
+
+.passive-chip.is-active {
+  animation: passive-bounce 0.9s ease-out;
+}
+
+@keyframes passive-bounce {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(255 212 94 / 0.9);
+  }
+  25% {
+    transform: scale(1.6);
+    box-shadow: 0 0 0 0.35em rgb(255 212 94 / 0.6);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0.9em rgb(255 212 94 / 0);
+  }
+}
+
+/* A potion drunk by the own hero: pink glow around the screen edges. */
+.potion-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 3em 1em rgb(255 80 130 / 0.75);
+  animation: potion-flash 1.4s ease-out forwards;
+}
+
+@keyframes potion-flash {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* Desktop: the Maestro's dock keeps a phone-like width, centered at the bottom. */

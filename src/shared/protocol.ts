@@ -10,6 +10,9 @@
 export type Role = 'hero' | 'master'
 export type HeroClass = 'melee' | 'ranged' | 'priest' | 'mage'
 export const HERO_CLASSES: readonly HeroClass[] = ['melee', 'ranged', 'priest', 'mage']
+// Small passives each hero picks at the dungeon entrance (two to choose from per class; see rules.ts PASSIVES).
+export type PassiveId = 'recover' | 'tough' | 'keenEye' | 'focus'
+export const PASSIVE_IDS: readonly PassiveId[] = ['recover', 'tough', 'keenEye', 'focus']
 import type { RoomShape } from './layouts.ts'
 
 export type Placeable = 'slime' | 'thrower' | 'ogre' // enemies the master places one by one
@@ -52,6 +55,9 @@ export type HeroView = {
   mana: number // priestess and mage (0 for the others)
   heals: number // times this hero was healed: a change shows the heal effect
   drinks: number // potions this hero drank: a change shows the potion effect
+  chosen: boolean // picked a hero at the entrance (until then it is not drawn)
+  passive: PassiveId | null
+  boons: number // times its passive triggered: a change shows the passive's effect
 }
 export type EnemyView = {
   id: number
@@ -93,7 +99,7 @@ export type Snapshot = {
   items: ItemView[]
   potions: number // the team's shared potions
   kills: number // times a hero fell: what the Maestro sees instead of lives and potions
-  introWaiting: string[] // heroes still reading the intro; the heroes' match starts when it is empty
+  introWaiting: string[] // heroes still picking their hero and passive at the entrance; the heroes' match starts when it is empty
   cinematic: { room: number; t: number; total: number } | null // boss entrance (t: seconds since it began)
   possessed: number | null // enemy the Maestro controls
   possessedWait: { attack: number; special: number } | null // seconds before its attacks are ready again
@@ -111,7 +117,9 @@ export type ServerMessage =
 
 export type ClientMessage =
   | { type: 'role'; role: Role }
+  // At the entrance (match started): each hero picks a different hero, then one of its two passives.
   | { type: 'class'; cls: HeroClass }
+  | { type: 'passive'; passive: PassiveId }
   | { type: 'start' }
   | { type: 'pos'; x: number; y: number; facing: number; epoch: number }
   // An attack started on the device. Melee: `hits` are the enemies the device saw inside the cone or circle.
@@ -128,7 +136,7 @@ export type ClientMessage =
   // A chest the device saw this hero's attack reach: it opens and heals that hero.
   | { type: 'openChest'; item: number }
   | { type: 'ping'; t: number }
-  // The hero finished reading the intro ("Entrar a la mazmorra").
+  // The hero picked hero and passive and is ready ("Entrar a la mazmorra").
   | { type: 'introReady' }
   // Master
   | { type: 'build'; gx: number; gy: number; kind: 'normal' | 'boss' }

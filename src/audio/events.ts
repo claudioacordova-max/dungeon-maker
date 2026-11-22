@@ -66,6 +66,7 @@ export function playSnapshotSounds(prev: Snapshot | null, next: Snapshot, you: s
     else if (h.hp < p.hp && !own) sfx.heroHurt(v)
     else if (h.drinks > p.drinks) sfx.potion(own ? 1 : v)
     else if (h.heals > p.heals) sfx.heal(v)
+    if (h.boons > p.boons) sfx.boon(own ? 1 : v)
     if (!own && h.act && h.act.seq !== p.act?.seq) {
       const charged = h.act.kind === 'charged'
       if (h.cls === 'melee') (charged ? sfx.spin : sfx.swing)(v * 0.6)
