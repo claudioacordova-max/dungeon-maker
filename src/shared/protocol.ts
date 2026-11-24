@@ -1,6 +1,6 @@
 // Messages between the browser and the room server (a Durable Object). JSON over one WebSocket per player.
 //
-// Netcode (see DESIGN.md, section Red): one shared match lives on the server. Each hero's device owns that hero's
+// Netcode (see GAME.md, section Red): one shared match lives on the server. Each hero's device owns that hero's
 // position and decides what its attacks hit and whether enemy attacks reached it; the server validates with
 // tolerances and owns everything shared: enemies, team lives, the map, doors and what the master builds.
 //

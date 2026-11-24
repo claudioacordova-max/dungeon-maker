@@ -1,4 +1,4 @@
-// The own hero, owned by this device (see DESIGN.md, section Red): moved here at once, reported to the server,
+// The own hero, owned by this device (see GAME.md, section Red): moved here at once, reported to the server,
 // which only overrides it when it moves the hero itself (start, respawn: a new epoch). Attacks, shots and enemy
 // attacks are resolved here, against what this screen shows, and reported to the server.
 import { sfx } from '../audio/sfx'

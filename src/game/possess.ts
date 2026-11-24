@@ -1,4 +1,4 @@
-// The enemy the Maestro controls, owned by the Maestro's device like a hero (see DESIGN.md, section Red): moved
+// The enemy the Maestro controls, owned by the Maestro's device like a hero (see GAME.md, section Red): moved
 // here at once with the movement stick and reported to the server (which limits the speed); the attack button
 // (and the boss's second button) start the enemy's own attacks. Tap = auto-aim at the nearest hero, drag = aim.
 import { useNet } from '../net/connection'

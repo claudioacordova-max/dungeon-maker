@@ -1,4 +1,4 @@
-// Rules from DESIGN.md (v2) and the netcode checks, on the pure simulation (run with `npm test`).
+// Rules from GAME.md (v2) and the netcode checks, on the pure simulation (run with `npm test`).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { buildableSlots, difficulty, doorState, FALL_MARGIN, fallPoint, walkable } from '../src/shared/map.ts'

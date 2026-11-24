@@ -21,7 +21,7 @@ A "Mario Maker in real time": the level is designed by a live opponent while the
 ## Operating Context
 
 - The Maestro works under time pressure: the next room must be ready before the heroes clear the current one, so every build action must be fast, reachable with thumbs and readable at a glance.
-- Approved next version (see `DESIGN.md`): 5 rooms plus a predesigned boss room; a narrative intro the heroes read while the Maestro starts building; an Observar view where the Maestro watches a room with heroes, possesses an enemy (joystick + attack) and summons a slime; the Maestro controls the boss after a short cinematic; a Maestro character model.
+- Approved next version (see `GAME.md`): 5 rooms plus a predesigned boss room; a narrative intro the heroes read while the Maestro starts building; an Observar view where the Maestro watches a room with heroes, possesses an enemy (joystick + attack) and summons a slime; the Maestro controls the boss after a short cinematic; a Maestro character model.
 
 ## Capabilities and Constraints
 
@@ -29,7 +29,7 @@ A "Mario Maker in real time": the level is designed by a live opponent while the
 - Mobile portrait stage scaled with `--ui-px` (design pixels); the 3D scene sits behind DOM overlays. Must stay smooth on a phone.
 - Building a room today: floor shape (Entera, Orillas, Cruz, Puente), a spikes pack, 0 to N chests, enemies (slime, lanzador, ogro) placed by tapping the floor, a shared difficulty cap per room, "Sala lista", "Quitar sala", back to the map.
 - Terminology (Spanish UI): Maestro, héroes, sala, sala del jefe, pinchos, cofres, dificultad, «Sala lista».
-- `DESIGN.md` in this repository is the **game design document** (the designer's rules and numbers), not a visual design system. Never overwrite or restructure it as a visual DESIGN.md; visual decisions live in code and in `.impeccable/` artifacts.
+- `GAME.md` holds the designer's game rules and numbers; design work never edits it. `DESIGN.md`, when it exists, is the visual design system. This is a video game, not a website: the UI scales on one mobile-portrait stage and never reflows; menus are Experience, HUD and in-game panels are Operate; do not run `adapt`. Equal-size cards, big HUD numbers, reading measure and scrollbar or selection theming are web rules that do not apply.
 
 ## Brand Commitments
 

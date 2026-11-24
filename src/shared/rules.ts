@@ -1,5 +1,5 @@
 import type { HeroClass, PassiveId } from './protocol.ts'
-// Balance numbers. The designer owns those listed in DESIGN.md "Números"; change them only on request.
+// Balance numbers. The designer owns those listed in GAME.md "Números"; change them only on request.
 export const TEAM_LIVES = 3
 // One more team life with 4 heroes (designer, 2026-11-21).
 export const teamLives = (heroes: number) => TEAM_LIVES + (heroes >= 4 ? 1 : 0)
@@ -51,7 +51,7 @@ export const CLASS_PASSIVES: Record<HeroClass, readonly [PassiveId, PassiveId]> 
 // The forest clearing south of the start room where the heroes start (cells deep; as wide as a room).
 export const ENTRANCE_DEPTH = 8
 
-// Feel and tuning values chosen by the agent (not in DESIGN.md).
+// Feel and tuning values chosen by the agent (not in GAME.md).
 export const MAX_HEROES = 4
 export const ROOM_W = 11 // cells
 export const ROOM_H = 13 // cells
